@@ -1,0 +1,29 @@
+id: go_tos_finder
+name: Legal Document Finder
+category: legal_analysis
+version: "1.0.0"
+port: 8316
+
+api:
+  endpoint: /t/{token}/go_tos_finder
+  method: GET
+  params:
+    - name: target
+      type: string
+      required: true
+      description: URL of the public site whose legal documents (ToS, privacy, cookies, DMCA, AUP, GDPR/DPA, imprint, etc.) should be located.
+
+health:
+  endpoint: /health
+  expected_status: 200
+
+test:
+  url: /t/default_token/go_tos_finder?target=https://github.com
+  expected_status: 200
+
+deploy:
+  path: /opt/services/go_tos_finder
+
+requires:
+  - docker
+  - pentest_network

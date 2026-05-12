@@ -1,0 +1,5 @@
+/go_tos_finder
+*.test
+*.out
+.idea/
+.vscode/

@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  app:
+    image: ghcr.io/baditaflorin/go_tos_finder:1.0.0
+    container_name: go_tos_finder-app-1
+    restart: always
+    ports:
+      - 8316:8316
+    environment:
+      - PORT=8316
+    networks:
+      - pentest_network
+
+networks:
+  pentest_network:
+    external: true
