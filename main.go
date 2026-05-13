@@ -7,7 +7,7 @@ import (
 	"github.com/baditaflorin/go-common/server"
 )
 
-const Version = "1.0.0"
+const Version = "1.0.1"
 
 func main() {
 	cfg := config.Load("go_tos_finder", Version)

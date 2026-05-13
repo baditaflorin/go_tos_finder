@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/baditaflorin/go-common/safehttp"
 )
 
 func TestClassifyLinkByPath(t *testing.T) {
@@ -99,23 +102,23 @@ func TestLinkScanSkipsJunkSchemes(t *testing.T) {
 	}
 }
 
-func TestValidateURLBlocksLoopback(t *testing.T) {
-	u, _ := url.Parse("http://127.0.0.1/")
-	if err := validateURL(u); err == nil {
+func TestCheckURLBlocksLoopback(t *testing.T) {
+	_, err := safehttp.CheckURL(context.Background(), "http://127.0.0.1/")
+	if err == nil {
 		t.Fatal("expected loopback to be blocked")
 	}
 }
 
-func TestValidateURLBlocksPrivate(t *testing.T) {
-	u, _ := url.Parse("http://10.0.0.1/")
-	if err := validateURL(u); err == nil {
+func TestCheckURLBlocksPrivate(t *testing.T) {
+	_, err := safehttp.CheckURL(context.Background(), "http://10.0.0.1/")
+	if err == nil {
 		t.Fatal("expected private network to be blocked")
 	}
 }
 
-func TestValidateURLBlocksScheme(t *testing.T) {
-	u, _ := url.Parse("file:///etc/passwd")
-	if err := validateURL(u); err == nil {
+func TestCheckURLBlocksScheme(t *testing.T) {
+	_, err := safehttp.CheckURL(context.Background(), "file:///etc/passwd")
+	if err == nil {
 		t.Fatal("expected file scheme to be blocked")
 	}
 }

@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
+
+	"github.com/baditaflorin/go-common/safehttp"
 )
 
 // stalenessThreshold: documents whose Last-Modified header is older than this
@@ -16,12 +17,9 @@ const stalenessThreshold = 2 * 365 * 24 * time.Hour
 // Content-Length, and Last-Modified. If HEAD is rejected by the server with
 // 405/501, falls back to a GET with no body read.
 func probeHead(ctx context.Context, client *http.Client, rawURL string) (status int, contentLen int64, lastMod string, err error) {
-	u, perr := url.Parse(rawURL)
+	_, perr := safehttp.CheckURL(ctx, rawURL)
 	if perr != nil {
 		return 0, 0, "", perr
-	}
-	if verr := validateURL(u); verr != nil {
-		return 0, 0, "", verr
 	}
 	doReq := func(method string) (*http.Response, error) {
 		req, rerr := http.NewRequestWithContext(ctx, method, rawURL, nil)

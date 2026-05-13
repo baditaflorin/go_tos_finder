@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/baditaflorin/go-common/safehttp"
 )
 
 const (
@@ -55,20 +57,20 @@ type Response struct {
 }
 
 func newClient() *http.Client {
-	return &http.Client{
-		Timeout:   requestTimeout,
-		Transport: safeTransport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= maxRedirects {
-				return fmt.Errorf("stopped after %d redirects", maxRedirects)
-			}
-			if err := validateURL(req.URL); err != nil {
-				return err
-			}
-			req.Header.Set("User-Agent", userAgent)
-			return nil
-		},
+	c := safehttp.NewClient()
+	c.Timeout = requestTimeout
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
+		}
+		_, err := safehttp.CheckURL(req.Context(), req.URL.String())
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", userAgent)
+		return nil
 	}
+	return c
 }
 
 func writeJSON(w http.ResponseWriter, status int, resp Response) {
@@ -112,7 +114,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	resp := Response{Target: u.String()}
 
-	if err := validateURL(u); err != nil {
+	if _, err := safehttp.CheckURL(r.Context(), u.String()); err != nil {
 		writeJSON(w, http.StatusBadRequest, addError(resp, err))
 		return
 	}
