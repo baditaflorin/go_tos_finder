@@ -1,27 +1,10 @@
 package main
 
-import (
-	"net/http"
+import "github.com/baditaflorin/go-common/server"
 
-	"github.com/baditaflorin/go-common/config"
-	"github.com/baditaflorin/go-common/server"
-)
-
-const Version = "1.0.1"
+const Version = "1.1.0"
+const serviceName = "go_tos_finder"
 
 func main() {
-	cfg := config.Load("go_tos_finder", Version)
-	srv := server.New(cfg)
-	srv.Mux.HandleFunc("/t/", Handler)
-	srv.Mux.HandleFunc("/go_tos_finder", Handler)
-	srv.Mux.HandleFunc("/", rootHandler)
-	srv.Start()
-}
-
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	Handler(w, r)
+	server.Run(serviceName, Version, Handler)
 }
