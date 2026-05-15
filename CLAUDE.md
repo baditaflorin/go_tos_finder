@@ -343,8 +343,38 @@ check a static Pages site.
 | Webgateway      | `ssh -J root@0docker.com florin@10.10.10.10`                   |
 
 - **Builder LXC 108** is a Proxmox container on `0docker.com`. Hosts
-  per-service build workspaces at `/root/workspace/go_*/` and the
+  per-service build workspaces at `/root/workspace/<repo>/` and the
   `fleet-runner` binary.
+
+  **AI-agent rule — always use a git worktree, never the shared
+  workspace directly.** Multiple AI sessions (or a session + a human)
+  routinely target the same repo concurrently; sharing
+  `/root/workspace/<repo>/` produces silent races (one session's
+  `git checkout`/`reset --hard` clobbers the other's working tree
+  mid-build, image tags get pushed in the wrong order, deploys flip
+  to the loser's commit). Each session must isolate its checkout:
+
+  ```
+  cd /root/workspace/<repo>
+  git fetch origin
+  git worktree add /root/wt/<repo>-<short-purpose> origin/<branch>
+  cd /root/wt/<repo>-<short-purpose>
+  # do work, build, push, then:
+  git worktree remove /root/wt/<repo>-<short-purpose>
+  ```
+
+  Worktrees share the same `.git` (cheap; no extra clone), but each
+  has its own `HEAD`, working tree, and `git status`. The shared
+  `/root/workspace/<repo>/` stays as the canonical "long-lived
+  upstream tracker" — operate on it only for read-only inspection
+  (`git log`, `git diff`); never `checkout` / `reset` there.
+
+  Build images from inside the worktree with the same
+  `docker buildx build --platform linux/amd64 --provenance=false …`
+  command; tag with a short purpose suffix (e.g.
+  `1.6.172-postmerge`, `1.6.171-traits-pr9c`) so concurrent builds
+  don't trample one canonical tag. Remove the worktree on exit so
+  Builder LXC disk doesn't accumulate stale checkouts.
 - **Dockerhost VM** runs the service containers. Compose dirs:
   `/opt/services/<repo>/`, `/opt/security/<repo>/`,
   `/home/ubuntu_vm/pentest/<repo>/`.
@@ -355,6 +385,37 @@ check a static Pages site.
 Operational topology and credentials are in **private**
 `fleet-state/OPS.md` — never commit SSH targets, IPs, or tokens to
 service repos.
+
+## Unattended automation — secrets, DNS, preflight (read RUNBOOK-UNATTENDED.md)
+
+**Three primitives let any agent ship a brand-new service from "local
+code" to "live with DNS + scope + secrets" without operator intervention:**
+
+| Service | Role | Port |
+|---------|------|------|
+| [`go-fleet-secrets`](https://github.com/baditaflorin/go-fleet-secrets) | Encrypted vault for tokens (Hetzner, GitHub PAT, SMTP, platform API keys) | 18140 |
+| [`go-fleet-dns-sync`](https://github.com/baditaflorin/go-fleet-dns-sync) | Registry → Hetzner Cloud DNS reconciler (30-min ticker) | 18141 |
+| [`go-fleet-preflight`](https://github.com/baditaflorin/go-fleet-preflight) | Pre-deploy checklist (registry + DNS + port + secrets) | 18142 |
+
+The full operational playbook — bootstrap, secret rotation, "how to add
+a new service unattended", agent anti-patterns — lives in
+[`RUNBOOK-UNATTENDED.md`](RUNBOOK-UNATTENDED.md). **Read that before
+asking the user for tokens or where things live.**
+
+Key facts an agent needs to know:
+
+- **DNS API**: `https://api.hetzner.cloud/v1` (Bearer auth). The older
+  `dns.hetzner.com` Console API is **deprecated** — don't use it.
+- **Zone**: `0exec.com` is Hetzner Cloud zone id `1285812`.
+- **Gateway IP**: `176.9.123.221` — every fleet A record points here;
+  nginx terminates TLS and routes to the right upstream port.
+- **Token env name**: `HCLOUD_TOKEN` (canonical, matches hcloud-cli +
+  official Go SDK). `HETZNER_TOKEN` kept as back-compat alias.
+- **Secrets**: live in `go-fleet-secrets`, NEVER in env on dockerhost,
+  NEVER in service repos, NEVER in services.json / overrides.json.
+  Each secret has a `consumers` allowlist (`X-Auth-User` scope).
+- **Before any deploy**: call preflight; expect 200 (green) or 424 with
+  a detailed checklist of what's red.
 
 ## Operations playbook — teach yourself to fish
 
