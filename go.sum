@@ -1,5 +1,5 @@
-github.com/baditaflorin/go-common v0.15.0 h1:VNYluUIuG8wWkqBmkjTQ1anJAYvHqVRzCwzL2s9G8CA=
-github.com/baditaflorin/go-common v0.15.0/go.mod h1:hwEEQsLp4bnFgoSD4L9MfhrF2sPNHKB1cqAi8RIqpow=
+github.com/baditaflorin/go-common v0.18.0 h1:GHpaiwSsuenuSYBQPufs2wGueFhdFXMS8wx8SgO9Zks=
+github.com/baditaflorin/go-common v0.18.0/go.mod h1:hwEEQsLp4bnFgoSD4L9MfhrF2sPNHKB1cqAi8RIqpow=
 golang.org/x/sync v0.10.0 h1:3NQrjDixjgGwUOCaF8w2+VYHv0Ve/vGYSbdkTa98gmQ=
 golang.org/x/sync v0.10.0/go.mod h1:Czt+wKu1gCyEFDUtn0jG5QVvpJ6rzVqr5aXyt9drQfk=
 golang.org/x/time v0.14.0 h1:MRx4UaLrDotUKUdCIqzPC48t1Y9hANFKIRpNx+Te8PI=
