@@ -8,7 +8,10 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -trimpath -ldflags="-s -w" -o /out/go_tos_finder .
+    go build -trimpath -ldflags="-s -w \
+           -X github.com/baditaflorin/go-common/version.Tag=$(git describe --tags --always 2>/dev/null || echo dev) \
+           -X github.com/baditaflorin/go-common/version.GitCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) \
+           -X github.com/baditaflorin/go-common/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o /out/go_tos_finder .
 
 FROM alpine:3.20
 
