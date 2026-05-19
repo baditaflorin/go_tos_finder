@@ -44,7 +44,7 @@ type DocFinding struct {
 // Response is the JSON payload returned to callers.
 type Response struct {
 	Tool            string       `json:"tool"`
-	Version         string       `json:"version"`
+	Version         string       `json:"Version"`
 	Target          string       `json:"target"`
 	FetchedURL      string       `json:"fetched_url,omitempty"`
 	ResolvedIP      string       `json:"resolved_ip,omitempty"`
