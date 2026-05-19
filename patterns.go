@@ -9,19 +9,19 @@ import (
 type DocType string
 
 const (
-	DocTermsOfService       DocType = "terms_of_service"
-	DocPrivacyPolicy        DocType = "privacy_policy"
-	DocCookiePolicy         DocType = "cookie_policy"
-	DocAcceptableUse        DocType = "acceptable_use"
-	DocDMCA                 DocType = "dmca"
-	DocGDPRDPA              DocType = "gdpr_dpa"
-	DocSubprocessors        DocType = "subprocessors"
-	DocSLA                  DocType = "sla"
-	DocRefundPolicy         DocType = "refund_policy"
-	DocShippingPolicy       DocType = "shipping_policy"
-	DocImprint              DocType = "imprint"
-	DocCommunityGuidelines  DocType = "community_guidelines"
-	DocCopyrightPolicy      DocType = "copyright_policy"
+	DocTermsOfService      DocType = "terms_of_service"
+	DocPrivacyPolicy       DocType = "privacy_policy"
+	DocCookiePolicy        DocType = "cookie_policy"
+	DocAcceptableUse       DocType = "acceptable_use"
+	DocDMCA                DocType = "dmca"
+	DocGDPRDPA             DocType = "gdpr_dpa"
+	DocSubprocessors       DocType = "subprocessors"
+	DocSLA                 DocType = "sla"
+	DocRefundPolicy        DocType = "refund_policy"
+	DocShippingPolicy      DocType = "shipping_policy"
+	DocImprint             DocType = "imprint"
+	DocCommunityGuidelines DocType = "community_guidelines"
+	DocCopyrightPolicy     DocType = "copyright_policy"
 )
 
 // documentTypeOrder controls output ordering and the "expected" set used for
@@ -154,9 +154,9 @@ var patterns = []pattern{
 		},
 	},
 	{
-		docType: DocDMCA,
-		pathPatterns: pathRE("dmca", "dmca-policy", "dmca-notice"),
-		textRegex: regexp.MustCompile(`(?i)\b(?:DMCA(?:\s+(?:policy|notice))?)\b`),
+		docType:        DocDMCA,
+		pathPatterns:   pathRE("dmca", "dmca-policy", "dmca-notice"),
+		textRegex:      regexp.MustCompile(`(?i)\b(?:DMCA(?:\s+(?:policy|notice))?)\b`),
 		canonicalPaths: []string{"/dmca", "/dmca-policy", "/legal/dmca"},
 	},
 	{
@@ -194,9 +194,9 @@ var patterns = []pattern{
 		},
 	},
 	{
-		docType: DocSLA,
+		docType:      DocSLA,
 		pathPatterns: pathRE("sla", "service-level-agreement"),
-		textRegex: regexp.MustCompile(`(?i)\b(?:SLA|service\s+level\s+agreement)\b`),
+		textRegex:    regexp.MustCompile(`(?i)\b(?:SLA|service\s+level\s+agreement)\b`),
 		canonicalPaths: []string{
 			"/sla", "/service-level-agreement", "/legal/sla",
 		},
@@ -213,9 +213,9 @@ var patterns = []pattern{
 		},
 	},
 	{
-		docType: DocShippingPolicy,
+		docType:      DocShippingPolicy,
 		pathPatterns: pathRE("shipping", "shipping-policy", "delivery"),
-		textRegex: regexp.MustCompile(`(?i)\b(?:shipping\s+policy|delivery\s+(?:policy|information))\b`),
+		textRegex:    regexp.MustCompile(`(?i)\b(?:shipping\s+policy|delivery\s+(?:policy|information))\b`),
 		canonicalPaths: []string{
 			"/shipping-policy", "/shipping", "/delivery",
 		},
