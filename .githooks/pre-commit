@@ -1,0 +1,17 @@
+#!/bin/bash
+# Pre-commit hook: validate Version const matches service.yaml
+
+# Get the script location (in .githooks dir next to .git)
+HOOK_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_DIR="$HOOK_DIR/.."
+
+# Run validation
+if [ -f "$REPO_DIR/.githooks/validate-version.sh" ]; then
+  "$REPO_DIR/.githooks/validate-version.sh" "$REPO_DIR"
+  if [ $? -ne 0 ]; then
+    echo "Commit aborted: Version const drift detected"
+    exit 1
+  fi
+fi
+
+exit 0
