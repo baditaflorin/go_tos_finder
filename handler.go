@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/baditaflorin/go-common/fleetfetch"
 	"github.com/baditaflorin/go-common/safehttp"
 )
 
@@ -57,7 +58,7 @@ type Response struct {
 }
 
 func newClient() *http.Client {
-	c := safehttp.NewClient()
+	c := fleetfetch.NewHTTPClient(fleetfetch.WithRender(fleetfetch.RenderJS))
 	c.Timeout = requestTimeout
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {
