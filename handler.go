@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -31,34 +32,67 @@ const (
 
 // DocFinding is one entry of the documents[] array in the response.
 type DocFinding struct {
-	Type         DocType `json:"type"`
-	URL          string  `json:"url"`
-	Status       int     `json:"status,omitempty"`
-	ContentLen   int64   `json:"content_length,omitempty"`
-	LastModified string  `json:"last_modified,omitempty"`
-	Staleness    string  `json:"staleness,omitempty"`
-	Source       string  `json:"source"`
-	LinkText     string  `json:"link_text,omitempty"`
-	Match        string  `json:"match,omitempty"`
+	Type         DocType  `json:"type"`
+	URL          string   `json:"url"`
+	Status       int      `json:"status,omitempty"`
+	ContentLen   int64    `json:"content_length,omitempty"`
+	LastModified string   `json:"last_modified,omitempty"`
+	Staleness    string   `json:"staleness,omitempty"`
+	Source       string   `json:"source"`
+	LinkText     string   `json:"link_text,omitempty"`
+	Match        string   `json:"match,omitempty"`
+	Confidence   string   `json:"confidence,omitempty"`
+	Title        string   `json:"title,omitempty"`
+	Evidence     []string `json:"evidence,omitempty"`
+}
+
+// DetectionSummary is an aggregate evidence trail describing how the result
+// was produced — part of the TRL-6/7 "evidence trail" requirement.
+type DetectionSummary struct {
+	HomepageFetched  bool   `json:"homepage_fetched"`
+	RenderMode       string `json:"render_mode"`
+	LinksScanned     int    `json:"links_scanned"`
+	PathsProbed      int    `json:"paths_probed"`
+	ProbesRejected   int    `json:"probes_rejected_soft404"`
+	HighConfidence   int    `json:"high_confidence"`
+	MediumConfidence int    `json:"medium_confidence"`
+	LowConfidence    int    `json:"low_confidence"`
 }
 
 // Response is the JSON payload returned to callers.
 type Response struct {
-	Tool             string       `json:"tool"`
-	Version          string       `json:"Version"`
-	Target           string       `json:"target"`
-	FetchedURL       string       `json:"fetched_url,omitempty"`
-	ResolvedIP       string       `json:"resolved_ip,omitempty"`
-	Documents        []DocFinding `json:"documents"`
-	DocumentsFound   int          `json:"documents_found"`
-	DocumentsMissing []DocType    `json:"documents_missing"`
-	ImprintPresent   bool         `json:"imprint_present"`
-	Verdict          string       `json:"verdict"`
-	Error            string       `json:"error,omitempty"`
+	Tool             string           `json:"tool"`
+	Version          string           `json:"Version"`
+	Target           string           `json:"target"`
+	FetchedURL       string           `json:"fetched_url,omitempty"`
+	ResolvedIP       string           `json:"resolved_ip,omitempty"`
+	Documents        []DocFinding     `json:"documents"`
+	DocumentsFound   int              `json:"documents_found"`
+	DocumentsMissing []DocType        `json:"documents_missing"`
+	ImprintPresent   bool             `json:"imprint_present"`
+	Verdict          string           `json:"verdict"`
+	Detection        DetectionSummary `json:"detection"`
+	Error            string           `json:"error,omitempty"`
+}
+
+// renderMode is resolved once from env. The fleet JS-render proxy
+// (RenderJS) is expensive and frequently unhealthy; defaulting to a direct
+// SSRF-safe fetch (RenderDefault) is both cheaper and far more reliable for
+// the static legal pages this service targets. Operators can opt back into
+// JS rendering with TOS_FINDER_RENDER=js (or html).
+func renderMode() string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("TOS_FINDER_RENDER"))) {
+	case "js":
+		return fleetfetch.RenderJS
+	case "html":
+		return fleetfetch.RenderHTML
+	default:
+		return fleetfetch.RenderDefault
+	}
 }
 
 func newClient() *http.Client {
-	c := fleetfetch.NewHTTPClient(fleetfetch.WithRender(fleetfetch.RenderJS))
+	c := fleetfetch.NewHTTPClient(fleetfetch.WithRender(renderMode()))
 	c.Timeout = requestTimeout
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {
@@ -114,6 +148,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := Response{Target: u.String()}
+	resp.Detection.RenderMode = renderMode()
+	if resp.Detection.RenderMode == "" {
+		resp.Detection.RenderMode = "direct"
+	}
 
 	if _, err := safehttp.CheckURL(r.Context(), u.String()); err != nil {
 		writeJSON(w, http.StatusBadRequest, addError(resp, err))
@@ -132,6 +170,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.FetchedURL = finalURL
+	resp.Detection.HomepageFetched = true
 
 	base, _ := url.Parse(finalURL)
 	if base == nil {
@@ -140,11 +179,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	// Phase 1: scan links in the rendered HTML.
 	linkHits := linkScan(html, base)
+	resp.Detection.LinksScanned = len(linkHits)
 
 	// Phase 2: for any expected doc type missing from linkHits, probe a small
-	// set of canonical paths. Capped at maxProbes.
+	// set of canonical paths — now content-verified to reject soft-404s.
 	missing := make([]DocType, 0)
 	for _, t := range documentTypeOrder {
+		if hubDocTypes[t] {
+			continue
+		}
 		if _, ok := linkHits[t]; !ok {
 			missing = append(missing, t)
 		}
@@ -158,14 +201,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	probedHits := make(map[DocType]DocFinding)
 	var probedMu sync.Mutex
+	var probedCount, rejectedCount int
 
 	g, gctx := errgroup.WithContext(probeCtx)
 	g.SetLimit(5)
 
+	now := time.Now()
 	for _, cand := range probeList {
 		cand := cand
-		// Skip if we already discovered this type via link scan during this loop
-		// (multiple paths per type — first hit wins).
 		probedMu.Lock()
 		_, already := probedHits[cand.DocType]
 		probedMu.Unlock()
@@ -177,27 +220,38 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		g.Go(func() error {
-			status, clen, lastMod, perr := probeHead(gctx, probeClient, probeURL)
+			pm, perr := probeVerify(gctx, probeClient, probeURL)
+			probedMu.Lock()
+			probedCount++
+			probedMu.Unlock()
 			if perr != nil {
 				return nil
 			}
-			if status >= 400 || status == 0 {
-				// Record the negative result only if no other path of this type
-				// has succeeded yet, so callers can see what was probed.
+			if pm.status < 200 || pm.status >= 400 {
 				return nil
 			}
-			staleness, isoDate := stalenessOf(lastMod, time.Now())
+			vr := classifyBody(pm.body, pm.status, cand.DocType)
+			if !vr.IsReal {
+				probedMu.Lock()
+				rejectedCount++
+				probedMu.Unlock()
+				return nil
+			}
+			staleness, isoDate := stalenessOf(pm.lastMod, now)
 			hit := DocFinding{
 				Type:         cand.DocType,
 				URL:          probeURL,
-				Status:       status,
-				ContentLen:   clen,
+				Status:       pm.status,
+				ContentLen:   pm.contentLen,
 				LastModified: isoDate,
 				Staleness:    staleness,
 				Source:       "probed_path",
+				Confidence:   vr.Confidence,
+				Title:        vr.Title,
+				Evidence:     vr.Evidence,
 			}
 			probedMu.Lock()
-			if _, exists := probedHits[cand.DocType]; !exists {
+			if cur, exists := probedHits[cand.DocType]; !exists || confidenceRank(vr.Confidence) > confidenceRank(cur.Confidence) {
 				probedHits[cand.DocType] = hit
 			}
 			probedMu.Unlock()
@@ -205,9 +259,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	_ = g.Wait()
+	resp.Detection.PathsProbed = probedCount
+	resp.Detection.ProbesRejected = rejectedCount
 
-	// Phase 3: for each link-discovered doc, fire a HEAD to capture status and
-	// Last-Modified (bounded concurrency).
+	// Phase 3: for each link-discovered doc, GET-verify to capture status,
+	// freshness, and content confidence (rejecting links that point at
+	// soft-404s). A footer link is strong location evidence, so an unconfirmed
+	// real page still keeps at least low confidence.
 	g2, g2ctx := errgroup.WithContext(probeCtx)
 	g2.SetLimit(5)
 	var linkMu sync.Mutex
@@ -215,15 +273,45 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	for t, hit := range linkHits {
 		t, hit := t, hit
 		g2.Go(func() error {
-			status, clen, lastMod, perr := probeHead(g2ctx, probeClient, hit.URL)
-			if perr != nil {
+			pm, perr := probeVerify(g2ctx, probeClient, hit.URL)
+			if perr != nil || pm.status == 0 {
+				// Could not verify (fetch noise) — keep the link finding but
+				// mark its confidence low; the link itself is real evidence.
+				if hit.Confidence == "" {
+					hit.Confidence = ConfLow
+				}
+				linkMu.Lock()
+				linkHits[t] = hit
+				linkMu.Unlock()
 				return nil
 			}
-			staleness, isoDate := stalenessOf(lastMod, time.Now())
-			hit.Status = status
-			hit.ContentLen = clen
+			staleness, isoDate := stalenessOf(pm.lastMod, now)
+			hit.Status = pm.status
+			hit.ContentLen = pm.contentLen
 			hit.LastModified = isoDate
 			hit.Staleness = staleness
+			if pm.status >= 200 && pm.status < 400 {
+				vr := classifyBody(pm.body, pm.status, t)
+				if !vr.IsReal {
+					// Footer link to a soft-404: downgrade but keep — the link
+					// existing is itself a (weak) signal the site references it.
+					hit.Confidence = ConfLow
+					hit.Evidence = append([]string{"link_target_soft404"}, vr.Evidence...)
+				} else {
+					if vr.Title != "" {
+						hit.Title = vr.Title
+					}
+					hit.Confidence = vr.Confidence
+					if confidenceRank(vr.Confidence) < confidenceRank(ConfMedium) {
+						// An explicit footer/page link to a real page is at
+						// least medium confidence regardless of body vocab.
+						hit.Confidence = ConfMedium
+					}
+					hit.Evidence = append(hit.Evidence, vr.Evidence...)
+				}
+			} else {
+				hit.Confidence = ConfLow
+			}
 			linkMu.Lock()
 			linkHits[t] = hit
 			linkMu.Unlock()
@@ -232,25 +320,38 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = g2.Wait()
 
-	// Merge: prefer link hits over probed hits (an explicit footer link is
-	// stronger signal than a guess).
+	// Merge: prefer link hits over probed hits (an explicit link is stronger
+	// location evidence than a guess), but if a probe found a higher-confidence
+	// verified document, keep the probe.
 	merged := make(map[DocType]DocFinding)
 	for k, v := range probedHits {
 		merged[k] = v
 	}
 	for k, v := range linkHits {
+		if cur, ok := merged[k]; ok && confidenceRank(cur.Confidence) > confidenceRank(v.Confidence) {
+			continue
+		}
 		merged[k] = v
 	}
 
-	// Build documents[] in documentTypeOrder.
+	// Build documents[] in documentTypeOrder, and confidence tallies.
 	docs := make([]DocFinding, 0, len(merged))
-	missingFinal := make([]DocType, 0)
 	for _, t := range documentTypeOrder {
 		if d, ok := merged[t]; ok {
 			docs = append(docs, d)
+			switch d.Confidence {
+			case ConfHigh:
+				resp.Detection.HighConfidence++
+			case ConfMedium:
+				resp.Detection.MediumConfidence++
+			case ConfLow:
+				resp.Detection.LowConfidence++
+			}
 		}
 	}
+
 	// Missing is computed against the *expected* set, not every type.
+	missingFinal := make([]DocType, 0)
 	for _, t := range expectedDocTypes {
 		if _, ok := merged[t]; !ok {
 			missingFinal = append(missingFinal, t)
@@ -267,10 +368,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// countSuccess counts docs whose Status is 0 (link-only, no HEAD result) or 2xx.
+// countSuccess counts docs that are present (link-only with no HEAD result, or
+// a verified 2xx). Hub directory pages don't count toward documents_found —
+// they're navigation, not a document.
 func countSuccess(docs []DocFinding) int {
 	n := 0
 	for _, d := range docs {
+		if hubDocTypes[d.Type] {
+			continue
+		}
 		if d.Status == 0 || (d.Status >= 200 && d.Status < 400) {
 			n++
 		}
