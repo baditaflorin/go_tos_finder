@@ -44,6 +44,13 @@ type DocFinding struct {
 	Confidence   string   `json:"confidence,omitempty"`
 	Title        string   `json:"title,omitempty"`
 	Evidence     []string `json:"evidence,omitempty"`
+
+	// LinkConfidence is the location-confidence floor derived from the link
+	// itself (path-token / anchor-text corroboration) before any body fetch.
+	// It is internal scoring metadata — not serialised — used to keep a
+	// discovered link from collapsing to "low" when its target body GET fails
+	// (a frequent timeout behind the fleet fetch proxy in production).
+	LinkConfidence string `json:"-"`
 }
 
 // DetectionSummary is an aggregate evidence trail describing how the result
@@ -237,6 +244,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				probedMu.Unlock()
 				return nil
 			}
+			// False-positive guard for canonical probes: a guessed path that
+			// merely "exists" (low, page_exists_unconfirmed) but carries no
+			// type-specific vocabulary is almost always an unrelated page (or a
+			// large wildcard catch-all that slipped past the soft-404 gate) —
+			// e.g. /shipping or /refunds 200ing on a site that sells nothing.
+			// Unlike an explicit link, a probe has no independent location
+			// evidence, so reject it. Link-discovered hits are handled in
+			// Phase 3 and are never subject to this guard.
+			if confidenceRank(vr.Confidence) <= confidenceRank(ConfLow) && !bodyHasTypeSignal(pm.body, cand.DocType) {
+				probedMu.Lock()
+				rejectedCount++
+				probedMu.Unlock()
+				return nil
+			}
 			staleness, isoDate := stalenessOf(pm.lastMod, now)
 			hit := DocFinding{
 				Type:         cand.DocType,
@@ -275,11 +296,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		g2.Go(func() error {
 			pm, perr := probeVerify(g2ctx, probeClient, hit.URL)
 			if perr != nil || pm.status == 0 {
-				// Could not verify (fetch noise) — keep the link finding but
-				// mark its confidence low; the link itself is real evidence.
+				// Could not verify (fetch noise / proxy timeout). The link
+				// itself is location evidence, so fall back to its
+				// link-confidence floor rather than always collapsing to low.
+				// A footer link whose path AND anchor text both name the type
+				// (floor=medium) stays medium even when its body can't be
+				// fetched — this is the common production case behind the
+				// fleet fetch proxy.
+				if confidenceRank(hit.Confidence) < confidenceRank(hit.LinkConfidence) {
+					hit.Confidence = hit.LinkConfidence
+				}
 				if hit.Confidence == "" {
 					hit.Confidence = ConfLow
 				}
+				hit.Evidence = append(hit.Evidence, "link_unverified:floor="+hit.LinkConfidence)
 				linkMu.Lock()
 				linkHits[t] = hit
 				linkMu.Unlock()
@@ -302,10 +332,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 						hit.Title = vr.Title
 					}
 					hit.Confidence = vr.Confidence
-					if confidenceRank(vr.Confidence) < confidenceRank(ConfMedium) {
-						// An explicit footer/page link to a real page is at
-						// least medium confidence regardless of body vocab.
-						hit.Confidence = ConfMedium
+					// An explicit link to a real page is location evidence: hold
+					// it to at least its link-confidence floor (medium when path
+					// AND anchor text agree; low for a single-signal match). This
+					// replaces the old blanket "every link is at least medium",
+					// which over-promoted single-signal links.
+					if confidenceRank(hit.Confidence) < confidenceRank(hit.LinkConfidence) {
+						hit.Confidence = hit.LinkConfidence
 					}
 					hit.Evidence = append(hit.Evidence, vr.Evidence...)
 				}

@@ -37,6 +37,43 @@ var softNotFoundRE = regexp.MustCompile(`(?i)\b(?:404|page\s+not\s+found|not\s+f
 // corroborating signal when the title/h1 doesn't directly name the doc type.
 var legalVocabRE = regexp.MustCompile(`(?i)\b(?:last\s+(?:updated|modified|revised)|effective\s+date|these\s+terms|this\s+(?:policy|agreement|notice)|we\s+(?:collect|process|use)\s+(?:your\s+)?(?:personal\s+)?(?:data|information)|governed\s+by|liability|indemnif|warrant|jurisdiction|arbitration|gerichtsstand|haftung|responsabilit[ée]|datos\s+personales|dati\s+personali)\b`)
 
+// docTypeSignalRE maps each canonical doc type to a regex of body vocabulary
+// that is *specific* to that type. It is the false-positive guard for
+// canonical probes: a server that returns a generic 200 page (or a wildcard
+// catch-all that happens to clear the soft-404 gate by being large) for
+// /shipping or /refunds on a site that ships nothing produces a "low,
+// page_exists_unconfirmed" finding that is almost always noise. Requiring a
+// probed path's body to carry at least a type-specific term (or the generic
+// legalVocab term, or a title match) before it counts removes that long tail
+// of probe false positives seen on the 100 real rows. Link-discovered docs are
+// exempt — the explicit link is itself the location evidence.
+var docTypeSignalRE = map[DocType]*regexp.Regexp{
+	DocTermsOfService:      regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use)|terms\s+and\s+conditions|user\s+agreement|acceptance\s+of\s+these\s+terms|by\s+(?:using|accessing))\b`),
+	DocPrivacyPolicy:       regexp.MustCompile(`(?i)\b(?:privacy|personal\s+(?:data|information)|datenschutz|we\s+collect|how\s+we\s+(?:use|process)|data\s+we\s+collect|cookies?\s+and\s+similar)\b`),
+	DocCookiePolicy:        regexp.MustCompile(`(?i)\b(?:cookies?|tracking\s+technolog|local\s+storage|web\s+beacons?)\b`),
+	DocAcceptableUse:       regexp.MustCompile(`(?i)\b(?:acceptable\s+use|prohibited\s+(?:uses?|activities|conduct)|may\s+not\s+use|abuse|fair\s+use)\b`),
+	DocCommunityGuidelines: regexp.MustCompile(`(?i)\b(?:community\s+(?:guidelines|standards)|code\s+of\s+conduct|behaviou?r|respectful|harassment)\b`),
+	DocDMCA:                regexp.MustCompile(`(?i)\b(?:DMCA|copyright\s+(?:infringement|owner|agent)|takedown|notice\s+and\s+takedown|17\s+U\.?S\.?C)\b`),
+	DocCopyrightPolicy:     regexp.MustCompile(`(?i)\b(?:copyright|intellectual\s+property|trademark|all\s+rights\s+reserved|infringement)\b`),
+	DocGDPRDPA:             regexp.MustCompile(`(?i)\b(?:GDPR|data\s+processing|data\s+controller|data\s+processor|sub[-\s]?processor|article\s+\d+|personal\s+data)\b`),
+	DocSubprocessors:       regexp.MustCompile(`(?i)\b(?:sub[-\s]?processors?|vendors?|third[-\s]party\s+(?:service|provider)|hosting\s+provider)\b`),
+	DocSLA:                 regexp.MustCompile(`(?i)\b(?:service\s+level|uptime|availability|credit|downtime|99\.\d+%)\b`),
+	DocRefundPolicy:        regexp.MustCompile(`(?i)\b(?:refund|return|cancellation|money[-\s]back|exchange|reimburse)\b`),
+	DocShippingPolicy:      regexp.MustCompile(`(?i)\b(?:shipping|delivery|dispatch|carrier|tracking\s+number|order\s+(?:will|is)\s+(?:ship|deliver))\b`),
+	DocImprint:             regexp.MustCompile(`(?i)\b(?:impressum|imprint|registered\s+(?:office|address)|company\s+(?:number|registration)|handelsregister|umsatzsteuer|vat\s+(?:id|number)|gesch[äa]ftsf[üu]hrer|mentions\s+l[ée]gales)\b`),
+	DocDisclaimer:          regexp.MustCompile(`(?i)\b(?:disclaimer|no\s+warrant|as\s+is|not\s+(?:liable|responsible)|haftungsausschluss)\b`),
+}
+
+// bodyHasTypeSignal reports whether a body carries type-specific vocabulary for
+// `want` (or generic legal vocabulary, which corroborates any legal doc). Used
+// as the false-positive guard on canonical-probe hits.
+func bodyHasTypeSignal(body string, want DocType) bool {
+	if re, ok := docTypeSignalRE[want]; ok && re.MatchString(body) {
+		return true
+	}
+	return legalVocabRE.MatchString(body)
+}
+
 // verifyResult is the outcome of fetching a candidate URL's body and checking
 // whether it is a genuine legal document of the expected type.
 type verifyResult struct {

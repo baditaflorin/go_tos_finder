@@ -323,22 +323,46 @@ func matchPathOnly(urlPath string, regs []*regexp.Regexp) bool {
 // tried first (stronger signal) and the hub types (legal/policies) are tried
 // last so a `/legal/privacy` link classifies as privacy, not as the hub.
 func classifyLink(urlPath, linkText string) (DocType, string) {
-	// Pass 1: specific (non-hub) path matches.
+	dt, how, _ := classifyLinkEvidence(urlPath, linkText)
+	return dt, how
+}
+
+// classifyLinkEvidence is the richer form of classifyLink: it returns the
+// matched doc type, which signal matched, and a *location-confidence floor*
+// derived purely from the link itself (independent of any body fetch).
+//
+// The floor exists because in production the Phase-3 body-verification GET of a
+// discovered footer link frequently times out behind the fleet fetch proxy,
+// collapsing every footer link to "low". But a link is itself location
+// evidence: when BOTH the URL path token AND the anchor text independently name
+// the same canonical doc type (e.g. href=/legal/privacy text="Privacy Policy"),
+// that corroboration is strong location evidence and should hold a `medium`
+// floor even when the target body can't be fetched. A single-signal match holds
+// only a `low` floor (a stray "/terms" path or a stray "Privacy" word can be a
+// false friend on its own).
+func classifyLinkEvidence(urlPath, linkText string) (DocType, string, string) {
+	linkText = strings.TrimSpace(linkText)
+	// Pass 1: specific (non-hub) path matches. Check whether the SAME doc
+	// type is also corroborated by the anchor text → medium floor.
 	for _, p := range patterns {
 		if hubDocTypes[p.docType] {
 			continue
 		}
 		if matchPathOnly(urlPath, p.pathPatterns) {
-			return p.docType, "url_path"
+			floor := ConfLow
+			if p.textRegex != nil && p.textRegex.MatchString(linkText) {
+				floor = ConfMedium // path AND text agree
+			}
+			return p.docType, "url_path", floor
 		}
 	}
-	// Pass 2: specific (non-hub) link-text matches.
+	// Pass 2: specific (non-hub) link-text matches (path didn't match any type).
 	for _, p := range patterns {
 		if hubDocTypes[p.docType] {
 			continue
 		}
 		if p.textRegex != nil && p.textRegex.MatchString(linkText) {
-			return p.docType, "link_text"
+			return p.docType, "link_text", ConfLow
 		}
 	}
 	// Pass 3: hub types last (legal / policies / trust). For the legal hub
@@ -352,13 +376,13 @@ func classifyLink(urlPath, linkText string) (DocType, string) {
 			if p.docType == DocLegalHub && !isBareHubPath(urlPath) {
 				continue
 			}
-			return p.docType, "url_path"
+			return p.docType, "url_path", ConfLow
 		}
-		if p.textRegex != nil && p.textRegex.MatchString(strings.TrimSpace(linkText)) {
-			return p.docType, "link_text"
+		if p.textRegex != nil && p.textRegex.MatchString(linkText) {
+			return p.docType, "link_text", ConfLow
 		}
 	}
-	return "", ""
+	return "", "", ConfNone
 }
 
 // isBareHubPath reports whether the path is a bare /legal or /policies hub

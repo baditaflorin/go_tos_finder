@@ -30,7 +30,7 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		if len(linkText) > 80 {
 			linkText = linkText[:80]
 		}
-		dt, how := classifyLink(u.Path, linkText)
+		dt, how, floor := classifyLinkEvidence(u.Path, linkText)
 		if dt == "" {
 			continue
 		}
@@ -39,11 +39,12 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 			source = "footer_link"
 		}
 		hit := DocFinding{
-			Type:     dt,
-			URL:      stripFragment(u),
-			Source:   source,
-			LinkText: linkText,
-			Match:    how,
+			Type:           dt,
+			URL:            stripFragment(u),
+			Source:         source,
+			LinkText:       linkText,
+			Match:          how,
+			LinkConfidence: floor,
 		}
 		if cur, exists := out[dt]; exists {
 			// Prefer footer over page; otherwise keep the first match.
