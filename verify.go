@@ -31,7 +31,7 @@ var jsRedirectRE = regexp.MustCompile(`(?is)(?:window\.)?location(?:\.href)?\s*=
 
 // softNotFoundRE matches body/title text that signals a soft 404 / placeholder
 // even though the HTTP status was 2xx.
-var softNotFoundRE = regexp.MustCompile(`(?i)\b(?:404|page\s+not\s+found|not\s+found|seite\s+nicht\s+gefunden|page\s+introuvable|p[áa]gina\s+no\s+encontrada|no\s+longer\s+available|coming\s+soon|under\s+construction|domain\s+(?:is\s+)?(?:for\s+sale|parked)|buy\s+this\s+domain|account\s+suspended|default\s+web\s+page)\b`)
+var softNotFoundRE = regexp.MustCompile(`(?i)(?:\b(?:404|page\s+not\s+found|not\s+found|seite\s+nicht\s+gefunden|page\s+introuvable|p[áa]gina\s+no\s+encontrada|no\s+longer\s+available|coming\s+soon|under\s+construction|domain\s+(?:is\s+)?(?:for\s+sale|parked)|buy\s+this\s+domain|account\s+suspended|default\s+web\s+page)\b|(?:ページが見つかりません|お探しのページは見つかりません|页面不存在|頁面不存在|找不到页面|找不到網頁|페이지를 찾을 수 없습니다|страница не найдена|Страница не найдена))`)
 
 // legalVocabRE matches generic legal-document vocabulary used as a weak
 // corroborating signal when the title/h1 doesn't directly name the doc type.
@@ -64,14 +64,36 @@ var docTypeSignalRE = map[DocType]*regexp.Regexp{
 	DocDisclaimer:          regexp.MustCompile(`(?i)\b(?:disclaimer|no\s+warrant|as\s+is|not\s+(?:liable|responsible)|haftungsausschluss)\b`),
 }
 
+// scriptLegalVocabRE matches non-Latin-script generic legal-document vocabulary
+// (effective date / "we collect" / last-updated / governing-law phrasing) used
+// to corroborate a CJK/Cyrillic/Greek/etc. legal page whose body has no Latin
+// legalVocabRE hit. Distinctive multi-char phrases → substring match is
+// high-precision.
+var scriptLegalVocabRE = regexp.MustCompile(`(?i)(?:` + strings.Join([]string{
+	// Japanese
+	"個人情報", "本規約", "本ポリシー", "制定日", "改定日", "最終更新", "プライバシー", "利用規約",
+	// Chinese (simplified + traditional)
+	"个人信息", "本协议", "本政策", "隐私", "隱私", "更新日期", "生效日期", "我们收集", "適用",
+	// Korean
+	"개인정보", "본 약관", "본 정책", "시행일", "수집", "이용약관",
+	// Russian / Ukrainian
+	"персональных данных", "настоящ", "конфиденциальност", "обработк", "соглашени",
+	// Greek / Turkish / Arabic
+	"προσωπικών δεδομένων", "kişisel veri", "gizlilik", "البيانات الشخصية", "الخصوصية",
+}, "|") + `)`)
+
 // bodyHasTypeSignal reports whether a body carries type-specific vocabulary for
-// `want` (or generic legal vocabulary, which corroborates any legal doc). Used
-// as the false-positive guard on canonical-probe hits.
+// `want` (Latin docTypeSignalRE or the type's non-Latin scriptRegex), or generic
+// legal vocabulary in any script. Used as the false-positive guard on
+// canonical-probe hits.
 func bodyHasTypeSignal(body string, want DocType) bool {
 	if re, ok := docTypeSignalRE[want]; ok && re.MatchString(body) {
 		return true
 	}
-	return legalVocabRE.MatchString(body)
+	if sr := scriptRegexFor(want); sr != nil && sr.MatchString(body) {
+		return true
+	}
+	return legalVocabRE.MatchString(body) || scriptLegalVocabRE.MatchString(body)
 }
 
 // verifyResult is the outcome of fetching a candidate URL's body and checking
@@ -126,16 +148,21 @@ func classifyBody(body string, httpStatus int, want DocType) verifyResult {
 	// Passed the rejection gates: it is a real page.
 	res.IsReal = true
 
-	// Confidence scoring.
-	if tr := titleRegexFor(want); tr != nil {
+	// Confidence scoring. The title/h1 confirmation is script-aware: a Latin
+	// titleRegex OR a CJK/Cyrillic scriptRegex match is equally strong evidence
+	// the page is the expected type (e.g. <title>利用規約</title>,
+	// <h1>개인정보처리방침</h1>, <title>Политика конфиденциальности</title>).
+	tr := titleRegexFor(want)
+	sr := scriptRegexFor(want)
+	if tr != nil || sr != nil {
 		h1 := strings.TrimSpace(stripTags(firstGroup(h1RE, body)))
-		if tr.MatchString(res.Title) || tr.MatchString(h1) {
+		if matchTextOrScript(tr, sr, res.Title) || matchTextOrScript(tr, sr, h1) {
 			res.Confidence = ConfHigh
 			res.Evidence = append(res.Evidence, "title_matches_type")
 			return res
 		}
 	}
-	if legalVocabRE.MatchString(body) {
+	if legalVocabRE.MatchString(body) || scriptLegalVocabRE.MatchString(body) {
 		res.Confidence = ConfMedium
 		res.Evidence = append(res.Evidence, "legal_vocabulary")
 		return res

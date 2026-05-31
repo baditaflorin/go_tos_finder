@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/idna"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/baditaflorin/go-common/fleetfetch"
@@ -153,6 +154,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, Response{Target: raw, Error: "invalid URL: " + err.Error()})
 		return
 	}
+
+	// IDN normalisation: a Unicode-form host (U-label, e.g. "bücher.de",
+	// "日本.jp", "россия.рф") must be converted to its ASCII A-label
+	// (punycode) before fetch/DNS. See normaliseIDN.
+	normaliseIDN(u)
 
 	resp := Response{Target: u.String()}
 	resp.Detection.RenderMode = renderMode()
@@ -483,6 +489,46 @@ func readBodyLimited(resp *http.Response) string {
 		return string(body)
 	}
 	return string(body)
+}
+
+// normaliseIDN converts a Unicode-form (U-label) host on u to its ASCII A-label
+// (punycode) in place, using the IDNA2008 lookup profile. Without this Go
+// percent-encodes the raw UTF-8 host bytes ("bücher.de" → "b%C3%BCcher.de"),
+// which neither the DNS resolver nor the fleet fetch proxy can resolve — so the
+// homepage fetch silently fails for every non-ASCII domain. That is a pure
+// geo-bias bug: only non-Western registrants type U-label hosts. Pure Go,
+// CGO-free, no new outbound calls; an already-ASCII or unconvertible host is
+// left unchanged.
+func normaliseIDN(u *url.URL) {
+	h := u.Hostname()
+	if h == "" || isASCII(h) {
+		return
+	}
+	ascii, err := idna.Lookup.ToASCII(h)
+	if err != nil || ascii == "" {
+		return
+	}
+	u.Host = rebuildHost(ascii, u.Port())
+}
+
+// isASCII reports whether s contains only 7-bit ASCII bytes. Used to gate the
+// (relatively expensive) IDNA conversion to the rare non-ASCII-host case.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false // any non-ASCII byte → not ASCII
+		}
+	}
+	return true
+}
+
+// rebuildHost reassembles a host:port from an (already ASCII) host and an
+// optional port. Empty port yields a bare host.
+func rebuildHost(host, port string) string {
+	if port == "" {
+		return host
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func firstResolvedIP(ctx context.Context, host string) string {

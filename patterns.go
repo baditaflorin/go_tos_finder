@@ -82,6 +82,17 @@ type pattern struct {
 	textRegex      *regexp.Regexp
 	titleRegex     *regexp.Regexp
 	canonicalPaths []string
+
+	// scriptRegex matches CJK / Cyrillic / Greek / Arabic / Thai / Hindi
+	// legal-document phrases in link text, titles, and bodies. These scripts
+	// have no ASCII word boundaries (Go's regexp `\b` is ASCII-only), so the
+	// ASCII-anchored textRegex/titleRegex never fire on a Korean/Chinese/
+	// Japanese/Russian footer link such as "服务协议" / "이용약관" /
+	// "利用規約" / "Пользовательское соглашение". scriptRegex is matched in
+	// addition to (not instead of) textRegex/titleRegex everywhere they are
+	// consulted, closing the non-Latin-script geo gap without weakening any
+	// existing Latin-script precision.
+	scriptRegex *regexp.Regexp
 }
 
 // pathRE compiles a set of path-segment regexes. A path matches if a listed
@@ -120,6 +131,38 @@ func textRE(words ...string) *regexp.Regexp {
 	return regexp.MustCompile(`(?i)\b(?:` + strings.Join(escaped, "|") + `)\b`)
 }
 
+// scriptRE compiles a case-insensitive alternation of literal non-Latin-script
+// phrases with NO ASCII word boundaries. CJK / Cyrillic / Greek / Arabic /
+// Devanagari / Thai have no `\b` notion (and Go's `\b` is ASCII-only), so these
+// phrases must be matched as bare substrings. The phrases listed are distinctive
+// multi-character legal terms (e.g. 利用規約, 개인정보처리방침, Пользовательское
+// соглашение) that do not collide with ordinary prose, so a substring match is
+// high-precision. Returns nil when no phrases are supplied.
+func scriptRE(phrases ...string) *regexp.Regexp {
+	if len(phrases) == 0 {
+		return nil
+	}
+	escaped := make([]string, len(phrases))
+	for i, p := range phrases {
+		escaped[i] = regexp.QuoteMeta(p)
+	}
+	return regexp.MustCompile(`(?i)(?:` + strings.Join(escaped, "|") + `)`)
+}
+
+// matchTextOrScript reports whether s matches either the ASCII-anchored
+// textRegex/titleRegex (re) OR the non-Latin scriptRegex (sr). Either being nil
+// is treated as "no match for that arm". This is the single place that fuses
+// Latin and non-Latin link/title/body matching.
+func matchTextOrScript(re, sr *regexp.Regexp, s string) bool {
+	if re != nil && re.MatchString(s) {
+		return true
+	}
+	if sr != nil && sr.MatchString(s) {
+		return true
+	}
+	return false
+}
+
 // patterns is the master table consulted by the discovery pass.
 var patterns = []pattern{
 	{
@@ -138,9 +181,33 @@ var patterns = []pattern{
 		),
 		textRegex:  regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)?|terms\s*&\s*conditions|terms\s+and\s+conditions|conditions\s+of\s+use|user\s+agreement|EULA|nutzungsbedingungen|allgemeine\s+gesch[äa]ftsbedingungen|AGB|conditions\s+d['e]\s*utilisation|conditions\s+g[ée]n[ée]rales|termini\s+di\s+servizio|t[ée]rminos\s+(?:y\s+condiciones|de\s+servicio)|condiciones\s+(?:de\s+uso|del\s+servicio)|termos\s+de\s+(?:uso|servi[çc]o)|gebruiksvoorwaarden|algemene\s+voorwaarden|regulamin)\b`),
 		titleRegex: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)|terms\s+and\s+conditions|terms\s*&\s*conditions|user\s+agreement|end[-\s]user\s+license|EULA|nutzungsbedingungen|gesch[äa]ftsbedingungen|conditions\s+g[ée]n[ée]rales|termini\s+di\s+servizio|t[ée]rminos|condiciones|termos\s+de)\b`),
+		scriptRegex: scriptRE(
+			// Japanese: terms of use / member agreement
+			"利用規約", "利用条件", "ご利用規約", "会員規約", "サービス利用規約",
+			// Chinese (simplified + traditional): service terms / agreement
+			"服务条款", "服務條款", "服务协议", "服務協議", "使用条款", "使用條款", "用户协议", "用戶協議", "用户协定",
+			// Korean: terms of use / terms of service
+			"이용약관", "이용 약관", "서비스 이용약관", "이용규약",
+			// Russian / Ukrainian: user agreement / terms of use
+			"Пользовательское соглашение", "Условия использования", "Условия использова",
+			"Умови використання", "Угода користувача",
+			// Greek: terms of use
+			"Όροι χρήσης", "Όροι Χρήσης",
+			// Turkish: terms of use / membership agreement
+			"Kullanım Koşulları", "Kullanım Şartları", "Üyelik Sözleşmesi", "Hizmet Şartları",
+			// Arabic: terms of use / terms and conditions
+			"شروط الاستخدام", "الشروط والأحكام", "اتفاقية الاستخدام",
+			// Thai / Hindi / Indonesian-Malay / Vietnamese
+			"ข้อกำหนดการใช้งาน", "उपयोग की शर्तें", "सेवा की शर्तें",
+			"Syarat Penggunaan", "Ketentuan Layanan", "Điều khoản sử dụng", "Điều khoản dịch vụ",
+		),
 		canonicalPaths: []string{
 			"/terms", "/terms-of-service", "/terms-of-use", "/terms-and-conditions",
 			"/tos", "/legal/terms", "/conditions", "/user-agreement", "/eula", "/agb",
+			// non-Latin canonical paths seen in the wild (CJK sites frequently
+			// expose romanised or kanji policy paths)
+			"/kiyaku", "/riyou-kiyaku", "/利用規約", "/terms-of-use.html",
+			"/agreement", "/useragreement", "/法律声明", "/服务协议",
 		},
 	},
 	{
@@ -159,9 +226,30 @@ var patterns = []pattern{
 		),
 		textRegex:  regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
 		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
+		scriptRegex: scriptRE(
+			// Japanese: privacy policy / handling of personal information
+			"プライバシーポリシー", "プライバシー", "個人情報保護方針", "個人情報の取り扱い", "個人情報保護",
+			// Chinese (simplified + traditional): privacy policy
+			"隐私政策", "隱私政策", "隱私權政策", "隐私权政策", "隐私声明", "隱私聲明", "个人信息保护", "個人資料",
+			// Korean: privacy policy / handling of personal data
+			"개인정보처리방침", "개인정보 처리방침", "개인정보보호정책", "개인정보보호", "개인정보취급방침",
+			// Russian / Ukrainian: privacy policy
+			"Политика конфиденциальности", "Конфиденциальность", "Политика конфиденц",
+			"Політика конфіденційності",
+			// Greek / Turkish / Arabic
+			"Πολιτική απορρήτου", "Πολιτική Απορρήτου",
+			"Gizlilik Politikası", "Gizlilik İlkesi", "Kişisel Verilerin Korunması",
+			"سياسة الخصوصية", "الخصوصية",
+			// Thai / Hindi / Indonesian-Malay / Vietnamese
+			"นโยบายความเป็นส่วนตัว", "गोपनीयता नीति",
+			"Kebijakan Privasi", "Dasar Privasi", "Chính sách bảo mật", "Chính sách quyền riêng tư",
+		),
 		canonicalPaths: []string{
 			"/privacy", "/privacy-policy", "/privacy-notice", "/legal/privacy",
 			"/datenschutz", "/politique-confidentialite",
+			// non-Latin / romanised privacy paths seen in the wild
+			"/privacypolicy", "/privacy.html", "/personal-information",
+			"/kojinjoho", "/隐私政策", "/隱私權政策", "/개인정보처리방침",
 		},
 	},
 	{
@@ -178,6 +266,14 @@ var patterns = []pattern{
 		),
 		textRegex:  regexp.MustCompile(`(?i)\b(?:cookie(?:s)?(?:\s+(?:policy|notice|statement|settings|preferences))?|use\s+of\s+cookies|cookie[-\s]?richtlinie|politique\s+(?:des\s+)?cookies|pol[íi]tica\s+de\s+cookies|cookiebeleid)\b`),
 		titleRegex: regexp.MustCompile(`(?i)\b(?:cookie\s+(?:policy|notice|statement)|cookie[-\s]?richtlinie|politique\s+(?:des\s+)?cookies|pol[íi]tica\s+de\s+cookies)\b`),
+		scriptRegex: scriptRE(
+			// Japanese / Chinese / Korean / Russian / Greek / Turkish / Arabic cookie policy
+			"クッキーポリシー", "クッキーの使用について", "Cookieポリシー",
+			"Cookie政策", "Cookie 政策", "Cookie使用政策", "Cookie聲明",
+			"쿠키 정책", "쿠키정책",
+			"Политика использования файлов cookie", "Политика cookie", "файлов cookie",
+			"Πολιτική cookies", "Çerez Politikası", "سياسة ملفات تعريف الارتباط",
+		),
 		canonicalPaths: []string{
 			"/cookies", "/cookie-policy", "/use-of-cookies", "/legal/cookies",
 		},
@@ -247,10 +343,17 @@ var patterns = []pattern{
 		canonicalPaths: []string{"/sla", "/service-level-agreement", "/legal/sla"},
 	},
 	{
-		docType:        DocRefundPolicy,
-		pathPatterns:   pathRE("refunds", "returns", "refund-policy", "return-policy", "refunds-and-returns", "returns-policy", "cancellation-policy"),
-		textRegex:      regexp.MustCompile(`(?i)\b(?:refund(?:\s+policy)?|returns?\s+(?:and\s+refunds?\s+)?policy|return\s+policy|cancellation\s+policy)\b`),
-		titleRegex:     regexp.MustCompile(`(?i)\b(?:refund\s+policy|returns?\s+policy|cancellation\s+policy)\b`),
+		docType:      DocRefundPolicy,
+		pathPatterns: pathRE("refunds", "returns", "refund-policy", "return-policy", "refunds-and-returns", "returns-policy", "cancellation-policy"),
+		textRegex:    regexp.MustCompile(`(?i)\b(?:refund(?:\s+policy)?|returns?\s+(?:and\s+refunds?\s+)?policy|return\s+policy|cancellation\s+policy)\b`),
+		titleRegex:   regexp.MustCompile(`(?i)\b(?:refund\s+policy|returns?\s+policy|cancellation\s+policy)\b`),
+		scriptRegex: scriptRE(
+			// Japanese / Chinese / Korean / Russian refund & return policy
+			"返品・交換", "返品ポリシー", "返金ポリシー", "返品について", "キャンセルポリシー",
+			"退款政策", "退货政策", "退換貨政策", "退貨政策", "退款退货",
+			"환불정책", "환불 정책", "교환/환불", "반품정책",
+			"Политика возврата", "Возврат товара",
+		),
 		canonicalPaths: []string{"/refunds", "/returns", "/refund-policy", "/return-policy"},
 	},
 	{
@@ -266,9 +369,25 @@ var patterns = []pattern{
 			"imprint", "impressum", "legal-notice", "legal-notices",
 			"mentions-legales", "note-legali", "aviso-legal", "colofon",
 		),
-		textRegex:      regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|note\s+legali|aviso\s+legal|colof[oó]n)\b`),
-		titleRegex:     regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|aviso\s+legal)\b`),
-		canonicalPaths: []string{"/imprint", "/impressum", "/legal-notice", "/mentions-legales"},
+		textRegex:  regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|note\s+legali|aviso\s+legal|colof[oó]n)\b`),
+		titleRegex: regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|aviso\s+legal)\b`),
+		scriptRegex: scriptRE(
+			// Japanese: Specified Commercial Transactions Act disclosure (the
+			// JP-mandated seller/company legal-info page — the imprint analogue),
+			// plus company-profile / legal-notice
+			"特定商取引法に基づく表記", "特定商取引法", "特定商取引法に基づく表示", "会社概要", "運営会社", "法的事項",
+			// Chinese: legal notice / business licence / about-company
+			"法律声明", "法律聲明", "营业执照", "營業執照", "公司信息", "公司資訊",
+			// Korean: business operator information / company info
+			"사업자정보", "사업자 정보", "회사소개", "사업자등록번호",
+			// Russian / Greek / Turkish / Arabic legal-notice / company-info
+			"Правовая информация", "Реквизиты", "Юридическая информация",
+			"Νομική σημείωση", "Yasal Uyarı", "Şirket Bilgileri", "إشعار قانوني",
+		),
+		canonicalPaths: []string{
+			"/imprint", "/impressum", "/legal-notice", "/mentions-legales",
+			"/tokushoho", "/law", "/company", "/about-us", "/特定商取引法",
+		},
 	},
 	{
 		docType:        DocDisclaimer,
@@ -350,18 +469,21 @@ func classifyLinkEvidence(urlPath, linkText string) (DocType, string, string) {
 		}
 		if matchPathOnly(urlPath, p.pathPatterns) {
 			floor := ConfLow
-			if p.textRegex != nil && p.textRegex.MatchString(linkText) {
+			if matchTextOrScript(p.textRegex, p.scriptRegex, linkText) {
 				floor = ConfMedium // path AND text agree
 			}
 			return p.docType, "url_path", floor
 		}
 	}
 	// Pass 2: specific (non-hub) link-text matches (path didn't match any type).
+	// This is the arm that fires on CJK / Cyrillic footer links whose href is an
+	// opaque ID (e.g. 服务协议 → /rule/202504020001): the script-aware text match
+	// is the only available signal, so it classifies on anchor text alone.
 	for _, p := range patterns {
 		if hubDocTypes[p.docType] {
 			continue
 		}
-		if p.textRegex != nil && p.textRegex.MatchString(linkText) {
+		if matchTextOrScript(p.textRegex, p.scriptRegex, linkText) {
 			return p.docType, "link_text", ConfLow
 		}
 	}
@@ -414,6 +536,16 @@ func canonicalPathsFor(t DocType) []string {
 func titleRegexFor(t DocType) *regexp.Regexp {
 	if p, ok := patternByType[t]; ok {
 		return p.titleRegex
+	}
+	return nil
+}
+
+// scriptRegexFor returns the non-Latin-script confirmation regex for a doc
+// type, if any. Used by content verification to confirm a CJK/Cyrillic title or
+// body (where the ASCII-anchored titleRegex can never fire).
+func scriptRegexFor(t DocType) *regexp.Regexp {
+	if p, ok := patternByType[t]; ok {
+		return p.scriptRegex
 	}
 	return nil
 }
