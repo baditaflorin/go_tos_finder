@@ -100,7 +100,7 @@ func renderMode() string {
 }
 
 func newClient() *http.Client {
-	c := fleetfetch.NewHTTPClient(fleetfetch.WithRender(renderMode()))
+	c := fleetfetch.NewHTTPClient(fleetfetch.WithRender(renderMode()), fleetfetch.WithFallbackOnTimeout())
 	c.Timeout = requestTimeout
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {
