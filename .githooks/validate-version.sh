@@ -8,7 +8,10 @@ if [ ! -f "$REPO_DIR/service.yaml" ]; then
   exit 0
 fi
 
-SERVICE_VERSION=$(grep -E '^\s*version:' "$REPO_DIR/service.yaml" | head -1 | sed "s/.*version:[[:space:]]*[\"']\?\([^\"']*\).*/\1/")
+# Strip everything up to and including "version:", then any surrounding quotes
+# and trailing whitespace. Avoids GNU-only sed extensions (\?) so it is portable
+# across BSD/macOS and GNU sed.
+SERVICE_VERSION=$(grep -E '^[[:space:]]*version:' "$REPO_DIR/service.yaml" | head -1 | sed -e 's/.*version:[[:space:]]*//' -e 's/["'"'"']//g' -e 's/[[:space:]]*$//')
 
 if [ -z "$SERVICE_VERSION" ]; then
   exit 0
