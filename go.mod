@@ -3,7 +3,7 @@ module github.com/baditaflorin/go_tos_finder
 go 1.25.0
 
 require (
-	github.com/baditaflorin/go-common v0.59.0
+	github.com/baditaflorin/go-common v0.62.0
 	golang.org/x/net v0.52.0
 	golang.org/x/sync v0.20.0
 )
@@ -11,7 +11,6 @@ require (
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
