@@ -43,6 +43,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := safehttp.CheckURL(r.Context(), u.String()); err != nil {
+		// Distinguish "target unreachable" (NXDOMAIN / no records — the target
+		// simply does not resolve) from a genuine policy reject (private IP,
+		// invalid scheme). The former is data, not a service error: record it
+		// as unreachable at HTTP 200 so domainscope doesn't log upstream_error
+		// for every dead domain. Only an actual SSRF/scheme block stays 400.
+		if isUnreachableCheckError(err) {
+			writeUnreachable(w, resp, classifyFetchError(err), err)
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, addError(resp, err))
 		return
 	}
@@ -53,9 +62,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	resp.ResolvedIP = firstResolvedIP(ctx, u.Hostname())
 
 	client := newClient()
-	html, finalURL, err := fetchPage(ctx, client, u.String())
+	html, finalURL, err := fetchPageRetry(ctx, client, u.String())
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, addError(resp, err))
+		// Homepage could not be fetched after retries — the target is
+		// unreachable, not an internal fault. Report it as such at HTTP 200.
+		writeUnreachable(w, resp, classifyFetchError(err), err)
 		return
 	}
 	resp.FetchedURL = finalURL
@@ -172,6 +183,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	g2, g2ctx := errgroup.WithContext(probeCtx)
 	g2.SetLimit(5)
 	var linkMu sync.Mutex
+	// Write verified results into a SEPARATE map. Ranging over linkHits while
+	// the goroutines below write back into it is a data race (the range read is
+	// unsynchronised against the locked writes); collecting into linkResults and
+	// merging after Wait() removes it. Pre-seed with the discovered hits so a
+	// goroutine that the errgroup limiter never started (ctx cancelled) still
+	// contributes its link-only evidence.
+	linkResults := make(map[DocType]DocFinding, len(linkHits))
+	for t, hit := range linkHits {
+		linkResults[t] = hit
+	}
 
 	for t, hit := range linkHits {
 		t, hit := t, hit
@@ -193,7 +214,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				}
 				hit.Evidence = append(hit.Evidence, "link_unverified:floor="+hit.LinkConfidence)
 				linkMu.Lock()
-				linkHits[t] = hit
+				linkResults[t] = hit
 				linkMu.Unlock()
 				return nil
 			}
@@ -228,12 +249,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				hit.Confidence = ConfLow
 			}
 			linkMu.Lock()
-			linkHits[t] = hit
+			linkResults[t] = hit
 			linkMu.Unlock()
 			return nil
 		})
 	}
 	_ = g2.Wait()
+	linkHits = linkResults
 
 	// Merge: prefer link hits over probed hits (an explicit link is stronger
 	// location evidence than a guess), but if a probe found a higher-confidence
@@ -247,6 +269,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		merged[k] = v
+	}
+
+	// Drop weak unconfirmed catch-all hits (the headline FP fix): a non-hub
+	// finding that only earned "page_exists_unconfirmed" on a large generic /
+	// SPA body, with no medium link-confidence floor, is navigation noise, not
+	// a legal document — don't claim it at all. Hubs are kept as legal-surface
+	// evidence (they're never counted as documents anyway).
+	for t, d := range merged {
+		if hubDocTypes[t] {
+			continue
+		}
+		if isWeakUnconfirmed(d) {
+			delete(merged, t)
+		}
 	}
 
 	// Build documents[] in documentTypeOrder, and confidence tallies.

@@ -62,11 +62,28 @@ type DetectionSummary struct {
 	LowConfidence    int    `json:"low_confidence"`
 }
 
+// Status classifies the outcome for the caller (domainscope) so a dead /
+// unreachable target is never recorded as a service error. All four are
+// returned at HTTP 200 — only a genuine internal fault returns 5xx.
+//
+//	ok          — homepage fetched, scan completed (documents may be empty).
+//	unreachable — target could not be reached (NXDOMAIN, connect/TLS/timeout
+//	              after retries, upstream 5xx, SSRF-rejected target).
+//	no_data     — reserved for "reached but nothing to analyse"; currently
+//	              folded into ok with an empty documents[] + verdict "none".
+const (
+	StatusOK          = "ok"
+	StatusUnreachable = "unreachable"
+	StatusNoData      = "no_data"
+)
+
 // Response is the JSON payload returned to callers.
 type Response struct {
 	Tool             string           `json:"tool"`
 	Version          string           `json:"Version"`
 	Target           string           `json:"target"`
+	Status           string           `json:"status"`
+	Reason           string           `json:"reason,omitempty"`
 	FetchedURL       string           `json:"fetched_url,omitempty"`
 	ResolvedIP       string           `json:"resolved_ip,omitempty"`
 	Documents        []DocFinding     `json:"documents"`
@@ -114,6 +131,9 @@ func newClient() *http.Client {
 func writeJSON(w http.ResponseWriter, status int, resp Response) {
 	resp.Tool = "go_tos_finder"
 	resp.Version = Version
+	if resp.Status == "" {
+		resp.Status = StatusOK
+	}
 	if resp.Documents == nil {
 		resp.Documents = []DocFinding{}
 	}
@@ -125,19 +145,151 @@ func writeJSON(w http.ResponseWriter, status int, resp Response) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// writeUnreachable records a target that could not be reached (NXDOMAIN,
+// connect/TLS/timeout after retries, upstream 5xx, SSRF-rejected target) as a
+// machine-readable status at HTTP 200. This is the core error-taxonomy fix: a
+// dead domain is data ("unreachable"), not a service fault, so domainscope no
+// longer persists it as upstream_error. The original error string is preserved
+// in `error` and `reason` for debugging.
+func writeUnreachable(w http.ResponseWriter, r Response, reason string, err error) {
+	r.Status = StatusUnreachable
+	r.Reason = reason
+	if err != nil {
+		r.Error = err.Error()
+	}
+	r.Verdict = "unknown"
+	writeJSON(w, http.StatusOK, r)
+}
+
 func addError(r Response, err error) Response {
 	r.Error = err.Error()
 	r.Verdict = "unknown"
 	return r
 }
 
+// classifyFetchError maps a homepage-fetch error to a coarse unreachable
+// reason. NXDOMAIN / no-host / connection refused / TLS / context-deadline all
+// mean "target unreachable", never an internal fault.
+func classifyFetchError(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(s, "no such host"), strings.Contains(s, "dns"):
+		return "dns_lookup_failed"
+	case strings.Contains(s, "deadline"), strings.Contains(s, "timeout"), strings.Contains(s, "timed out"):
+		return "fetch_timeout"
+	case strings.Contains(s, "connection refused"), strings.Contains(s, "connect"):
+		return "connect_failed"
+	case strings.Contains(s, "tls"), strings.Contains(s, "certificate"):
+		return "tls_error"
+	case strings.Contains(s, "status 5"):
+		return "upstream_5xx"
+	default:
+		return "fetch_failed"
+	}
+}
+
+// isUnreachableCheckError reports whether a safehttp.CheckURL failure means the
+// target is unreachable (DNS/no-host, NXDOMAIN) rather than a genuine policy
+// reject. ErrBlocked (private IP), ErrInvalidScheme, and ErrMissingHost are
+// real bad-request/policy rejects and stay HTTP 400; everything else (a DNS
+// resolution failure surfaced by CheckURL's GuardHost) is "unreachable".
+func isUnreachableCheckError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, safehttp.ErrBlocked) ||
+		errors.Is(err, safehttp.ErrInvalidScheme) ||
+		errors.Is(err, safehttp.ErrMissingHost) {
+		return false
+	}
+	return true
+}
+
+// isTransientFetchError reports whether an error is worth a short retry: proxy
+// timeouts / 5xx / transient connection resets, which behind the fleet fetch
+// proxy frequently succeed on a second attempt. A definitive NXDOMAIN is not
+// retried (it will not become resolvable in 400ms).
+func isTransientFetchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	if strings.Contains(s, "no such host") {
+		return false
+	}
+	return strings.Contains(s, "deadline") || strings.Contains(s, "timeout") ||
+		strings.Contains(s, "timed out") || strings.Contains(s, "status 5") ||
+		strings.Contains(s, "connection reset") || strings.Contains(s, "eof") ||
+		strings.Contains(s, "502") || strings.Contains(s, "503") || strings.Contains(s, "504")
+}
+
+// isWeakUnconfirmed reports whether a finding is a low-confidence hit whose
+// body WAS fetched and verified real, but carried NO type-specific vocabulary —
+// i.e. it earned only `page_exists_unconfirmed`. These are the headline false
+// positives: a footer "Trademark" / "Data Protection" link or a guessed path
+// that resolves to a large generic / SPA catch-all body (cloudflare's 400KB+
+// /cookie-policy, /trust-hub/gdpr, /trademark all returning the same homepage
+// SPA). The page genuinely exists but is not the claimed legal document, so the
+// hit over-claims and is dropped.
+//
+// Deliberately NARROW: a finding kept at medium+ (title or legal-vocab match),
+// or one whose body could NOT be fetched and is held up only by the link itself
+// (evidence `link_unverified:...` — a real footer link is location evidence the
+// site references that doc), is NOT weak and is retained.
+func isWeakUnconfirmed(d DocFinding) bool {
+	if confidenceRank(d.Confidence) >= confidenceRank(ConfMedium) {
+		return false
+	}
+	if confidenceRank(d.LinkConfidence) >= confidenceRank(ConfMedium) {
+		return false
+	}
+	hasUnconfirmedBody := false
+	for _, e := range d.Evidence {
+		switch {
+		case strings.HasPrefix(e, "title_matches_type"),
+			strings.HasPrefix(e, "legal_vocabulary"),
+			strings.HasPrefix(e, "link_unverified"),
+			strings.HasPrefix(e, "link_target_soft404"):
+			// Corroborated, or held up by the link itself / explicitly a soft404
+			// link the site references — not a generic-catch-all over-claim.
+			return false
+		case strings.HasPrefix(e, "page_exists_unconfirmed"):
+			hasUnconfirmedBody = true
+		}
+	}
+	return hasUnconfirmedBody
+}
+
+// hasEvidence reports whether finding d carries an evidence token with the
+// given prefix.
+func hasEvidence(d DocFinding, prefix string) bool {
+	for _, e := range d.Evidence {
+		if strings.HasPrefix(e, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // countSuccess counts docs that are present (link-only with no HEAD result, or
-// a verified 2xx). Hub directory pages don't count toward documents_found —
-// they're navigation, not a document.
+// a verified 2xx) and carry real evidence. Excluded: hub directory pages, weak
+// generic-catch-all hits, and footer links whose target turned out to be a
+// soft-404 (the link exists but the document does NOT — counting it would be a
+// "claimed a doc that 404s" false positive). Such soft-404 links are still
+// LISTED in documents[] for transparency, just not counted as found.
 func countSuccess(docs []DocFinding) int {
 	n := 0
 	for _, d := range docs {
 		if hubDocTypes[d.Type] {
+			continue
+		}
+		if isWeakUnconfirmed(d) {
+			continue
+		}
+		if hasEvidence(d, "link_target_soft404") {
 			continue
 		}
 		if d.Status == 0 || (d.Status >= 200 && d.Status < 400) {
@@ -186,6 +338,34 @@ func joinBaseAndPath(base *url.URL, path string) string {
 	u.RawQuery = ""
 	u.Fragment = ""
 	return u.String()
+}
+
+// fetchPageRetry fetches the homepage, retrying transient upstream failures
+// (proxy timeout / 5xx / reset) up to 2 extra times with a short backoff,
+// deadline-bounded by ctx. This recovers real data for live domains whose first
+// fetch trips the fleet fetch proxy's intermittent 504 — the dominant cause of
+// the service's false upstream_error rate.
+func fetchPageRetry(ctx context.Context, client *http.Client, target string) (string, string, error) {
+	const maxAttempts = 2 // 1 initial + 1 retry; kept bounded under the outer ctx
+	var body, finalURL string
+	var err error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", finalURL, err
+			case <-time.After(time.Duration(attempt) * 400 * time.Millisecond):
+			}
+		}
+		body, finalURL, err = fetchPage(ctx, client, target)
+		if err == nil {
+			return body, finalURL, nil
+		}
+		if !isTransientFetchError(err) {
+			return body, finalURL, err
+		}
+	}
+	return body, finalURL, err
 }
 
 func fetchPage(ctx context.Context, client *http.Client, target string) (string, string, error) {
