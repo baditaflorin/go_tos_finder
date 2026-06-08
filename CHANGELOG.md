@@ -2,6 +2,11 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.3.3 — 2026-06-08
+
+### Changed
+- R5: adopt go-common/meshresult (honest status) (#6)
+
 ## 1.3.2 — 2026-06-08
 
 ### Changed

@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.3.2"
+version: "1.3.3"
 port: 8316
 
 api:
