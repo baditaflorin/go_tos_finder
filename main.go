@@ -5,7 +5,7 @@ import (
 	"github.com/baditaflorin/go-common/server"
 )
 
-const Version = "1.3.1"
+const Version = "1.3.2"
 const serviceName = "go_tos_finder"
 
 // main mirrors server.Run (config load + keystore auth + the canonical /,
