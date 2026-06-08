@@ -84,6 +84,15 @@ func TestHandlerEndToEnd(t *testing.T) {
 		t.Fatalf("bad json: %v body=%s", err, rec.Body.String())
 	}
 
+	// Success body must carry the standardized top-level result:"ok" (additive;
+	// the rest of the shape is unchanged) so domainscope can read the outcome.
+	if resp.Result != "ok" {
+		t.Errorf("success body must carry result:\"ok\", got %q", resp.Result)
+	}
+	if resp.Status != "ok" {
+		t.Errorf("success status should be ok, got %q", resp.Status)
+	}
+
 	byType := map[DocType]DocFinding{}
 	for _, d := range resp.Documents {
 		byType[d.Type] = d

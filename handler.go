@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/baditaflorin/go-common/fleetfetch"
+	"github.com/baditaflorin/go-common/meshresult"
 	"github.com/baditaflorin/go-common/safehttp"
 	"golang.org/x/net/idna"
 	"io"
@@ -83,6 +84,12 @@ type Response struct {
 	Version          string           `json:"Version"`
 	Target           string           `json:"target"`
 	Status           string           `json:"status"`
+	// Result is the fleet-canonical meshresult.Outcome ("ok" / "no_data" /
+	// "unreachable" / "timeout" / "error"). It is the orthogonal,
+	// machine-readable enricher-level classification domainscope keys on
+	// (alongside the HTTP status code). Additive to the historical body:
+	// the success shape is unchanged except for this field.
+	Result           string           `json:"result,omitempty"`
 	Reason           string           `json:"reason,omitempty"`
 	FetchedURL       string           `json:"fetched_url,omitempty"`
 	ResolvedIP       string           `json:"resolved_ip,omitempty"`
@@ -128,11 +135,20 @@ func newClient() *http.Client {
 	return c
 }
 
+// writeJSON serialises a Response at the given HTTP status. The success body
+// shape (HTTP 200) is unchanged from prior rounds EXCEPT that the
+// fleet-canonical top-level "result" field is now stamped ("ok" for a 200
+// scan) so domainscope can read the meshresult.Outcome. Error/unreachable/
+// no_data callers set r.Result + r.Status themselves and pass the
+// meshresult HTTP code.
 func writeJSON(w http.ResponseWriter, status int, resp Response) {
 	resp.Tool = "go_tos_finder"
 	resp.Version = Version
 	if resp.Status == "" {
 		resp.Status = StatusOK
+	}
+	if resp.Result == "" && status == http.StatusOK {
+		resp.Result = string(meshresult.OutcomeOK)
 	}
 	if resp.Documents == nil {
 		resp.Documents = []DocFinding{}
@@ -146,49 +162,45 @@ func writeJSON(w http.ResponseWriter, status int, resp Response) {
 }
 
 // writeUnreachable records a target that could not be reached (NXDOMAIN,
-// connect/TLS/timeout after retries, upstream 5xx, SSRF-rejected target) as a
-// machine-readable status at HTTP 200. This is the core error-taxonomy fix: a
-// dead domain is data ("unreachable"), not a service fault, so domainscope no
-// longer persists it as upstream_error. The original error string is preserved
-// in `error` and `reason` for debugging.
-func writeUnreachable(w http.ResponseWriter, r Response, reason string, err error) {
-	r.Status = StatusUnreachable
+// connect/TLS/timeout after retries, upstream 5xx) as a machine-readable
+// status. The fetch error is classified with the fleet-canonical
+// meshresult.ClassifyFetchError so the HTTP status follows the fleet contract
+// (unreachable/no_data → 404, timeout → 504, upstream error → 502) instead of
+// the old false-OK 200. domainscope keys on that HTTP code; the body keeps its
+// historical shape (status "unreachable", verdict "unknown", empty documents)
+// plus the standardized top-level result+reason. The original error string is
+// preserved in `error` for debugging.
+func writeUnreachable(w http.ResponseWriter, r Response, err error) {
+	outcome, reason := meshresult.ClassifyFetchError(err)
+	r.Result = string(outcome)
 	r.Reason = reason
+	r.Status = StatusUnreachable
 	if err != nil {
 		r.Error = err.Error()
 	}
 	r.Verdict = "unknown"
-	writeJSON(w, http.StatusOK, r)
+	writeJSON(w, outcome.HTTPCode(), r)
+}
+
+// writeNoData records a target that WAS reached and scanned, but where no
+// verified legal document was found. For an extraction service this is
+// genuinely "reached, no data" — meshresult.OutcomeNoData → HTTP 404 — so
+// domainscope records NoData rather than a false-OK 200 carrying an empty
+// documents[]. The body keeps its full historical scan shape (documents[],
+// detection trail, verdict "none") so the evidence trail is still visible.
+func writeNoData(w http.ResponseWriter, r Response) {
+	r.Result = string(meshresult.OutcomeNoData)
+	if r.Reason == "" {
+		r.Reason = "no_legal_documents_found"
+	}
+	r.Status = StatusNoData
+	writeJSON(w, meshresult.OutcomeNoData.HTTPCode(), r)
 }
 
 func addError(r Response, err error) Response {
 	r.Error = err.Error()
 	r.Verdict = "unknown"
 	return r
-}
-
-// classifyFetchError maps a homepage-fetch error to a coarse unreachable
-// reason. NXDOMAIN / no-host / connection refused / TLS / context-deadline all
-// mean "target unreachable", never an internal fault.
-func classifyFetchError(err error) string {
-	if err == nil {
-		return ""
-	}
-	s := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(s, "no such host"), strings.Contains(s, "dns"):
-		return "dns_lookup_failed"
-	case strings.Contains(s, "deadline"), strings.Contains(s, "timeout"), strings.Contains(s, "timed out"):
-		return "fetch_timeout"
-	case strings.Contains(s, "connection refused"), strings.Contains(s, "connect"):
-		return "connect_failed"
-	case strings.Contains(s, "tls"), strings.Contains(s, "certificate"):
-		return "tls_error"
-	case strings.Contains(s, "status 5"):
-		return "upstream_5xx"
-	default:
-		return "fetch_failed"
-	}
 }
 
 // isUnreachableCheckError reports whether a safehttp.CheckURL failure means the
