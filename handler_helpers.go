@@ -46,10 +46,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		// Distinguish "target unreachable" (NXDOMAIN / no records — the target
 		// simply does not resolve) from a genuine policy reject (private IP,
 		// invalid scheme). The former is data, not a service error: record it
-		// as unreachable at HTTP 200 so domainscope doesn't log upstream_error
+		// as unreachable (404) so domainscope doesn't log upstream_error
 		// for every dead domain. Only an actual SSRF/scheme block stays 400.
 		if isUnreachableCheckError(err) {
-			writeUnreachable(w, resp, classifyFetchError(err), err)
+			writeUnreachable(w, resp, err)
 			return
 		}
 		writeJSON(w, http.StatusBadRequest, addError(resp, err))
@@ -65,8 +65,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	html, finalURL, err := fetchPageRetry(ctx, client, u.String())
 	if err != nil {
 		// Homepage could not be fetched after retries — the target is
-		// unreachable, not an internal fault. Report it as such at HTTP 200.
-		writeUnreachable(w, resp, classifyFetchError(err), err)
+		// unreachable, not an internal fault. Classified via meshresult so the
+		// HTTP status follows the fleet contract (404/504/502, never false-OK).
+		writeUnreachable(w, resp, err)
 		return
 	}
 	resp.FetchedURL = finalURL
@@ -315,6 +316,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	resp.DocumentsMissing = missingFinal
 	_, resp.ImprintPresent = merged[DocImprint]
 	resp.Verdict = verdictOf(resp.DocumentsFound, missingFinal)
+
+	// Extraction-service no-data rule: the homepage was reached and scanned,
+	// but no VERIFIED legal document was found (Round 2 tightened
+	// documents_found to verified doc links only — see countSuccess). "Reached
+	// but genuinely empty" is meshresult.OutcomeNoData → HTTP 404, so
+	// domainscope records NoData rather than a false-OK 200 over an empty
+	// documents[]. The full scan body (detection trail, empty documents[],
+	// verdict "none") is preserved for the evidence trail.
+	if resp.DocumentsFound == 0 {
+		writeNoData(w, resp)
+		return
+	}
 
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/baditaflorin/go-common/meshresult"
 	"github.com/baditaflorin/go-common/safehttp"
 )
 
@@ -46,7 +47,8 @@ func TestWeakCatchAllProbeDropped(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp := doHandler(t, srv.URL)
+	// Zero verified docs ⇒ extraction no_data ⇒ HTTP 404 (meshresult contract).
+	resp := doHandler(t, srv.URL, http.StatusNotFound)
 	for _, d := range resp.Documents {
 		if d.Type == DocCopyrightPolicy {
 			t.Errorf("single-signal copyright link to a generic catch-all must be dropped, got %+v", d)
@@ -55,8 +57,11 @@ func TestWeakCatchAllProbeDropped(t *testing.T) {
 	if resp.DocumentsFound != 0 {
 		t.Errorf("documents_found=%d, want 0 (catch-all is not a real doc)", resp.DocumentsFound)
 	}
-	if resp.Status != StatusOK {
-		t.Errorf("status=%q, want ok", resp.Status)
+	if resp.Status != StatusNoData {
+		t.Errorf("status=%q, want no_data (reached but no verified doc)", resp.Status)
+	}
+	if resp.Result != string(meshresult.OutcomeNoData) {
+		t.Errorf("result=%q, want no_data", resp.Result)
 	}
 }
 
@@ -79,14 +84,17 @@ func TestSoftFourOhFourLinkNotCounted(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp := doHandler(t, srv.URL)
+	// terms target is a soft-404 ⇒ zero verified docs ⇒ no_data ⇒ HTTP 404.
+	resp := doHandler(t, srv.URL, http.StatusNotFound)
 	if resp.DocumentsFound != 0 {
 		t.Errorf("documents_found=%d, want 0 (terms target is a soft-404)", resp.DocumentsFound)
 	}
 }
 
 // TestUnreachableStatusOnFetchFail: when the homepage cannot be fetched, the
-// service must report status=unreachable at HTTP 200, not a 5xx service error.
+// service must report status=unreachable via meshresult — HTTP 404 (NoData,
+// the fleet contract for an unreachable target), NOT a false-OK 200 and not a
+// 5xx service error. domainscope keys on this code to record NoData.
 func TestUnreachableStatusOnFetchFail(t *testing.T) {
 	allowLoopback(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -104,13 +112,16 @@ func TestUnreachableStatusOnFetchFail(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/?url="+srv.URL, nil)
 	rec := httptest.NewRecorder()
 	Handler(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("unreachable target must return HTTP 200, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unreachable target must return HTTP 404, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	var resp Response
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	if resp.Status != StatusUnreachable {
 		t.Errorf("status=%q, want unreachable (reason=%q err=%q)", resp.Status, resp.Reason, resp.Error)
+	}
+	if resp.Result != string(meshresult.OutcomeUnreachable) {
+		t.Errorf("result=%q, want unreachable", resp.Result)
 	}
 	if resp.Reason == "" {
 		t.Error("expected a machine-readable reason for unreachable target")
@@ -165,9 +176,13 @@ func TestRetryRecoversTransient(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp := doHandler(t, srv.URL)
+	// Finds privacy+terms ⇒ has data ⇒ HTTP 200.
+	resp := doHandler(t, srv.URL, http.StatusOK)
 	if resp.Status != StatusOK {
 		t.Fatalf("status=%q want ok after retry (err=%q)", resp.Status, resp.Error)
+	}
+	if resp.Result != StatusOK {
+		t.Errorf("result=%q, want ok", resp.Result)
 	}
 	if !resp.Detection.HomepageFetched {
 		t.Fatal("homepage should have been fetched on retry")
@@ -198,15 +213,18 @@ func TestSelftestFixtureDiscovers(t *testing.T) {
 	}
 }
 
-// doHandler runs Handler against target and returns the parsed Response,
-// failing the test on a non-200 or bad JSON.
-func doHandler(t *testing.T, target string) Response {
+// doHandler runs Handler against target, asserts the HTTP status equals
+// wantCode, and returns the parsed Response. Under the meshresult contract an
+// extraction scan that finds verified docs is 200, while "reached but zero
+// verified legal docs" is meshresult.OutcomeNoData → 404; callers pass the
+// code they expect.
+func doHandler(t *testing.T, target string, wantCode int) Response {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/?url="+target, nil)
 	rec := httptest.NewRecorder()
 	Handler(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != wantCode {
+		t.Fatalf("status=%d want %d body=%s", rec.Code, wantCode, rec.Body.String())
 	}
 	var resp Response
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
