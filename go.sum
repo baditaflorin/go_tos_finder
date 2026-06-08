@@ -1,5 +1,5 @@
-github.com/baditaflorin/go-common v0.62.0 h1:oDJ9TRYIN4WhdUhBQi1Up7z/FvWDzgKeNggE92iV7VE=
-github.com/baditaflorin/go-common v0.62.0/go.mod h1:7rsNL00yoctjof7NnpKzSsWwVV7xeqjBIu95siJDraQ=
+github.com/baditaflorin/go-common v0.63.0 h1:QOt7J3cr8I0Jp5gRpE10/xOeq6RVVB23yKSK1HkU1oA=
+github.com/baditaflorin/go-common v0.63.0/go.mod h1:7rsNL00yoctjof7NnpKzSsWwVV7xeqjBIu95siJDraQ=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
