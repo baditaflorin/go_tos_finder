@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/baditaflorin/go-common/safehttp"
 	"golang.org/x/sync/errgroup"
 	"net/http"
 	"net/url"
@@ -42,7 +41,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		resp.Detection.RenderMode = "direct"
 	}
 
-	if _, err := safehttp.CheckURL(r.Context(), u.String()); err != nil {
+	if _, err := checkURLRetry(r.Context(), u.String()); err != nil {
 		// Distinguish "target unreachable" (NXDOMAIN / no records — the target
 		// simply does not resolve) from a genuine policy reject (private IP,
 		// invalid scheme). The former is data, not a service error: record it

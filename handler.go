@@ -238,6 +238,42 @@ func isTransientFetchError(err error) bool {
 		strings.Contains(s, "502") || strings.Contains(s, "503") || strings.Contains(s, "504")
 }
 
+// checkURLRetry validates target with safehttp.CheckURL, retrying once on a
+// transient DNS failure. safehttp.GuardHost documents its own single-shot
+// 3s resolver call as non-cached on failure specifically so "the caller
+// [can] retry/resolve again" — but the original call site here never did,
+// so a live, perfectly-reachable domain (confirmed against stripe.com and
+// github.com, not just the flagged low-completion domains) that hits one
+// slow/flaky resolver window is permanently recorded as unreachable with
+// zero retry, even though the exact same request succeeds on a second try
+// moments later. This mirrors fetchPageRetry's existing bounded-retry
+// pattern for the homepage GET later in the same handler. A definitive
+// policy reject (blocked/invalid scheme/missing host) or a real NXDOMAIN
+// ("no such host") is never retried — see isUnreachableCheckError /
+// isTransientFetchError.
+func checkURLRetry(ctx context.Context, target string) (*url.URL, error) {
+	const maxAttempts = 2 // 1 initial + 1 retry; bounded, matches fetchPageRetry
+	var u *url.URL
+	var err error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return u, err
+			case <-time.After(time.Duration(attempt) * 400 * time.Millisecond):
+			}
+		}
+		u, err = safehttp.CheckURL(ctx, target)
+		if err == nil {
+			return u, nil
+		}
+		if !isUnreachableCheckError(err) || !isTransientFetchError(err) {
+			return u, err
+		}
+	}
+	return u, err
+}
+
 // isWeakUnconfirmed reports whether a finding is a low-confidence hit whose
 // body WAS fetched and verified real, but carried NO type-specific vocabulary —
 // i.e. it earned only `page_exists_unconfirmed`. These are the headline false
