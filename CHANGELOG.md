@@ -2,6 +2,11 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.3.4 — 2026-07-05
+
+### Fixed
+- Retry the pre-fetch SSRF/DNS reachability check (safehttp.CheckURL) once on a transient DNS lookup timeout, mirroring the existing homepage-fetch retry. Live domains (including stripe.com/github.com) were intermittently failing this single-shot 3s DNS check and getting permanently recorded as unreachable.
+
 ## 1.3.3 — 2026-06-08
 
 ### Changed
