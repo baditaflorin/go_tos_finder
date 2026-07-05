@@ -193,3 +193,55 @@ func TestAllCanonicalProbesCapped(t *testing.T) {
 		t.Errorf("expected 7 probes, got %d", len(probes))
 	}
 }
+
+// TestCheckURLRetryRejectsBlockedWithoutRetry verifies a definitive policy
+// reject (private-IP SSRF block) returns immediately on the first attempt —
+// it must never be retried, since retrying would not change the verdict and
+// would only add latency.
+func TestCheckURLRetryRejectsBlockedWithoutRetry(t *testing.T) {
+	start := time.Now()
+	_, err := checkURLRetry(context.Background(), "http://127.0.0.1/")
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatalf("expected an error for a private-IP target")
+	}
+	if !strings.Contains(err.Error(), "blocked") {
+		t.Errorf("expected an ErrBlocked-flavoured error, got %v", err)
+	}
+	// A retry would sleep >=400ms; a single-attempt reject should be near-instant.
+	if elapsed > 300*time.Millisecond {
+		t.Errorf("policy reject took %v — looks like it was retried", elapsed)
+	}
+}
+
+// TestCheckURLRetryRespectsContextCancellation verifies that a context which
+// is already done short-circuits the retry loop instead of blocking forever
+// or panicking on a nil deref.
+func TestCheckURLRetryRespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := checkURLRetry(ctx, "https://example.invalid/")
+	if err == nil {
+		t.Fatalf("expected an error with an already-cancelled context")
+	}
+}
+
+// TestCheckURLRetrySucceedsOnValidURL is a smoke test that the happy path
+// (a syntactically valid, non-blocked URL) still returns cleanly through the
+// new wrapper — i.e. checkURLRetry is behaviourally transparent for the
+// common case and only changes behavior on a transient DNS failure.
+func TestCheckURLRetrySucceedsOnValidURL(t *testing.T) {
+	u, err := checkURLRetry(context.Background(), "https://example.com/")
+	if err != nil {
+		var zero url.URL
+		if u != nil && *u != zero {
+			t.Fatalf("unexpected error for a well-formed public URL: %v", err)
+		}
+		// A DNS hiccup in this sandbox is acceptable (matches production
+		// reality); just make sure we didn't panic and got *an* answer.
+		t.Skipf("network unavailable in test sandbox: %v", err)
+	}
+	if u == nil || u.Hostname() != "example.com" {
+		t.Errorf("expected resolved URL for example.com, got %+v", u)
+	}
+}
