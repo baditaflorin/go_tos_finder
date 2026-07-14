@@ -80,10 +80,10 @@ const (
 
 // Response is the JSON payload returned to callers.
 type Response struct {
-	Tool             string           `json:"tool"`
-	Version          string           `json:"Version"`
-	Target           string           `json:"target"`
-	Status           string           `json:"status"`
+	Tool    string `json:"tool"`
+	Version string `json:"Version"`
+	Target  string `json:"target"`
+	Status  string `json:"status"`
 	// Result is the fleet-canonical meshresult.Outcome ("ok" / "no_data" /
 	// "unreachable" / "timeout" / "error"). It is the orthogonal,
 	// machine-readable enricher-level classification domainscope keys on

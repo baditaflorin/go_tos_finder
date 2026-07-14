@@ -5,6 +5,13 @@ import (
 	"testing"
 )
 
+func TestClassifyBodyRejectsErrorTemplate(t *testing.T) {
+	r := classifyBody("<title>Terms of Service</title><p>These terms apply...</p>", 404, DocTermsOfService)
+	if r.IsReal || len(r.Evidence) == 0 {
+		t.Fatalf("error template classified as real: %+v", r)
+	}
+}
+
 // The production soft-404 fingerprint: a 200 with a ~114-byte JS-redirect stub
 // that bounces to a parking lander. ~528k of these were being counted as real
 // documents at v1.1.0. classifyBody must reject them.
