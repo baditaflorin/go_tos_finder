@@ -119,6 +119,12 @@ type verifyResult struct {
 //   - Anything else that's a real page but unconfirmed          -> low.
 func classifyBody(body string, httpStatus int, want DocType) verifyResult {
 	res := verifyResult{Confidence: ConfNone}
+	// Error responses can reuse legal templates or CDN challenge text; they
+	// are not evidence that the requested document exists.
+	if httpStatus < 200 || httpStatus >= 400 {
+		res.Evidence = append(res.Evidence, "rejected:http_status")
+		return res
+	}
 	trimmed := strings.TrimSpace(body)
 	res.Title = strings.TrimSpace(stripTags(firstGroup(titleRE, body)))
 
