@@ -2,6 +2,13 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.3.5 — 2026-07-17
+
+### Changed
+- Make ToS finder selftest deterministic
+- fix: reject third-party and soft-404 legal docs
+- fix: reduce detector false positives
+
 ## 1.3.4 — 2026-07-05
 
 ### Fixed
