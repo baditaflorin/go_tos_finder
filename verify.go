@@ -135,11 +135,10 @@ func classifyBody(body string, httpStatus int, want DocType) verifyResult {
 		return res
 	}
 
-	// Gate 2: soft-404 / parked / placeholder text in the title or a small body.
-	hay := res.Title
-	if smallBody {
-		hay = hay + " " + stripTags(body)
-	}
+	// Gate 2: soft-404 / parked / placeholder text is disqualifying even on
+	// a large branded error page.  The old small-body-only guard let CDN 200
+	// error templates (often several KB of navigation) become legal docs.
+	hay := res.Title + " " + stripTags(body)
 	if softNotFoundRE.MatchString(hay) {
 		res.Evidence = append(res.Evidence, "rejected:soft_404")
 		return res

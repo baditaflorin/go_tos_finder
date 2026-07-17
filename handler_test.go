@@ -92,6 +92,15 @@ func TestLinkScanRelativeURL(t *testing.T) {
 	}
 }
 
+func TestLinkScanRejectsThirdPartyLegalPage(t *testing.T) {
+	base, _ := url.Parse("https://shop.example.com/")
+	hits := linkScan(`<footer><a href="https://platform.example/privacy">Privacy</a><a href="https://privacy.shop.example.com/policy">Privacy</a></footer>`, base)
+	got, ok := hits[DocPrivacyPolicy]
+	if !ok || got.URL != "https://privacy.shop.example.com/policy" {
+		t.Fatalf("want same-site policy only, got %#v", hits)
+	}
+}
+
 func TestLinkScanSkipsJunkSchemes(t *testing.T) {
 	base, _ := url.Parse("https://example.com/")
 	html := `<a href="mailto:foo@bar.com">terms of service</a>

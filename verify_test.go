@@ -47,6 +47,14 @@ func TestClassifyBodyRejectsSoftVariants(t *testing.T) {
 	}
 }
 
+func TestClassifyBodyRejectsLargeSoft404(t *testing.T) {
+	body := "<title>Page Not Found</title><main>" + strings.Repeat("navigation ", 100) + "</main>"
+	vr := classifyBody(body, 200, DocTermsOfService)
+	if vr.IsReal {
+		t.Fatalf("large branded 404 must not be a legal document: %+v", vr)
+	}
+}
+
 func TestClassifyBodyHighConfidenceTitleMatch(t *testing.T) {
 	body := `<!DOCTYPE html><html><head><title>Privacy Policy | Acme Inc</title></head>
 <body><h1>Privacy Policy</h1><p>This policy describes how we collect and process your personal data. Last updated: January 2026.</p>` +
