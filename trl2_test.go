@@ -200,6 +200,9 @@ func TestRetryRecoversTransient(t *testing.T) {
 // exercises real discovery logic, not a static 200).
 func TestSelftestFixtureDiscovers(t *testing.T) {
 	_ = newSelftest(serviceName, Version) // suite builds without panic
+	if err := checkSelftestFixture(); err != nil {
+		t.Fatalf("deterministic selftest fixture failed: %v", err)
+	}
 	base, err := url.Parse("https://example.com/")
 	if err != nil {
 		t.Fatal(err)
