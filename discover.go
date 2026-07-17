@@ -26,6 +26,11 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		if u.Scheme != "http" && u.Scheme != "https" {
 			continue
 		}
+		// Platform-wide or social-network legal links in a footer are not this
+		// target's documents. Keep the origin and its subdomains only.
+		if !sameSiteHost(u, base) {
+			continue
+		}
 		linkText := strings.TrimSpace(stripTags(a.Inner))
 		if len(linkText) > 80 {
 			linkText = linkText[:80]
@@ -56,6 +61,15 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		out[dt] = hit
 	}
 	return out
+}
+
+func sameSiteHost(u, base *url.URL) bool {
+	if u == nil || base == nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	baseHost := strings.ToLower(strings.TrimSuffix(base.Hostname(), "."))
+	return host != "" && baseHost != "" && (host == baseHost || strings.HasSuffix(host, "."+baseHost))
 }
 
 func stripFragment(u *url.URL) string {
