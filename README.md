@@ -50,6 +50,24 @@ Response (truncated for brevity):
 - `partial` — ≥2 documents found but ToS/Privacy missing.
 - `sparse` — exactly 1 document found.
 - `none` — no documents discovered.
+- `unknown` — the homepage could not be verified (see `status`/`result` below);
+  this is NOT a claim that the site has no legal documents.
+
+## Status / result
+
+`status` (and the fleet-canonical `result`) additionally distinguish *why* a
+scan didn't produce documents:
+
+- `ok` — homepage fetched and scanned; `documents`/`verdict` reflect real findings.
+- `no_data` — homepage fetched and scanned; genuinely no legal document found.
+- `unreachable` — the target could not be reached at all (NXDOMAIN, connect/TLS
+  failure, ...).
+- `blocked` — the homepage responded (HTTP < 500) but the body is a bot-block /
+  WAF-challenge interstitial (Cloudflare JS challenge, a stock 403 stub, a
+  generic "Access Denied" page) or an unusably empty stub, not real site
+  content. Reported as HTTP 502 with `verdict:"unknown"` rather than a false
+  `no_data` — we did not actually see the site, so "no legal documents found"
+  would be a false claim of certainty.
 
 ## Flow
 

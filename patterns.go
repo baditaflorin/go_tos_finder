@@ -142,8 +142,18 @@ var patterns = []pattern{
 			"polityka-prywatnosci", "prywatnosc", "personvern", "integritetspolicy",
 			"tietosuoja",
 		),
-		textRegex:  regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
-		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
+		textRegex: regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
+		// datenschutz(?:erkl[äa]rung|hinweise)? — NOT bare "datenschutz": the
+		// standalone word is rare as a page <title>, while "Datenschutzerklärung"
+		// (the compound word) is the standard, near-universal title for a German
+		// privacy policy page. A bare `\bdatenschutz\b` cannot match inside that
+		// compound (no word boundary between "...schutz" and "erklärung..."), so
+		// the single most common real German privacy-policy title was silently
+		// falling through to medium/low confidence instead of the high-confidence
+		// title match every other language gets. Found via the charset fix's own
+		// test fixture (a real German title, decoded correctly, still failed to
+		// classify as high-confidence) — a distinct, charset-independent bug.
+		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
 		scriptRegex: scriptRE(
 			// Japanese: privacy policy / handling of personal information
 			"プライバシーポリシー", "プライバシー", "個人情報保護方針", "個人情報の取り扱い", "個人情報保護",

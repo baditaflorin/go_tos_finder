@@ -48,8 +48,14 @@ var legalVocabRE = regexp.MustCompile(`(?i)\b(?:last\s+(?:updated|modified|revis
 // of probe false positives seen on the 100 real rows. Link-discovered docs are
 // exempt — the explicit link is itself the location evidence.
 var docTypeSignalRE = map[DocType]*regexp.Regexp{
-	DocTermsOfService:      regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use)|terms\s+and\s+conditions|user\s+agreement|acceptance\s+of\s+these\s+terms|by\s+(?:using|accessing))\b`),
-	DocPrivacyPolicy:       regexp.MustCompile(`(?i)\b(?:privacy|personal\s+(?:data|information)|datenschutz|we\s+collect|how\s+we\s+(?:use|process)|data\s+we\s+collect|cookies?\s+and\s+similar)\b`),
+	DocTermsOfService: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use)|terms\s+and\s+conditions|user\s+agreement|acceptance\s+of\s+these\s+terms|by\s+(?:using|accessing))\b`),
+	// datenschutz(?:erkl[äa]rung|hinweise)? — see the matching titleRegex fix
+	// in patterns.go: a bare `\bdatenschutz\b` cannot match inside the standard
+	// German compound "Datenschutzerklärung", so a canonical-probed German-only
+	// privacy page (title AND body using only the compound form, no English
+	// "privacy"/"we collect" vocabulary) could fail this false-positive guard
+	// entirely and be silently rejected as noise, not merely under-scored.
+	DocPrivacyPolicy:       regexp.MustCompile(`(?i)\b(?:privacy|personal\s+(?:data|information)|datenschutz(?:erkl[äa]rung|hinweise)?|we\s+collect|how\s+we\s+(?:use|process)|data\s+we\s+collect|cookies?\s+and\s+similar)\b`),
 	DocCookiePolicy:        regexp.MustCompile(`(?i)\b(?:cookies?|tracking\s+technolog|local\s+storage|web\s+beacons?)\b`),
 	DocAcceptableUse:       regexp.MustCompile(`(?i)\b(?:acceptable\s+use|prohibited\s+(?:uses?|activities|conduct)|may\s+not\s+use|abuse|fair\s+use)\b`),
 	DocCommunityGuidelines: regexp.MustCompile(`(?i)\b(?:community\s+(?:guidelines|standards)|code\s+of\s+conduct|behaviou?r|respectful|harassment)\b`),

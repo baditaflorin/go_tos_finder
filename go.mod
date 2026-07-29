@@ -6,6 +6,7 @@ require (
 	github.com/baditaflorin/go-common v0.70.0
 	golang.org/x/net v0.52.0
 	golang.org/x/sync v0.20.0
+	golang.org/x/text v0.35.0
 )
 
 require (
@@ -18,7 +19,6 @@ require (
 	github.com/prometheus/procfs v0.16.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
