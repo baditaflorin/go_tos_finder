@@ -61,7 +61,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	resp.ResolvedIP = firstResolvedIP(ctx, u.Hostname())
 
 	client := newClient()
-	html, finalURL, err := fetchPageRetry(ctx, client, u.String())
+	html, finalURL, homepageStatus, err := fetchPageRetry(ctx, client, u.String())
 	if err != nil {
 		// Homepage could not be fetched after retries — the target is
 		// unreachable, not an internal fault. Classified via meshresult so the
@@ -71,6 +71,21 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.FetchedURL = finalURL
 	resp.Detection.HomepageFetched = true
+
+	// The homepage fetch succeeded (HTTP < 500) but the body may itself be a
+	// bot-block / WAF-challenge interstitial (Cloudflare "Just a moment...",
+	// a stock Apache/Nginx 403 stub, generic "Access Denied") rather than real
+	// site content — see patterns_block.go. Feeding that into linkScan finds
+	// zero legal-document links (correctly — there are none in an
+	// interstitial), which pre-fix was recorded as an indistinguishable
+	// verdict:"none" false negative next to a domain that genuinely has no
+	// legal pages. A real production sample (2026-07-29, 202 "no_data" hosts
+	// re-fetched live) found 15 (~7%) matching this signature. Report these
+	// honestly as blocked/unverifiable rather than a false "no data".
+	if blocked, reason := isHomepageBlocked(html, homepageStatus); blocked {
+		writeBlocked(w, resp, homepageStatus, reason)
+		return
+	}
 
 	base, _ := url.Parse(finalURL)
 	if base == nil {

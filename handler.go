@@ -76,6 +76,14 @@ const (
 	StatusOK          = "ok"
 	StatusUnreachable = "unreachable"
 	StatusNoData      = "no_data"
+	// StatusBlocked marks a homepage that fetched successfully (HTTP < 500)
+	// but whose body is a bot-block / WAF-challenge interstitial (or an
+	// unusably empty stub) rather than real site content — see
+	// patterns_block.go / isHomepageBlocked. Distinct from StatusNoData: we
+	// genuinely could not see the site, so "no legal documents found" would
+	// be a false claim of certainty domainscope should not record as a clean
+	// negative.
+	StatusBlocked = "blocked"
 )
 
 // Response is the JSON payload returned to callers.
@@ -195,6 +203,22 @@ func writeNoData(w http.ResponseWriter, r Response) {
 	}
 	r.Status = StatusNoData
 	writeJSON(w, meshresult.OutcomeNoData.HTTPCode(), r)
+}
+
+// writeBlocked records a homepage that fetched (HTTP < 500) but whose body is
+// a bot-block/WAF-challenge interstitial or an unusably empty stub — see
+// isHomepageBlocked. Mapped to meshresult.OutcomeError (HTTP 502): this is
+// neither a clean "ok" (we never saw real content) nor a clean "no_data"
+// (we don't actually know whether legal documents exist), so domainscope
+// should treat it as a retry-worthy upstream condition rather than a
+// verified-empty result. The homepageStatus the origin actually returned is
+// preserved in Reason for debugging.
+func writeBlocked(w http.ResponseWriter, r Response, homepageStatus int, reason string) {
+	r.Result = string(meshresult.OutcomeError)
+	r.Reason = fmt.Sprintf("homepage_blocked:%s:http_%d", reason, homepageStatus)
+	r.Status = StatusBlocked
+	r.Verdict = "unknown"
+	writeJSON(w, meshresult.OutcomeError.HTTPCode(), r)
 }
 
 func addError(r Response, err error) Response {
@@ -393,54 +417,70 @@ func joinBaseAndPath(base *url.URL, path string) string {
 // deadline-bounded by ctx. This recovers real data for live domains whose first
 // fetch trips the fleet fetch proxy's intermittent 504 — the dominant cause of
 // the service's false upstream_error rate.
-func fetchPageRetry(ctx context.Context, client *http.Client, target string) (string, string, error) {
+func fetchPageRetry(ctx context.Context, client *http.Client, target string) (string, string, int, error) {
 	const maxAttempts = 2 // 1 initial + 1 retry; kept bounded under the outer ctx
 	var body, finalURL string
+	var status int
 	var err error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return "", finalURL, err
+				return "", finalURL, status, err
 			case <-time.After(time.Duration(attempt) * 400 * time.Millisecond):
 			}
 		}
-		body, finalURL, err = fetchPage(ctx, client, target)
+		body, finalURL, status, err = fetchPage(ctx, client, target)
 		if err == nil {
-			return body, finalURL, nil
+			return body, finalURL, status, nil
 		}
 		if !isTransientFetchError(err) {
-			return body, finalURL, err
+			return body, finalURL, status, err
 		}
 	}
-	return body, finalURL, err
+	return body, finalURL, status, err
 }
 
-func fetchPage(ctx context.Context, client *http.Client, target string) (string, string, error) {
+func fetchPage(ctx context.Context, client *http.Client, target string) (string, string, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
 	req.Header.Set("Accept-Language", "en;q=0.9,de;q=0.8,fr;q=0.7")
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("fetch failed: %w", err)
+		return "", "", 0, fmt.Errorf("fetch failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 500 {
-		return "", resp.Request.URL.String(), fmt.Errorf("upstream returned status %d", resp.StatusCode)
+		return "", resp.Request.URL.String(), resp.StatusCode, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
-	return readBodyLimited(resp), resp.Request.URL.String(), nil
+	return readBodyLimited(resp), resp.Request.URL.String(), resp.StatusCode, nil
 }
 
+// readBodyLimited reads the response body (capped to maxBodyBytes) and
+// decodes it to UTF-8 when the origin declared (via Content-Type header or
+// an in-body <meta charset>/http-equiv tag) a different encoding. Real,
+// still-common legacy encodings (ISO-8859-1/Windows-1252 on older European
+// sites, Shift_JIS/EUC-KR/GBK on older Japanese/Korean/Chinese sites) were
+// previously read as raw bytes and treated as UTF-8 by every regex in this
+// package (patterns.go, patterns_script.go) and by encoding/json on the way
+// out — silently corrupting non-ASCII title/link-text/evidence content and
+// making the script-aware CJK/Cyrillic matchers (added for exactly this
+// geo-coverage reason) unable to fire against a body that isn't actually
+// UTF-8. Only transcodes when the encoding is explicitly DECLARED and
+// `certain` (charset.DetermineEncoding's own confidence signal); an
+// undeclared/ambiguous body is left untouched exactly as before, so this
+// cannot introduce new corruption on already-UTF-8 pages that lack a
+// declaration.
 func readBodyLimited(resp *http.Response) string {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil && !errors.Is(err, io.EOF) {
-		return string(body)
+		return decodeToUTF8(body, resp.Header.Get("Content-Type"))
 	}
-	return string(body)
+	return decodeToUTF8(body, resp.Header.Get("Content-Type"))
 }
 
 // normaliseIDN converts a Unicode-form (U-label) host on u to its ASCII A-label

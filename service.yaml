@@ -1,10 +1,40 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.3.5"
-trl: 5
-trl_assessed_at: "2026-07-01"
-trl_assessor: "codex-trl-audit-2026-07-01-batch2"
+version: "1.4.0"
+trl: 6
+trl_assessed_at: "2026-07-29"
+trl_assessor: "claude-trl-uplift-2026-07-29"
+# TRL evidence (2026-07-29 real-data pass, see PR that bumped 5->6):
+#   - Live re-run of the SAME 1000 real hostnames (domains table sample)
+#     before/after this change: 68/1000 (6.8%) previously-silent
+#     verdict:"none" false negatives were bot-block/WAF-challenge homepages
+#     (Cloudflare JS challenge, Apache 403 stub, generic WAF block), now
+#     honestly reported as status:"blocked" instead of a false no-data claim.
+#   - Two additional real bugs found and fixed with unit-test evidence: raw
+#     non-UTF-8 body bytes (ISO-8859-1/Windows-1252 — confirmed present on
+#     real domains in the same sample) fed straight into UTF-8 pattern
+#     matching; and the German "Datenschutzerklärung" compound title failing
+#     the bare `\bdatenschutz\b` regex.
+#   - Persistence / cross-source corroboration: verified against the live
+#     domainscope database (prod_2026_domainscope_scrapetheworld_org) that a
+#     `domain_legal_docs` + `domain_legal_doc_items` evidence store ALREADY
+#     exists and is actively populated from this tool's own output
+#     (tool_name='go_tos_finder', 3.1M rows, fresh as of the day of this
+#     audit) by the fleet's domainscope enrichment pipeline, keyed to
+#     domain_id with a FK to the 11.9M-row domains table, with per-item
+#     detection-method provenance (probed_path/footer_link/page_link). This
+#     satisfies the "stored evidence store" the ceiling reason names as a
+#     valid path to closing the persistence half of the gap — but it is
+#     implemented OUTSIDE this repo (by the calling enrichment pipeline, not
+#     by go_tos_finder's own code), and the store is latest-state-only (no
+#     historical time series, no independent second-source corroboration).
+#     TRL is bumped to 6, not to the ceiling of 7, on that basis: real,
+#     measured detection-quality improvement plus real (if externally-owned)
+#     persistence evidence, but no cross-source corroboration logic owned by
+#     this service, and the JS-render limitation (naver.com-style SPA
+#     footers) is unchanged and still real. See PR description for the full
+#     writeup this comment summarises.
 port: 8316
 
 api:

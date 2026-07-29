@@ -59,7 +59,11 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	}
 	if pm.status >= 200 && pm.status < 400 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, verifyBodyBytes))
-		pm.body = string(b)
+		// Decode declared non-UTF-8 encodings (ISO-8859-1/Windows-1252,
+		// Shift_JIS/EUC-KR/GBK, ...) before any title/vocabulary matching —
+		// see decodeToUTF8 in charset.go. contentLen below is measured on the
+		// raw wire bytes (b), matching pre-fix behavior for the size heuristic.
+		pm.body = decodeToUTF8(b, resp.Header.Get("Content-Type"))
 		// If Content-Length wasn't advertised (-1), backfill from what we read
 		// so downstream size heuristics still work for chunked responses.
 		if pm.contentLen < 0 {
