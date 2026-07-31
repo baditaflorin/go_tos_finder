@@ -1,10 +1,22 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.4.0"
+version: "1.4.1"
 trl: 6
-trl_assessed_at: "2026-07-29"
-trl_assessor: "claude-trl-uplift-2026-07-29"
+trl_assessed_at: "2026-07-31"
+trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-07-31 genuine re-audit (fresh 60-domain sample, different hosts than
+# the 2026-07-29 sample below; full source re-read end-to-end; safehttp
+# fetch-cache-masking check done explicitly — see PR for the writeup): no
+# trl/trl_ceiling contradiction found, no regression from the one commit
+# since the last audit (Dockerfile HEALTHCHECK interval only). One real,
+# evidence-backed correctness bug found and fixed: the fleetfetch fallback
+# client used whenever the shared fetch cache is unreachable/slow silently
+# dropped this service's own User-Agent (Go's bare default UA reached origin
+# instead), inflating false blocked/unreachable verdicts specifically during
+# cache degradation — live before/after proof in CHANGELOG.md 1.4.1. TRL
+# stays at 6 (bug fix within the existing band, not a new capability); the
+# JS-render ceiling reason is unchanged and still real.
 # TRL evidence (2026-07-29 real-data pass, see PR that bumped 5->6):
 #   - Live re-run of the SAME 1000 real hostnames (domains table sample)
 #     before/after this change: 68/1000 (6.8%) previously-silent

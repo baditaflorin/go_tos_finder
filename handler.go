@@ -126,8 +126,58 @@ func renderMode() string {
 	}
 }
 
+// fallbackClient is the client fleetfetch falls through to whenever a fetch
+// is NOT cache-mediated: the shared fleet fetch cache is unreachable, or (via
+// WithFallbackOnTimeout below) it answered too slowly. fleetfetch's own
+// RoundTripper (see fetchCacheTransport.RoundTrip in go-common) deliberately
+// strips the caller's per-request User-Agent before handing headers to this
+// path — a real cache-hit-rate win for the CACHE-mediated case, where the
+// cache's own crawler UA is what actually reaches origin, so a per-service UA
+// would needlessly fragment a cache key meant to be shared fleet-wide. But
+// that same stripped header set is also what reaches this fallback client,
+// and nothing else sets a User-Agent for it — go-common's own default
+// fallback (an unconfigured safehttp.NewClient()) has no UA option set
+// either, so the request that's supposed to be a faithful direct fetch
+// silently goes out as Go's bare "Go-http-client/1.1" instead of this
+// service's honest, RFC-compliant UA.
+//
+// Verified live and reproducible against a real 2026-07-31 production
+// sample domain: chronicpies.com (redirects to chronicco.com, a WordPress
+// "Coming Soon" placeholder behind Cloudflare) returns HTTP 403 — classified
+// blocked/error by isHomepageBlocked — to a request carrying no/bare-Go UA,
+// but HTTP 200 to the byte-identical request carrying this service's own UA
+// string. Exactly this fallback path is what every request takes whenever
+// the shared fetch cache is degraded or unreachable — the one moment a
+// caller most needs a correct, honestly-identified direct fetch — so the
+// stripped UA was silently inflating false "blocked" verdicts specifically
+// during cache outages/timeouts. WithUserAgent restores it for this path
+// only; the common cache-mediated path (and its shared-cache hit rate for
+// every other fleet service) is untouched.
+//
+// WithoutFetchCache additionally keeps this client direct-only: without it,
+// a process-wide safehttp DefaultFetchDelegate — installed by server.New
+// whenever FLEET_FETCH_CACHE_URL is set, the fleet-standard deployment shape
+// — would make this "direct" fallback consult the very same shared fetch
+// cache the caller just fell back FROM, defeating the fallback's purpose
+// (and risking a cache-outage feedback loop) instead of genuinely reaching
+// origin. WithForceHTTP2 restores the HTTP/2 offering safehttp's custom
+// dialer otherwise disables (see that option's own doc), matching the
+// pre-fleetfetch safehttp.NewClient() behavior this fallback stands in for.
+func fallbackClient() *http.Client {
+	return safehttp.NewClient(
+		safehttp.WithTimeout(requestTimeout),
+		safehttp.WithUserAgent(userAgent),
+		safehttp.WithoutFetchCache(),
+		safehttp.WithForceHTTP2(),
+	)
+}
+
 func newClient() *http.Client {
-	c := fleetfetch.NewHTTPClient(fleetfetch.WithRender(renderMode()), fleetfetch.WithFallbackOnTimeout())
+	c := fleetfetch.NewHTTPClient(
+		fleetfetch.WithRender(renderMode()),
+		fleetfetch.WithFallbackOnTimeout(),
+		fleetfetch.WithFallbackClient(fallbackClient()),
+	)
 	c.Timeout = requestTimeout
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {

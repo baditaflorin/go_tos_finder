@@ -2,6 +2,46 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.4.1 — 2026-07-31
+
+### Fixed (real production bug, found via a fresh live sample during a genuine TRL re-audit)
+
+- **Fallback-fetch User-Agent stripped, causing false "blocked"/"unreachable"
+  results.** `newClient()` builds its `*http.Client` via
+  `fleetfetch.NewHTTPClient`, whose `RoundTripper` deliberately strips the
+  caller's per-request `User-Agent` (and `Accept-Encoding`) before handing
+  headers to the shared fleet fetch cache — a real cache-hit-rate win when
+  the fetch is cache-mediated, since the cache's own crawler UA is what
+  actually reaches origin. But that same stripped header set is also what
+  reaches fleetfetch's *direct* fallback fetch — the path taken whenever the
+  shared cache is unreachable or (via `WithFallbackOnTimeout`, which this
+  service enables) answers too slowly — and nothing else set a User-Agent on
+  that path, since go-common's own default fallback client
+  (`safehttp.NewClient(safehttp.WithTimeout(...))`) has no UA configured
+  either. The request that's supposed to be a faithful, honestly-identified
+  direct fetch silently went out as Go's bare `Go-http-client/1.1` instead.
+  Verified live and reproducible against a real production sample domain:
+  `chronicpies.com` (redirects to `chronicco.com`, a WordPress "Coming Soon"
+  placeholder behind Cloudflare) returned HTTP 403 — classified
+  `status:"blocked"` — to the bare-Go-UA request, but HTTP 200 (real content)
+  to the byte-identical request carrying this service's own UA. Since this
+  fallback path is exactly what runs whenever the shared cache is degraded —
+  the one moment a caller most needs a correct direct fetch — the stripped
+  UA was silently inflating false `blocked`/`unreachable` verdicts during
+  cache outages/timeouts specifically. `newClient()` now supplies fleetfetch
+  an explicit fallback client
+  (`fleetfetch.WithFallbackClient`) built with `safehttp.WithUserAgent`,
+  `safehttp.WithoutFetchCache`, and `safehttp.WithForceHTTP2` — restoring
+  the correct UA on the fallback path (measured before/after: `chronicpies.com`
+  blocked→no_data, `fixmycity.de` unreachable→ok/2 real documents found, same
+  live re-run), while leaving the common cache-mediated path — and its
+  shared-cache hit rate for every other fleet service — untouched.
+  `WithoutFetchCache` additionally stops this fallback client from consulting
+  the process-wide default fetch delegate a fleet deployment installs
+  whenever `FLEET_FETCH_CACHE_URL` is set, which would otherwise route this
+  "direct" fallback right back through the same (degraded) shared cache
+  instead of genuinely reaching origin.
+
 ## 1.4.0 — 2026-07-29
 
 ### Fixed (real production false negatives, found via a live 1000-domain sample)
