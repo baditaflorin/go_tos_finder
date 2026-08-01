@@ -139,6 +139,44 @@ func TestHandlerEndToEnd(t *testing.T) {
 	}
 }
 
+// TestFallbackClientSendsRealUserAgent guards against a real regression:
+// fleetfetch.NewHTTPClient's RoundTripper deliberately strips the caller's
+// per-request User-Agent before handing headers to its direct-fetch fallback
+// path (see fallbackClient's doc comment) — a real cache-hit-rate win when
+// the fetch is cache-mediated, but with nothing else to set a UA on the
+// fallback path itself. In this test environment (as in local/dev generally,
+// and in production whenever the shared fetch cache is unreachable or slow)
+// the fleet fetch cache is not reachable, so every request the handler makes
+// already exercises exactly this fallback path — making it the right place
+// to pin the fix: the origin must see this service's own UA, not Go's bare
+// default ("Go-http-client/1.1"), which real-world WAFs (verified live
+// against chronicpies.com, a production sample domain) are far more likely
+// to 403/block than a UA that honestly identifies the caller.
+func TestFallbackClientSendsRealUserAgent(t *testing.T) {
+	allowLoopback(t)
+	var gotUA string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>Acme</title></head><body>hi</body></html>`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/?target="+srv.URL, nil)
+	rec := httptest.NewRecorder()
+	Handler(rec, req)
+
+	if gotUA == "" {
+		t.Fatal("origin received no User-Agent header at all")
+	}
+	if !strings.Contains(gotUA, "go_tos_finder") {
+		t.Errorf("origin received User-Agent %q, want it to identify this service (contain %q) — "+
+			"the fallback-path UA-stripping regression this test guards against", gotUA, "go_tos_finder")
+	}
+}
+
 // TestHandlerProbedRealDoc: no footer links, but the canonical /privacy and
 // /terms paths serve real documents — they must be found via verified probe.
 func TestHandlerProbedRealDoc(t *testing.T) {
