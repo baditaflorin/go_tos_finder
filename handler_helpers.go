@@ -109,7 +109,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	probeList := allCanonicalProbes(missing, maxProbes)
 
-	probeCtx, probeCancel := context.WithTimeout(ctx, probeTimeout)
+	probeCtx, probeCancel := context.WithTimeout(ctx, probePhaseTimeout)
 	defer probeCancel()
 
 	probeClient := newClient()
@@ -195,7 +195,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	// freshness, and content confidence (rejecting links that point at
 	// soft-404s). A footer link is strong location evidence, so an unconfirmed
 	// real page still keeps at least low confidence.
-	g2, g2ctx := errgroup.WithContext(probeCtx)
+	// Canonical probes are speculative coverage work. They may use their whole
+	// deadline (30 paths, five in flight), but that must not cancel verification
+	// of legal-document links the homepage actually exposed. Those links are
+	// stronger evidence and receive a fresh, independently bounded phase.
+	linkCtx, linkCancel := context.WithTimeout(ctx, probePhaseTimeout)
+	defer linkCancel()
+	g2, g2ctx := errgroup.WithContext(linkCtx)
 	g2.SetLimit(5)
 	var linkMu sync.Mutex
 	// Write verified results into a SEPARATE map. Ranging over linkHits while

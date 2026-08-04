@@ -27,6 +27,15 @@ const (
 	maxProbes      = 30
 )
 
+// probePhaseTimeout bounds one bounded verification phase.  Canonical-path
+// probing and verification of explicitly discovered links are separate phases:
+// the latter must receive its own budget, rather than inheriting a context that
+// the speculative canonical probes may already have exhausted.
+//
+// Kept as a variable so the timeout boundary can be exercised without a
+// ten-second test delay. Production code leaves it at probeTimeout.
+var probePhaseTimeout = probeTimeout
+
 // DocFinding is one entry of the documents[] array in the response.
 type DocFinding struct {
 	Type         DocType  `json:"type"`

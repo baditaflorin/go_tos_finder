@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/baditaflorin/go-common/safehttp"
 )
@@ -155,9 +157,12 @@ func TestHandlerEndToEnd(t *testing.T) {
 func TestFallbackClientSendsRealUserAgent(t *testing.T) {
 	allowLoopback(t)
 	var gotUA string
+	var gotUAMu sync.Mutex
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		gotUAMu.Lock()
 		gotUA = r.Header.Get("User-Agent")
+		gotUAMu.Unlock()
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte(`<html><head><title>Acme</title></head><body>hi</body></html>`))
 	})
@@ -168,6 +173,8 @@ func TestFallbackClientSendsRealUserAgent(t *testing.T) {
 	rec := httptest.NewRecorder()
 	Handler(rec, req)
 
+	gotUAMu.Lock()
+	defer gotUAMu.Unlock()
 	if gotUA == "" {
 		t.Fatal("origin received no User-Agent header at all")
 	}
@@ -175,6 +182,53 @@ func TestFallbackClientSendsRealUserAgent(t *testing.T) {
 		t.Errorf("origin received User-Agent %q, want it to identify this service (contain %q) — "+
 			"the fallback-path UA-stripping regression this test guards against", gotUA, "go_tos_finder")
 	}
+}
+
+// TestHandlerFreshLinkVerificationBudgetAfterCanonicalProbeTimeout reproduces
+// the production scheduling bug where all 30 speculative canonical probes
+// consumed their deadline, leaving a discovered privacy link with an already
+// cancelled context. Explicit links are stronger evidence than guesses, so
+// they must receive a fresh bounded verification phase.
+func TestHandlerFreshLinkVerificationBudgetAfterCanonicalProbeTimeout(t *testing.T) {
+	allowLoopback(t)
+	oldTimeout := probePhaseTimeout
+	probePhaseTimeout = 30 * time.Millisecond
+	t.Cleanup(func() { probePhaseTimeout = oldTimeout })
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`<html><body><footer><a href="/privacy">Privacy Policy</a></footer></body></html>`))
+		case "/privacy":
+			_, _ = w.Write([]byte(realPrivacyPage()))
+		default:
+			// Keep every canonical probe alive until its phase deadline expires.
+			time.Sleep(2 * probePhaseTimeout)
+			_, _ = w.Write([]byte(parkingStub))
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/?target="+srv.URL, nil)
+	rec := httptest.NewRecorder()
+	Handler(rec, req)
+
+	var resp Response
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad JSON: %v body=%s", err, rec.Body.String())
+	}
+	for _, doc := range resp.Documents {
+		if doc.Type != DocPrivacyPolicy {
+			continue
+		}
+		if doc.Confidence != ConfHigh || hasEvidence(doc, "link_unverified") {
+			t.Fatalf("privacy link should be freshly verified after the canonical phase, got %+v", doc)
+		}
+		return
+	}
+	t.Fatalf("expected verified privacy link, got %+v", resp.Documents)
 }
 
 // TestHandlerProbedRealDoc: no footer links, but the canonical /privacy and

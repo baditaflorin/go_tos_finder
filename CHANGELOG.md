@@ -2,6 +2,23 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.4.2 — 2026-08-04
+
+### Fixed (real production verification-budget bug)
+
+- **Explicit legal-document links inherited an expired canonical-probe
+  deadline.** The finder first uses a bounded, speculative canonical-path
+  probe phase, then verifies legal-document links actually exposed by the
+  homepage. Both phases shared the same 10-second context, so a slow 30-path
+  canonical pass could leave every footer/page-link verification immediately
+  cancelled. In a deterministic fresh replay of 500 production domains, 386
+  reached the canonical-probe cap and 22 exposed legal-document links that
+  remained `link_unverified` for this reason. The link-verification phase now
+  receives its own bounded deadline; explicit links remain subject to the
+  existing soft-404 and vocabulary checks. The regression test forces the
+  canonical phase to time out and proves the exposed privacy link is then
+  content-verified rather than silently downgraded.
+
 ## 1.4.1 — 2026-07-31
 
 ### Fixed (real production bug, found via a fresh live sample during a genuine TRL re-audit)
@@ -113,4 +130,3 @@ All notable changes to this service are recorded here, newest first.
 - Fix version-validation hook to be portable across BSD/GNU sed (#1)
 - fix(fetch): restore corrupted handler.go and add WithFallbackOnTimeout
 - docs(CLAUDE.md): warn host_port collisions clobber the colliding live service
-
