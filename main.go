@@ -1,11 +1,15 @@
 package main
 
 import (
+	"embed"
 	"github.com/baditaflorin/go-common/config"
 	"github.com/baditaflorin/go-common/server"
 )
 
-const Version = "1.4.2"
+//go:embed agent.json
+var agentFS embed.FS
+
+const Version = "1.4.3"
 const serviceName = "go_tos_finder"
 
 // main mirrors server.Run (config load + keystore auth + the canonical /,
@@ -15,7 +19,7 @@ const serviceName = "go_tos_finder"
 // during a fresh container rollout.
 func main() {
 	cfg := config.Load(serviceName, Version)
-	srv := server.New(cfg, server.WithKeystoreAuth("default_token"))
+	srv := server.New(cfg, server.WithKeystoreAuth("default_token"), server.WithAgentFromEmbed(agentFS, "agent.json"), server.WithMCP())
 
 	srv.Mux.HandleFunc("/selftest", newSelftest(serviceName, Version).Render)
 
