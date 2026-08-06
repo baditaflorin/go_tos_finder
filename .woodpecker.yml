@@ -1,0 +1,11 @@
+# Woodpecker CI (services-registry ADR-0035). Mirrors the same gate
+# fleet-runner deploy's pre-flight already runs — one definition of
+# "green," not two.
+steps:
+  test:
+    image: golang:1.25
+    commands:
+      - go build ./...
+      - go test ./...
+    when:
+      event: [push, pull_request]
