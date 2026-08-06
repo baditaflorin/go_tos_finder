@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "tools": [
+    {
+      "name": "tos-finder",
+      "summary": "Locate and classify a site's legal documents (terms of service, privacy policy, imprint) and verdict on completeness",
+      "description": "Locate and classify a site's legal documents (terms of service, privacy policy, imprint) and verdict on completeness Provide at least one of: target, url.",
+      "category": "content",
+      "tags": [
+        "go",
+        "kind-container",
+        "auth-required"
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "URL or domain to scan for legal documents"
+          },
+          "url": {
+            "type": "string",
+            "description": "Alias for target"
+          }
+        }
+      },
+      "auth": {
+        "type": "api_key"
+      },
+      "method": "GET",
+      "path": "/"
+    }
+  ]
+}
