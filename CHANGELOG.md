@@ -2,6 +2,10 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.4.4 — 2026-08-20
+
+DomainScope extraction fixes promoted; distinct tool_version for this production rollout.
+
 ## 1.4.2 — 2026-08-04
 
 ### Fixed (real production verification-budget bug)
