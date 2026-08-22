@@ -476,6 +476,13 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 	low := strings.ToLower(pageURL)
 	isLegalPage := strings.Contains(low, "imprint") || strings.Contains(low, "impressum") ||
 		strings.Contains(low, "legal") || strings.Contains(low, "colophon") ||
+		// "colofon" (no 'h') is the actual Dutch spelling used by real
+		// colofon pages (see patterns.go's DocImprint path list, which
+		// already used the correct spelling) — this gate had drifted to the
+		// English "colophon" only, so a Dutch imprint page with no
+		// otherwise-recognisable VAT/register ID on it would silently skip
+		// extraction. Real evidence: simpelbootverhuurutrecht.nl/colofon/.
+		strings.Contains(low, "colofon") ||
 		strings.Contains(low, "terms") || strings.Contains(low, "company") ||
 		strings.Contains(low, "about")
 	text := stripTagsLines(body)
@@ -569,6 +576,17 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			Address: extractAddressNearEntity(text, labelName),
 		})
 		candOffset[labelName] = labelOffset
+	} else if len(out) == 0 {
+		if name := standaloneLegalFormCandidate(lines); name != "" {
+			if offset := strings.Index(text, name); offset >= 0 {
+				out = append(out, imprintCandidate{
+					Name:    name,
+					Source:  "imprint_label",
+					Address: extractAddressNearEntity(text, name),
+				})
+				candOffset[name] = offset
+			}
+		}
 	}
 	const proximityBytes = 800
 	ids := findIdentifiers(text, 5)

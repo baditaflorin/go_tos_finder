@@ -95,12 +95,31 @@ func validateVAT(country, raw string) validity {
 	case "DE":
 		return mod11Verdict(deVATValid(raw))
 	case "NL":
-		// NL VAT is 9 digits + "B" + 2 digits; the 9-digit body is mod-11.
+		// NL VAT is 9 digits + "B" + 2 digits; the 9-digit body is mod-11 —
+		// for companies (B.V./N.V., whose body is their RSIN). Sole traders
+		// (eenmanszaak/zzp) are a real, separate case: since 2020-01-01 the
+		// Belastingdienst issues them a "btw-identificatienummer" that is
+		// deliberately NOT derived from the owner's BSN (a privacy reform —
+		// the old BSN-derived number leaked the owner's citizen-service
+		// number on every invoice) and has no published check-digit
+		// algorithm at all — VIES-based validators confirm this and treat
+		// post-2020 sole-trader numbers as opaque, checked only by a live
+		// registry call. A body that fails the elfproef mod-11 below is NOT
+		// necessarily invalid, then: it may simply be one of these. Real
+		// evidence: simpelbootverhuurutrecht.nl (a real Dutch eenmanszaak)
+		// publishes NL005444107B41, which fails elfproef outright despite
+		// being the business's own genuine, live BTW-id. Falling back to
+		// formatValid (not checksumInvalid) avoids false-flagging this
+		// entire, real population of Dutch one-person businesses — same
+		// precedent as the LU/GB case below.
 		body := raw
 		if i := strings.IndexByte(raw, 'B'); i == 9 {
 			body = raw[:9]
 		}
-		return mod11Verdict(nlVATValid(body))
+		if nlVATValid(body) {
+			return checksumValid
+		}
+		return formatValid
 	case "IT":
 		return mod11Verdict(luhnValid(extractDigitsStr(raw)))
 	case "FR":

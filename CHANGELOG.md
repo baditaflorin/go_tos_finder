@@ -2,6 +2,72 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.5.4 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 1: France and the Netherlands.
+Found by fetching real, live business imprint pages (humresto.fr's real
+mentions-légales, simpelbootverhuurutrecht.nl's real colofon) and running
+the shipped 1.5.3 extractor against them.
+
+- **French prefix-form legal names never extracted.** Casual French
+  SARL/SAS usage often writes the legal form BEFORE the trading name
+  ("SARL Hum!Resto"), not after it — the name-then-suffix order this
+  extractor otherwise assumes. `extractEntityAround` now falls back to a
+  new `extractEntityAfterSuffix` when nothing precedes the suffix on the
+  line, gated so it never second-guesses an already-successful
+  name-then-suffix match.
+- **Real French street address silently dropped.** `looksAddressLine` had
+  no French street-word marker at all — a two-digit house number plus
+  "rue" cleared neither the digit-run heuristic nor the (English/German-
+  only) marker list. Added "rue".
+- **French "Code APE" business-activity code wrongly absorbed into the
+  address.** Its 4-digit-plus-letter shape ("5621Z") cleared the digit-run
+  heuristic purely by coincidence. Added "code ape"/"code naf" to
+  `extractAddressNearEntity`'s stop-marker list.
+- **Dutch "colofon" pages sometimes skipped entirely.** `extractImprintText`'s
+  own `isLegalPage` gate checked for the English "colophon" (with an 'h')
+  instead of the actual Dutch spelling "colofon" already used elsewhere in
+  this codebase (patterns.go's path list). A colofon page with no
+  otherwise-recognisable VAT/register ID on it would silently skip
+  extraction.
+- **Dutch sole-trader ("Eenmanszaak") legal names never extracted.** A Dutch
+  eenmanszaak has no legal-form suffix at all — "Eenmanszaak" is a
+  standalone declaration on its own line, not glued onto the name the way
+  GmbH/SARL are. Added `standaloneLegalFormCandidate`, a narrow fallback
+  (only "Eenmanszaak" for now — real evidence covers only this one case)
+  tried when neither the suffix-anchored scan nor the labelName fallback
+  found anything at all.
+- **Dutch KvK/BTW-id lines wrongly absorbed into the address, and the real
+  street address unreached.** On this real page the register/VAT lines
+  precede the street address (the reverse of the DE/AT fixtures the
+  existing window was sized for) — their digit-heavy shape both got them
+  collected as "address" AND their two-blank-line-separated position ran
+  the address scan window out before it ever reached the real street line.
+  Added KvK/BTW-id as skip-not-break markers and widened the scan window
+  from 10 to 20 raw lines.
+- **Post-2020 Dutch sole-trader BTW-id numbers false-flagged
+  `checksum_invalid`.** Since 2020-01-01 the Belastingdienst issues
+  eenmanszaak/zzp VAT IDs independently of the old BSN-derived elfproef
+  algorithm (a privacy reform), with no published check-digit algorithm at
+  all. `validateVAT`'s NL case now falls back to `format_valid` (not
+  `checksum_invalid`) when elfproef fails — same precedent as the existing
+  LU/GB case. The classic elfproef check is unaffected and still applies
+  correctly to company (B.V./N.V., RSIN-based) VAT numbers.
+- **A sole trader's bare, no-connector trading name could be mistaken for a
+  person's name.** The Bug-3 `titleCaseNameRun` responsible-person fallback
+  (imprint.go) now only accepts a run that is a proper SUBSET of the full
+  legal name — some lowercase connector elsewhere (like hotelrose.at's
+  "zur") must have actually isolated it — rather than accepting the WHOLE
+  legal name when every word happens to be capitalised, which is equally
+  true of an ordinary business trading name.
+
+Sample size: 1 real page per country (France, Netherlands). Both are real,
+live small-business sites, not synthetic fixtures — but this is not broad
+population coverage. France and Netherlands still fall back to the generic
+`eu_baseline` ruleset (no dedicated `fr_lcen`/`nl` checklist yet).
+
 ## 1.5.3 — 2026-08-22
 
 ### Fixed

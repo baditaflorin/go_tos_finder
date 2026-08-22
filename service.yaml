@@ -1,10 +1,43 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.5.3"
+version: "1.5.4"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.5.4) — EU-market-expansion real-evidence round 1: France and
+# the Netherlands. TRL stays at 6 (bug fixes within the existing band, not a
+# new capability/ruleset — France and NL still fall back to eu_baseline, no
+# dedicated fr_lcen/nl checklist yet). Fetched one real, live small-business
+# imprint page per country (humresto.fr's real mentions-légales,
+# simpelbootverhuurutrecht.nl's real colofon — honest sample size: 1 page
+# per country, not broad population coverage) and ran the shipped 1.5.3
+# extractor against them. Found and fixed seven real bugs: (1) casual French
+# SARL/SAS prefix-form legal names ("SARL Hum!Resto") were never extracted
+# at all — extractEntityAround only handled name-then-suffix order; (2) the
+# real French street address was silently dropped (looksAddressLine had no
+# French street-word marker); (3) the French "Code APE" business-activity
+# code was wrongly absorbed into the address, purely because its
+# 4-digit-plus-letter shape cleared the digit-run heuristic by coincidence;
+# (4) Dutch "colofon" pages could be skipped entirely — the isLegalPage gate
+# checked for the English "colophon" (with an 'h') instead of the actual
+# Dutch spelling already used elsewhere in this codebase; (5) Dutch
+# sole-trader ("Eenmanszaak") legal names were never extracted — no suffix,
+# no label, just a standalone legal-form line; (6) the Dutch KvK/BTW-id
+# lines were wrongly absorbed into the address ahead of (and instead of) the
+# real street address; (7) post-2020 Dutch sole-trader BTW-id numbers were
+# false-flagged checksum_invalid — since 2020-01-01 these are issued
+# independently of the old BSN-derived elfproef algorithm (a privacy
+# reform), with no published check-digit algorithm at all; now falls back
+# to format_valid, matching the existing LU/GB precedent. Also tightened the
+# Bug-3 titleCaseNameRun responsible-person fallback (imprint.go), which had
+# mistaken a Dutch sole trader's bare, no-connector trading name for a
+# person's name — now only accepts a run that is a proper subset of the
+# full legal name, matching the hotelrose.at case that motivated it. Two new
+# permanent regression tests
+# (imprint_extract_eu_round1_test.go); full existing suite (including the
+# hotelrose.at/atpkitz.at real-evidence tests from prior rounds) still
+# green, no regressions.
 # 2026-08-22 (1.5.3) — fourth real-evidence bug-fix pass. TRL stays at 6
 # (bug fix within the existing band, not new capability/coverage). This pass
 # stress-tested the shipped (1.5.0-1.5.2) extraction logic against realistic

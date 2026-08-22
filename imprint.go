@@ -634,7 +634,21 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 		// Additional satisfaction path alongside the label-based match
 		// above, not a replacement: GmbH/AG-style entities (im.Suffix !=
 		// "") still require the distinct managing-director line.
-		if p := titleCaseNameRun(im.LegalName); p != "" {
+		//
+		// Guard: only trust a run that is a proper SUBSET of LegalName —
+		// i.e. some lowercase connector elsewhere in the name (like
+		// hotelrose.at's "zur") actually isolated it from the rest. When
+		// the run consumes the WHOLE LegalName, nothing was isolated at
+		// all — every word just happened to be capitalised, which is
+		// equally true of an ordinary multi-word TRADING name. Real
+		// evidence: simpelbootverhuurutrecht.nl (a real Dutch eenmanszaak)
+		// has LegalName "Simpel Bootverhuur Utrecht" — a business name with
+		// no person embedded in it anywhere — and titleCaseNameRun happily
+		// returned the whole string as a false "responsible person". This
+		// is exactly the known limitation this function's own doc comment
+		// already flagged as accepted-but-not-yet-hit; this real fixture is
+		// the case that hits it.
+		if p := titleCaseNameRun(im.LegalName); p != "" && p != im.LegalName {
 			im.ResponsiblePerson = p
 		}
 	}

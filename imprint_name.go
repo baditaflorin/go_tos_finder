@@ -112,7 +112,17 @@ func looksAddressLine(s string) bool {
 	if hasDigitRun(s, 4) {
 		return true
 	}
-	for _, marker := range []string{"street", "strasse", "straße", "road", "avenue", "ave", "boulevard", "suite", "floor", "germany", "united states", "romania", "france", "netherlands", "poland"} {
+	for _, marker := range []string{
+		"street", "strasse", "straße", "road", "avenue", "ave", "boulevard", "suite", "floor",
+		"germany", "united states", "romania", "france", "netherlands", "poland",
+		// Real evidence: humresto.fr's real mentions-légales lists its
+		// address as "20 rue Marcel Pagnol" — a two-digit house number plus
+		// "rue" (French for "street") clears no digit-run threshold at all,
+		// so without an explicit marker the line was silently dropped (see
+		// extractAddressNearEntity's doc comment for the false-positive this
+		// same page surfaced on the OTHER side of that gap).
+		"rue",
+	} {
 		if strings.Contains(low, marker) {
 			return true
 		}
@@ -160,12 +170,28 @@ func extractAddressNearEntity(text, name string) string {
 			continue
 		}
 		var parts []string
-		for j := i + 1; j < len(lines) && j <= i+10 && len(parts) < 4; j++ {
+		// Real evidence: simpelbootverhuurutrecht.nl's real colofon lists
+		// the KvK number and BTW-id BEFORE the street address (name,
+		// Eenmanszaak, KvK, BTW-id, THEN the address) — the reverse of the
+		// DE/AT fixtures this window was originally sized for. 20 raw lines
+		// (rather than 10) gives enough room to reach the real address past
+		// a couple of identifier lines on a page that uses two blank
+		// separator lines between every block (common in modern
+		// page-builder markup — stripTagsLines turns each <br>/block
+		// boundary into its own blank line).
+		for j := i + 1; j < len(lines) && j <= i+20 && len(parts) < 4; j++ {
 			clean := collapseSpaces(strings.TrimSpace(lines[j]))
 			if clean == "" {
 				continue
 			}
 			low := strings.ToLower(clean)
+			// KvK/BTW-id: real Dutch register/VAT labels. Skip (not break)
+			// so scanning continues past them to the real address — unlike
+			// the break-markers below, this page's real address comes AFTER
+			// these lines, not before.
+			if strings.Contains(low, "kvk") || strings.Contains(low, "btw-id") {
+				continue
+			}
 			// Stop before absorbing an identifier/register/contact line
 			// into the address — those are separate fields (Register/VAT
 			// are found independently via findIdentifiers+proximity in
@@ -177,11 +203,28 @@ func extractAddressNearEntity(text, name string) string {
 				strings.Contains(low, "hrb") || strings.Contains(low, "company number") ||
 				strings.Contains(low, "email") || strings.Contains(low, "@") ||
 				strings.Contains(low, "firmenbuch") || strings.Contains(low, "uid") ||
-				strings.Contains(low, "fn ") {
+				strings.Contains(low, "fn ") ||
+				// "Code APE"/"Code NAF": the French business-activity
+				// classification code (SIRENE's NAF/APE nomenclature, e.g.
+				// "5621Z"). Real evidence: humresto.fr's real
+				// mentions-légales lists "Code APE : Service des traiteurs
+				// 5621Z" right after its RCS/SIRET lines — the code's
+				// 4-digit-plus-letter shape cleared looksAddressLine's
+				// digit-run heuristic and got absorbed into the address as
+				// a false positive. Not an address field at all, so this
+				// must stop collection before looksAddressLine ever sees it,
+				// same as the VAT/register markers above.
+				strings.Contains(low, "code ape") || strings.Contains(low, "code naf") {
 				break
 			}
 			if looksAddressLine(clean) {
-				parts = append(parts, clean)
+				// Real evidence: humresto.fr's street line is itself
+				// comma-terminated in the source markup ("20 rue Marcel
+				// Pagnol,<br>69720 ..."), which otherwise joins into a
+				// double comma ("Pagnol,, 69720"). Trim a trailing
+				// separator before joining rather than after, so a
+				// mid-line comma (a real part of the text) is untouched.
+				parts = append(parts, strings.TrimRight(clean, ",;"))
 			}
 		}
 		if len(parts) > 0 {
@@ -199,9 +242,15 @@ func extractAddressNearEntity(text, name string) string {
 //
 // Upstream also handles "prefix-form" jurisdictions (legal form written
 // BEFORE the name — Cyrillic/CJK/Indonesian) via a right-side extraction
-// branch; that branch is intentionally not ported here (see imprint_suffix.go
-// — the trimmed suffixTable carries only name-then-suffix forms, so it is
-// unreachable).
+// branch; that branch was originally left unported here on the assumption
+// that the trimmed suffixTable (imprint_suffix.go) only carries
+// name-then-suffix Latin forms. Real evidence corrected that assumption:
+// humresto.fr's real mentions-légales page opens its imprint paragraph with
+// "SARL Hum!Resto" — casual French SARL/SAS usage routinely puts the legal
+// form BEFORE the trading name, not just after it. extractEntityAfterSuffix
+// below is the (narrower, Latin-only) fallback for that case — tried only
+// when nothing precedes the suffix on the line, so it never second-guesses
+// an already-successful name-then-suffix match.
 func extractEntityAround(text, suffix string) string {
 	idx := strings.Index(text, suffix)
 	if idx < 0 {
@@ -242,10 +291,46 @@ func extractEntityAround(text, suffix string) string {
 	candidate = stripLabelPrefix(candidate)
 	candidate = trimAtConjunction(candidate, suffix)
 	candidate = collapseSpaces(candidate)
-	if !cleanCandidateName(candidate, suffix) {
+	if cleanCandidateName(candidate, suffix) {
+		return candidate
+	}
+	// Prefix-form fallback (see the doc comment above): only tried when
+	// nothing meaningful precedes the suffix on this line — a real
+	// name-then-suffix match earlier on the same line always wins first.
+	if strings.TrimSpace(text[startMin:idx]) == "" {
+		if after := extractEntityAfterSuffix(text, suffix, idx); after != "" {
+			return after
+		}
+	}
+	return ""
+}
+
+// extractEntityAfterSuffix is extractEntityAround's prefix-form
+// counterpart: the trading name is the text immediately AFTER the suffix
+// rather than before it ("SARL Hum!Resto" — see extractEntityAround's doc
+// comment for the real evidence). Stops at the first sentence-shaped
+// punctuation or line break so a suffix mentioned mid-sentence ("SARL.
+// Fondée en 2020...") doesn't vacuum up unrelated prose. Validated through
+// cleanCandidateName via a synthetic "name suffix" string so the exact same
+// false-positive gates (sentence-phrase, HTML-entity residue, cookie/geo/
+// postal-code stems, ...) apply as the suffix-after-name path.
+func extractEntityAfterSuffix(text, suffix string, idx int) string {
+	after := text[idx+len(suffix):]
+	cut := len(after)
+	for i, r := range after {
+		if r == '\n' || r == '\r' || r == '|' || r == '.' || r == ',' {
+			cut = i
+			break
+		}
+	}
+	name := strings.TrimSpace(after[:cut])
+	if name == "" {
 		return ""
 	}
-	return candidate
+	if !cleanCandidateName(name+" "+suffix, suffix) {
+		return ""
+	}
+	return suffix + " " + name
 }
 
 // labeledNameRE matches an explicit trading-name label with no
@@ -262,6 +347,53 @@ func extractEntityAround(text, suffix string) string {
 // followed by ": <value>", does not false-positive — see
 // TestExtractImprintTextLabeledNameFalsePositiveGuard.
 var labeledNameRE = regexp.MustCompile(`(?i)^(?:Firmenname|Company\s*Name|Unternehmen|Inhaber(?:in)?)\s*:\s*(.*)$`)
+
+// standaloneLegalFormRE matches a line that is NOTHING but a bare
+// legal-form declaration — the Dutch "Eenmanszaak" (sole proprietorship)
+// convention, where the form is stated on its own line immediately AFTER
+// the trading name rather than glued onto the name as a suffix
+// (GmbH/SARL-style) or introduced by an explicit "Label: value" (
+// labeledNameRE, above). Real evidence:
+// simpelbootverhuurutrecht.nl/colofon/, whose real colofon page reads
+// "Simpel Bootverhuur Utrecht" then, alone on the very next non-blank line,
+// "Eenmanszaak." — see standaloneLegalFormCandidate. The trailing
+// "(?:&nbsp;)?" tolerates stripTagsLines leaving a literal "&nbsp;" entity
+// un-decoded at the end of the line — the real page's markup is
+// "Eenmanszaak.&nbsp;" (a non-breaking space before the next <span>).
+var standaloneLegalFormRE = regexp.MustCompile(`(?i)^eenmanszaak\.?\s*(?:&nbsp;)?\s*$`)
+
+// standaloneLegalFormCandidate is standaloneLegalFormRE's companion: once a
+// bare legal-form line is found, the trading name is the nearest preceding
+// NON-BLANK line. The lookback window is counted in raw lines, not
+// non-blank ones — stripTagsLines commonly emits two blank lines between
+// each block-level element (confirmed against the real
+// simpelbootverhuurutrecht.nl fixture: "Simpel Bootverhuur Utrecht", two
+// blank lines, "Eenmanszaak.&nbsp;"), so a naive "skip at most N blanks"
+// counter can run out before reaching real content; 6 raw lines comfortably
+// covers a few blank separators while still stopping well short of an
+// unrelated preceding paragraph. validLabeledName (shared with the
+// label-path above) gates out junk — empty, too long, HTML-entity residue,
+// sentence-shaped prose. Tried only when neither the suffix-anchored scan
+// nor the labelName fallback found anything at all (see
+// extractImprintText) — a stronger signal always wins.
+func standaloneLegalFormCandidate(lines []string) string {
+	for i, raw := range lines {
+		if !standaloneLegalFormRE.MatchString(strings.TrimSpace(raw)) {
+			continue
+		}
+		for j := i - 1; j >= 0 && j >= i-6; j-- {
+			prev := strings.TrimSpace(lines[j])
+			if prev == "" {
+				continue
+			}
+			if validLabeledName(prev) {
+				return prev
+			}
+			return ""
+		}
+	}
+	return ""
+}
 
 // validLabeledName is the label-path's false-positive gate, parallel to
 // cleanCandidateName's role for the suffix-anchored path but lighter:
