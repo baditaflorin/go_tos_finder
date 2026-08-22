@@ -788,7 +788,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
 				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO",
-				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS", "Matična številka", "HE":
+				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS", "Matična številka", "HE", "Įmonės kodas":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}

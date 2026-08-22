@@ -2,6 +2,51 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.19 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 24: Lithuania. Fetched a real, live
+group-buying e-shop's Taisyklės page (grupinispirkimas.lt, naming UAB
+"GRUPINIS PIRKIMAS" in Lithuania's prefix-form convention — legal form
+before the quoted trading name) and ran the shipped 1.7.18 extractor
+against it — it extracted NOTHING at all (CompletenessScore 0), despite
+"UAB" being an existing, already-high-confidence suffixTable entry. Found
+and fixed six compounding real bugs:
+
+- **Lithuania's "Įmonės kodas" (legal-entity code) had no identifier
+  pattern at all.** Added it as Register-only (a genuinely separate number
+  from Lithuania's own PVM kodas/VAT code, unlike Bulgaria's ЕИК/Greece's
+  ΑΦΜ/Croatia's OIB), plus a new `ltCompanyCodeValid` two-pass
+  weighted-mod-11 checksum confirmed against two independent real values.
+- **The pattern needed no leading `\b`** (round 18/19's RE2 lesson,
+  confirmed non-script-specific: "Į" is Latin Extended-A).
+- **A literal un-decoded "&nbsp;"** sits between the label's colon and the
+  digits on this real page — added an optional-`&nbsp;` tolerance.
+- **`extractEntityAround`'s prefix-form fallback was gated on the ENTIRE
+  preceding text being blank**, but this real page has "Pardavėjas
+  &#8211; UAB „...\"" (a role label plus dash) preceding the suffix, so
+  the fallback never even tried. Widened the gate to also fire when the
+  preceding text ends in a dash-style separator (Unicode dashes and their
+  common un-decoded HTML-entity spellings).
+- **The prefix-form name itself is quote-wrapped with un-decoded numeric
+  entities** ("&#8222;GRUPINIS PIRKIMAS&#8221;") — `cleanCandidateName`'s
+  entity-corruption filter was rejecting this well-formed quoted name
+  outright. Added a new `stripQuoteDelimiters` helper that trims a known
+  quote-delimiter pair before the corruption check ever sees it.
+- **`formatRegister` leaked the same "&nbsp;" straight into the displayed
+  Register string** — added explicit `&nbsp;`-prefix stripping to its
+  existing cleanup pass.
+
+One real, honestly-documented gap NOT fixed: Address stays empty — the
+real address sits on the SAME line as the entity name and its Įmonės
+kodas/PVM kodas clause, the same class of gap already left undocumented
+for Romania/Croatia/Slovenia. No checksum implemented for Lithuania's VAT
+either (stays `format_valid`). Four new regression tests
+(imprint_extract_eu_round24_test.go); full existing suite still green, no
+regressions. No dedicated Lithuanian ruleset added — consistent with prior
+rounds' discipline.
+
 ## 1.7.18 — 2026-08-23
 
 ### Fixed

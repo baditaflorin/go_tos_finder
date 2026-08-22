@@ -1,10 +1,41 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.18"
+version: "1.7.19"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.19) - EU-market-expansion real-evidence round 24:
+# Lithuania. TRL stays at 6 (bug fixes plus one new identifier,
+# single-sample evidence). Fetched a real, live group-buying e-shop's
+# Taisykles page (grupinispirkimas.lt, naming UAB "GRUPINIS PIRKIMAS" in
+# Lithuania's prefix-form convention) and ran the shipped 1.7.18
+# extractor against it - it extracted NOTHING at all (CompletenessScore
+# 0), despite UAB being an existing high-confidence suffix entry. Found
+# and fixed six compounding real bugs: (1) Lithuania's Imones kodas
+# (legal-entity code) had no identifier pattern at all; added it as
+# Register-only plus a new ltCompanyCodeValid two-pass weighted-mod-11
+# checksum confirmed against two independent real values. (2) the
+# pattern needed no leading \b (round 18/19's RE2 lesson, confirmed
+# non-script-specific - Latin Extended-A hits it too). (3) a literal
+# un-decoded &nbsp; sits between the label and the digits; added
+# tolerance. (4) extractEntityAround's prefix-form fallback was gated on
+# the ENTIRE preceding text being blank, but this real page has a role
+# label plus dash before the suffix, so the fallback never tried;
+# widened the gate to fire on a dash-style separator too (including
+# un-decoded HTML-entity dash spellings). (5) the prefix-form name
+# itself is quote-wrapped with un-decoded numeric entities, which
+# cleanCandidateName's entity-corruption filter rejected outright; added
+# a new stripQuoteDelimiters helper to strip the delimiters before that
+# check runs. (6) formatRegister leaked the same &nbsp; into the
+# displayed Register string; added explicit stripping. One real gap
+# honestly left NOT fixed: the real address sits on the same line as
+# the entity name (same class of gap already left undocumented for
+# Romania/Croatia/Slovenia). No checksum implemented for Lithuania's
+# VAT either (stays format_valid). Four new regression tests
+# (imprint_extract_eu_round24_test.go); full existing suite still
+# green, no regressions. No dedicated Lithuanian ruleset added -
+# consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.18) - EU-market-expansion real-evidence round 23:
 # Cyprus. TRL stays at 6 (bug fixes plus two new identifiers,
 # single-sample evidence). Fetched a real, live electronics retailer's
