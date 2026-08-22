@@ -1,10 +1,34 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.20"
+version: "1.7.21"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.21) - EU-market-expansion real-evidence round 26:
+# Estonia. TRL stays at 6 (bug fixes plus one new identifier,
+# single-sample evidence). Fetched a real, live garden-supplies
+# e-shop's Muugitingimused page (voluaed.ee, naming OU Iru Aiakeskus)
+# and ran the shipped 1.7.20 extractor against it. Entity name, suffix,
+# country, and VAT already extracted correctly - OU is an existing
+# high-confidence suffix entry, and the pre-existing bare EE-prefixed
+# EU VAT pattern already matched the real KMKR nr without needing a
+# label anchor. Found and fixed two compounding real bugs: (1)
+# Estonia's registrikood (company registry code) had no identifier
+# pattern at all; added it as Register-only - a genuinely separate
+# 8-digit number from Estonia's own 9-digit KMKR nr (VAT number), same
+# architecture as Lithuania's Imones kodas/Latvia's split. No
+# checksum implemented this round. (2) the KMKR nr line leaked into
+# Address; added skip-past markers. One real gap honestly left NOT
+# fixed: the real address sits on the same line as the entity name
+# (same class of gap already left undocumented for Romania/Croatia/
+# Slovenia/Lithuania). Also honestly note-worthy (not a bug): LegalName
+# includes the source's own parenthetical register annotation verbatim,
+# left as-is since the register number is already separately and
+# correctly captured in Register regardless. Three new regression tests
+# (imprint_extract_eu_round26_test.go); full existing suite still
+# green, no regressions. No dedicated Estonian ruleset added -
+# consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.20) - EU-market-expansion real-evidence round 25:
 # Latvia. TRL stays at 6 (bug fixes plus one new identifier,
 # single-sample evidence). Fetched a real, live household-goods
