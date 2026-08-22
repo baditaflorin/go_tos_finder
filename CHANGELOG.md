@@ -2,6 +2,50 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.16 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 21: Slovakia. Fetched a real, live
+electrical-supplies retailer's Obchodné podmienky page (elektro-siete.sk,
+naming Elektro-Siete, s.r.o.) and ran the shipped 1.7.15 extractor against
+it. This round is the real test of round 16's own foresight: Czechia's
+"IČO" identifier and "s.r.o." suffix are BOTH shared, letter-for-letter,
+with Slovakia (former Czechoslovakia) — round 16 deliberately did NOT wire
+"IČO" into `singleCountryIdentifierKind`, anticipating that a future Slovak
+page should self-heal via its own SK-prefixed VAT number instead.
+
+- **Confirmed, not fixed**: Country correctly resolves to "SK" (not the
+  suffix-guessed "CZ") because this page also states "IČ DPH:
+  SK2023571528" — a plain "VAT" Kind match whose "SK" prefix takes
+  precedence over the suffix guess in the existing country-precedence
+  chain. No code change was needed — the self-healing path worked exactly
+  as round 16 anticipated. Also confirmed Slovak "IČO" uses the identical
+  published check-digit algorithm as Czech "IČO" (verified by hand against
+  this page's real value), so `czICOValid` needed no changes either.
+- **Real bug found and fixed**: this page's "IČO:"/"DIČ:"/"IČ DPH:"/
+  "IBAN:" block, plus a separate account-number line and a separate
+  court-register citation, all have long digit runs that cleared
+  `looksAddressLine` and got wrongly absorbed into Address —
+  `extractAddressNearEntity` had no stop-marker for any of these Slovak
+  labels (round 16 never needed one for its own fixture). Added
+  "ičo:"/"dič:"/"ič dph"/"iban" (colon-anchored on the first two to avoid
+  false-positiving on ordinary words like "dedičom") and "číslo účtu"/
+  "obchodnom registri" as skip-past markers. This retroactively benefits
+  round 16's Czech pages too.
+
+One real, honestly-documented gap NOT fixed: with the pollution removed,
+Address comes back empty — the real address never clears
+`looksAddressLine` at all (no Slovak street-word marker, and the "941 08"
+postal code's spaced digit grouping never reaches the 4-consecutive-digit
+threshold), the same class of gap round 16 already left undocumented for
+Czech postal codes. No checksum implemented for Slovak VAT either (stays
+`format_valid` — the modern numbering scheme has been reformed over time
+and this round lacked confidence in the current algorithm to verify
+safely). Three new regression tests (imprint_extract_eu_round21_test.go);
+full existing suite still green, no regressions. No dedicated Slovak
+ruleset added — consistent with prior rounds' discipline.
+
 ## 1.7.15 — 2026-08-23
 
 ### Fixed
