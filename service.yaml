@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.3"
+version: "1.7.4"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
@@ -408,6 +408,37 @@ trl_assessor: "claude-trl-reaudit-2026-07-31"
 # test at all before now — added one (imprint_checksum_nl_test.go)
 # asserting both directions. TRL stays at 6 (bug fix within the existing
 # band, not a new capability).
+# 2026-08-22 (1.7.4) - EU-market-expansion real-evidence round 9: Ireland.
+# TRL stays at 6 (bug fixes, single-sample evidence). Fetched one real,
+# live business's website footer (proxima.ie/company-registered-address/,
+# a real Irish company-formation/registered-office agent) and ran the
+# shipped 1.7.3 extractor against it. Found and fixed two compounding real
+# bugs: (1) Ireland's CRO (Companies Registration Office) company number
+# had no pattern at all - the real footer's "Company Registration No:
+# 613314" is 6 digits, which the existing UK-only "CompaniesHouse"
+# pattern's \d{7,8} requirement cannot match; added a dedicated "CRO"
+# vatPattern. (2) Even after adding that pattern, Country still came out
+# "GB" instead of "IE": the real footer's own "Company Registration No:
+# 613314" line false-matches suffixTable's low-confidence generic
+# "Company"->US entry (a bare English word, not a real US legal-form
+# suffix) and becomes its own throwaway candidate sitting at proximity
+# distance ~0 from the identifier match - winning the proximity-
+# attachment race in extractImprintCandidates over the real winning
+# candidate ("Proxima Tax Services Ltd", whose suffix-inferred country is
+# the real, live "Ltd"-is-GB-or-IE ambiguity: suffixTable maps bare "Ltd"
+# only to GB). backfillWinnerIdentifiers already backfilled the Register
+# STRING onto the winner but never carried over the underlying
+# identifierHit, so singleCountryIdentifierKind's ground-truth country
+# correction never ran on it - fixed by having the Register backfill also
+# copy the matching identifierHit, mirroring the pre-existing VAT
+# backfill immediately below it. One new regression test
+# (imprint_extract_eu_round9_test.go); full existing suite still green,
+# no regressions. No dedicated Irish ruleset added: S.I. No. 68/2003 reg.
+# 6's register-number requirement is conditional ("where applicable"),
+# the same conditionality as the EU baseline itself, so staying on
+# eu_baseline avoids overclaiming a hard requirement this one fixture
+# didn't establish - consistent with round 7/8's Belgium/Portugal
+# discipline.
 port: 8316
 
 api:

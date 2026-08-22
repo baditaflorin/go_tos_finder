@@ -495,6 +495,35 @@ func backfillWinnerIdentifiers(best *imprintCandidate, cands []imprintCandidate)
 	if best.Register == "" {
 		if c := find(func(c *imprintCandidate) bool { return c.Register != "" }); c != nil {
 			best.Register = c.Register
+			// Also carry over the underlying identifierHit that produced
+			// this Register string, mirroring the VAT backfill just below —
+			// needed so extractImprintFields' singleCountryIdentifierKind
+			// correction (see its real-evidence comment) can see a
+			// register-kind identifier even when the plain-text proximity
+			// scan (extractImprintCandidates, imprint_jsonld.go) attached it
+			// to a DIFFERENT candidate than the one that actually won.
+			//
+			// Real evidence: proxima.ie's real footer text "Company
+			// Registration No: 613314" itself false-matches suffixTable's
+			// low-confidence generic "Company"->US entry (a bare English
+			// word, not a real US legal-form suffix — imprint_suffix.go) and
+			// becomes its own throwaway candidate sitting at proximity
+			// distance ~0 from the identifier match — winning the
+			// proximity-attachment race in extractImprintCandidates over the
+			// REAL winning candidate ("Proxima Tax Services Ltd", whose
+			// suffix-inferred country is the real, live GB-vs-IE "Ltd"
+			// ambiguity — see the CRO vatPattern's doc comment in
+			// imprint_vat.go) a few hundred bytes away. Before this fix, the
+			// Register STRING was already correctly backfilled onto the
+			// winner (this function's pre-existing logic), but the CRO
+			// identifier's country ("IE") never reached best.Identifiers, so
+			// extractImprintFields' country-correction loop never ran on it
+			// and Country stayed wrongly "GB".
+			for _, id := range c.Identifiers {
+				if formatRegister(id.Kind, id.Value) == c.Register {
+					best.Identifiers = append(best.Identifiers, id)
+				}
+			}
 		}
 	}
 	if best.VAT == "" {

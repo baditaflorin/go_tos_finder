@@ -164,6 +164,24 @@ func init() {
 		// (Spain). Real evidence: urbana.com.pt's real "Ficha técnica"
 		// page ("NIPC -508980186").
 		{"NIPC", "PT", regexp.MustCompile(`\bNIPC\s*[:#-]?\s*\d{9}\b`)},
+		// Ireland — CRO (Companies Registration Office) company number, the
+		// register-number disclosure S.I. No. 68/2003 (European Communities
+		// (Directive 2000/31/EC) Regulations 2003), reg. 6(a) requires
+		// alongside name/address/contact. Distinct from the "CompaniesHouse"
+		// pattern above: UK Companies House numbers are always 7-8 digits
+		// (zero-padded), while a real Irish CRO number can be shorter — real
+		// evidence: proxima.ie's real website footer ("Company Registration
+		// No: 613314") is 6 digits, which the UK pattern's \d{7,8} cannot
+		// match at all. Given its own Kind ("CRO", not folded into
+		// "CompaniesHouse") so singleCountryIdentifierKind
+		// (imprint_checksum.go) can correct a real, live country
+		// mis-attribution: suffixTable (imprint_suffix.go) maps bare "Ltd"
+		// only to GB, so this same real Irish company's Country came out
+		// "GB" before this fix — an unambiguous domestic register-number
+		// label is exactly the kind of ground-truth evidence this codebase
+		// already uses to override a suffix guess (see the REA/Hoja/KvK/NIPC
+		// precedent cited in imprint.go's extractImprintFields).
+		{"CRO", "IE", regexp.MustCompile(`(?i)\b(?:CRO\s*(?:No\.?|Number|Reg(?:istration)?\.?(?:\s*(?:No\.?|Number))?)|Compan(?:y|ies)\s+Registration(?:\s+Office)?(?:\s+No\.?|\s+Number)?)\s*[:#]?\s*\d{5,7}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

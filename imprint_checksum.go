@@ -206,6 +206,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "PL"
 	case "NIPC":
 		return "PT"
+	case "CRO":
+		return "IE"
 	}
 	return ""
 }
