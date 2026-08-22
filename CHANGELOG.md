@@ -2,6 +2,60 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.11 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 16: Czechia. Fetched a real, live
+white-goods e-shop's Obchodní podmínky page (onlineshop.cz, naming SHOP
+TRADING, s.r.o.) and ran the shipped 1.7.10 extractor against it — it
+extracted NOTHING at all (CompletenessScore 0), despite "SHOP TRADING,
+s.r.o." being trivially suffix-matchable ("s.r.o.", an existing native
+CZ-unique suffixTable entry) right next to its IČO. Found and fixed three
+compounding real bugs:
+
+- **stripTagsLines' own tag-boundary newline split "s.r.o." in two**: this
+  page writes the entity name as `<strong>SHOP TRADING, s.r.o</strong>., se
+  sídlem ...` — a common real pattern (bold name, plain trailing
+  punctuation outside the tag) — so the closing "." of the suffix landed on
+  its own line, defeating suffixTable's literal dot-terminated match
+  entirely and silently emptying the whole suffix-anchored scan. Fixed with
+  a new `tagBoundaryPunctRE` post-process step: collapses a tag-boundary
+  newline back out only when a Unicode letter immediately precedes it and a
+  bare "."/"," immediately follows (mid-abbreviation split), NOT when a
+  digit precedes it. The digit gate was necessary after an unconditional
+  first attempt caused a real regression: eurostarshotels.com's real aviso
+  legal (round 2) has an isolated phone number in its own `<a href="tel:...">`
+  tag, and unconditionally collapsing merged it into the following
+  sentence, leaking it into the address.
+- **The exposed real sentence was 280 runes but 307 bytes** (Czech
+  diacritics are 2 bytes each in UTF-8) — over extractImprintText's
+  existing 220-byte per-line cap (`len()`, raised from 140 in round 2 for
+  the same class of gap). Switched to `utf8.RuneCountInString` so the cap
+  means what it says regardless of script, raised to 300.
+- **Czechia's IČO had no identifier pattern at all**, so `findIdentifiers`
+  found nothing and (since the real URL has no English isLegalPage
+  keyword either) the whole function bailed out before the suffix scan
+  could run. Added a dedicated "IČO" vatPattern, wired into the
+  Register-field Kind switch (same silently-dropped-Kind shape as round
+  14/15's OrgNr/CUI), and a new `czICOValid` weighted-mod-11 checksum,
+  confirmed against this page's real IČO (24717509).
+
+Deliberately NOT added: an "IČO" case in `singleCountryIdentifierKind` —
+unlike CUI/KvK/CRO/CVR/Y-tunnus/OrgNr, "IČO" is shared with Slovakia
+(former Czechoslovakia), so mapping it to "CZ" would risk mis-flagging a
+future real Slovak page; not needed for this fixture since "s.r.o." is
+already CZ-unambiguous. One real, honestly-documented gap NOT fixed:
+Address stays empty on this page — the real address sits on the SAME line
+as the entity+register clause (no further tag boundary to split it out),
+and a separate, cleaner section elsewhere on the page doesn't clear
+looksAddressLine either (no Czech street-word marker, and Czech postal
+codes' "XXX XX" spaced format never reaches the 4-consecutive-digit
+threshold). Three new regression tests
+(imprint_extract_eu_round16_test.go); full existing suite still green, no
+other regressions. No dedicated Czech ruleset added — consistent with
+round 15's discipline.
+
 ## 1.7.10 — 2026-08-22
 
 ### Fixed

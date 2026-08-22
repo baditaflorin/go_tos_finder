@@ -83,8 +83,45 @@ func stripTagsLines(body string) string {
 		}
 		i++
 	}
-	return b.String()
+	return tagBoundaryPunctRE.ReplaceAllString(b.String(), "$1$2")
 }
+
+// tagBoundaryPunctRE collapses a newline that stripTagsLines just inserted
+// at a tag boundary when the very next character is a bare "." or "," —
+// i.e. undoes the line-break specifically where it would otherwise strand a
+// trailing punctuation mark that belongs to the word before it, onto its
+// own line. Real evidence: onlineshop.cz's real Obchodní podmínky page
+// writes its entity name as "<strong>SHOP TRADING, s.r.o</strong>., se
+// sídlem ..." — the closing "." (and the rest of the sentence) sits OUTSIDE
+// the <strong> tag, a common real authoring pattern (bold entity name,
+// plain trailing punctuation). Before this fix, stripTagsLines' own
+// tag-boundary newline landed BETWEEN "s.r.o" and its own closing ".",
+// turning what should read as the single contiguous string "s.r.o." into
+// two separate lines ("SHOP TRADING, s.r.o" / "., se sídlem ...") — so
+// suffixTable's literal "s.r.o." (dot-terminated, like most CZ/PL/civil-law
+// abbreviation suffixes) never matched at all, and the ENTIRE
+// suffix-anchored scan silently found nothing on the page (same
+// total-extraction-failure shape as round 5/9/12/13/14's Polish/Irish/
+// Danish/Finnish/Norwegian gaps). Restricted to only "."/"," (not e.g. ")"
+// or ":") since those are the only two real punctuation marks confirmed to
+// appear split this way so far.
+//
+// Gated on the char immediately BEFORE the newline being a Unicode LETTER
+// (\p{L}), not just "any char" — an earlier version of this fix collapsed
+// every "\n."/"\n," unconditionally and broke a real, existing regression:
+// eurostarshotels.com's real aviso legal has a bare phone number in its own
+// <a href="tel:...">932681010</a> tag, immediately followed by ". Para más
+// formas de contacto..." outside the tag — the SAME tag-boundary shape as
+// the CZ suffix case, but here the line break is a genuine sentence
+// boundary, and bareIntlPhoneRE (this file) depends on the phone number
+// staying isolated on its own line to be recognised and excluded from the
+// address. Unconditional collapsing merged the two, defeating that
+// isolation and leaking the phone number into the address. Requiring a
+// LETTER (not a digit) immediately before the break correctly distinguishes
+// "mid-abbreviation split" (CZ: "...s.r.o" ends in a letter) from
+// "end-of-sentence-after-a-number split" (ES: "...932681010" ends in a
+// digit) without needing to special-case phone numbers specifically.
+var tagBoundaryPunctRE = regexp.MustCompile(`(\p{L})\n([.,])`)
 
 func safeSlice(s string, i, j int) string {
 	if i < 0 {

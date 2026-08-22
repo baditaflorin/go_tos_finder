@@ -1,10 +1,44 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.10"
+version: "1.7.11"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.7.11) - EU-market-expansion real-evidence round 16:
+# Czechia. TRL stays at 6 (bug fixes plus one new identifier, single-sample
+# evidence). Fetched a real, live white-goods e-shop's Obchodni podminky
+# page (onlineshop.cz, naming SHOP TRADING, s.r.o.) and ran the shipped
+# 1.7.10 extractor against it - it extracted NOTHING at all
+# (CompletenessScore 0), despite "SHOP TRADING, s.r.o." being trivially
+# suffix-matchable right next to its ICO. Found and fixed three
+# compounding real bugs: (1) stripTagsLines' own tag-boundary newline
+# split the literal "s.r.o." suffix in two (bold entity name, plain
+# trailing punctuation outside the tag - a common real pattern), silently
+# emptying the whole suffix-anchored scan; fixed with a new
+# tagBoundaryPunctRE post-process step, gated on a LETTER (not a digit)
+# preceding the break - the digit gate was required after an
+# unconditional first attempt regressed round 2's eurostarshotels.com
+# fixture (a bare phone number leaking into the address). (2) the exposed
+# real sentence was 280 runes but 307 bytes (Czech diacritics are 2 bytes
+# each in UTF-8), over the existing 220-byte per-line cap; switched to
+# utf8.RuneCountInString and raised to 300. (3) Czechia's ICO had no
+# identifier pattern at all, so findIdentifiers found nothing and the
+# whole function bailed out before the suffix scan could run; added a
+# dedicated "ICO" vatPattern, wired into the Register-field Kind switch,
+# plus a new czICOValid weighted-mod-11 checksum, confirmed against the
+# real ICO (24717509). Deliberately NOT added: an "ICO" case in
+# singleCountryIdentifierKind - unlike CUI/KvK/CRO/CVR/Y-tunnus/OrgNr,
+# "ICO" is shared with Slovakia (former Czechoslovakia), so mapping it to
+# "CZ" would risk mis-flagging a future real Slovak page. One real gap
+# honestly left NOT fixed: Address stays empty on this page (same-line
+# entity+register embedding, and a separate cleaner section elsewhere
+# doesn't clear looksAddressLine either - no Czech street-word marker, and
+# Czech postal codes' spaced "XXX XX" format never reaches the
+# 4-consecutive-digit threshold). Three new regression tests
+# (imprint_extract_eu_round16_test.go); full existing suite still green,
+# no other regressions. No dedicated Czech ruleset added - consistent with
+# round 15's discipline.
 # 2026-08-22 (1.7.10) - EU-market-expansion real-evidence round 15 (new
 # series continuing rounds 1-14, covering the 13 remaining EU countries):
 # Romania. TRL stays at 6 (bug fixes, single-sample evidence). Fetched a
