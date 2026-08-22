@@ -261,7 +261,19 @@ func extractAddressNearEntity(text, name string) string {
 				// heuristic and got absorbed into the address, the second
 				// one dragging in an entirely different company's address
 				// from a different country in the process.
-				strings.Contains(low, "tva") || strings.Contains(low, "nomenclature ape") {
+				strings.Contains(low, "tva") || strings.Contains(low, "nomenclature ape") ||
+				// "RCS" (Registre de Commerce et des Sociétés — France AND
+				// Luxembourg's shared company-register name). Real evidence:
+				// menu.lu's real "Mentions légales" page puts its own "RCS
+				// Luxembourg n&deg; B258641" register citation on its own
+				// line, immediately after the real street address line —
+				// the "L-1118 Luxembourg" postal-code-shaped digit run makes
+				// the address line itself pass looksAddressLine, and without
+				// this marker the following RCS line ALSO clears
+				// looksAddressLine (its own digit run) and gets absorbed
+				// into the address as if it were a continuation postal
+				// line.
+				strings.Contains(low, "rcs") {
 				break
 			}
 			if looksAddressLine(clean) {

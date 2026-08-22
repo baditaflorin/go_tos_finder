@@ -208,6 +208,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "PT"
 	case "CRO":
 		return "IE"
+	case "RCS":
+		return "LU"
 	}
 	return ""
 }

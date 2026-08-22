@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.4"
+version: "1.7.5"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
@@ -438,6 +438,34 @@ trl_assessor: "claude-trl-reaudit-2026-07-31"
 # the same conditionality as the EU baseline itself, so staying on
 # eu_baseline avoids overclaiming a hard requirement this one fixture
 # didn't establish - consistent with round 7/8's Belgium/Portugal
+# discipline.
+# 2026-08-22 (1.7.5) - EU-market-expansion real-evidence round 10:
+# Luxembourg. TRL stays at 6 (bug fixes, single-sample evidence). Fetched
+# one real, live business's "Mentions legales" page (menu.lu, a real
+# Luxembourg restaurant-directory/booking company) and ran the shipped
+# 1.7.4 extractor against it - it extracted NOTHING at all: no legal_name,
+# no candidates, despite "WeServices S.a r.l." being trivially
+# suffix-matchable in isolation. Found and fixed three compounding real
+# bugs: (1) suffixTable's Luxembourg entry ("S.a r.l.") contains a raw
+# accented character, but this real page renders it as its named HTML
+# entity ("S.&agrave; r.l.") - stripTagsLines never decodes entities, so
+# detectSuffix could never match it; added a small, targeted
+# decodeKnownAccentEntities step, applied page-wide so the extracted
+# candidate name and the address lookup keyed off it both see the same
+# (decoded) text. (2) Luxembourg's RCS (Registre de Commerce et des
+# Societes) company number had no pattern at all ("RCS Luxembourg n&deg;
+# B258641"); added a dedicated "RCS" vatPattern requiring a letter
+# immediately before the digits, which keeps it from colliding with
+# France's differently-shaped, all-digit RCS citation. (3) once found, the
+# RCS register line sat immediately after the real street address with no
+# intervening tag boundary, so it cleared looksAddressLine's digit-run
+# heuristic and got absorbed into the Address field; added "rcs" to
+# extractAddressNearEntity's stop-marker list. One new regression test
+# plus a direct decoder unit test (imprint_extract_eu_round10_test.go);
+# full existing suite still green, no regressions. No dedicated Luxembourg
+# ruleset added: the Loi du 14 aout 2000, Art. 4's register-number
+# requirement is conditional ("where applicable"), same as the EU
+# baseline itself - consistent with round 7/8/9's Belgium/Portugal/Ireland
 # discipline.
 port: 8316
 
