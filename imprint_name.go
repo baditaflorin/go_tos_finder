@@ -310,6 +310,21 @@ func extractAddressNearEntity(text, name string) string {
 			if strings.Contains(low, "nip") || strings.Contains(low, "krs") || strings.Contains(low, "regon") {
 				continue
 			}
+			// "cégjegyzékszám"/"adószám": Hungary's own register/tax-number
+			// labels (see the "Cégjegyzékszám"/"Adószám" vatPatterns
+			// entries in imprint_vat.go). Same shape as NIP/KRS/REGON just
+			// above, not the RCS/TVA break-markers further below: real
+			// evidence, szatmari-izek.shop.hu's real Impresszum page lists
+			// both BEFORE the real "Székhely:" (registered-seat) address
+			// line ("Név: ...<br />Cégjegyzékszám: ...<br />Adószám:
+			// ...<br />Székhely: ...") — skip (not break) so scanning
+			// continues past them to the real address that follows. Long,
+			// specific compound words — safe as plain substring checks,
+			// unlike "cui" (an ordinary short Romanian word) which needed
+			// cuiWordRE's word-boundary regex further below.
+			if strings.Contains(low, "cégjegyzékszám") || strings.Contains(low, "adószám") {
+				continue
+			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
 			// its own line, with no "tel"/"phone" label attached to THIS
 			// line (hasImprintContact/imprintPhoneRE find it independently
@@ -1048,6 +1063,11 @@ func stripLabelPrefix(s string) string {
 		// analogue of the existing "By Mail: " label above, which this
 		// English-only list had no equivalent for at all.
 		"Brev: ",
+		// Real evidence: szatmari-izek.shop.hu's real Impresszum page
+		// labels its entity-name line "Név: Szatmári Ízek Kft." (Hungarian
+		// for "Name:") — same shape as "Brev: " above, no Hungarian
+		// analogue existed in this list before.
+		"Név: ",
 		"Firma: ", "Disclaimer von ", "Impressum von ",
 		"Terms of Use: ", "Terms of Service: ",
 		"See the ", "See: ",

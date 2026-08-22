@@ -272,6 +272,25 @@ func init() {
 		// accepted since IČO is always exactly 8 digits regardless of how a
 		// given page chooses to space it.
 		{"IČO", "CZ", regexp.MustCompile(`(?i)\bIČO?\s*[:#]?\s*(?:\d{3}\s?\d{2}\s?\d{3}|\d{8})\b`)},
+		// Hungary — Adószám (the domestic tax number), 11 digits written
+		// "########-#-##" (8-digit core + 1-digit VAT-status code + 2-digit
+		// county code). Treated as VAT-equivalent (see isVATLikeIdentifierKind
+		// and validateIdentifier below) since the 8-digit core IS the same
+		// number the "HU"-prefixed EU VAT pattern above matches, just
+		// written domestically without the country prefix — same
+		// architecture as Poland's NIP/Portugal's NIPC. Real evidence:
+		// szatmari-izek.shop.hu's real Impresszum page writes "Adószám:
+		// 13495413-2-15"; huAdoszamValid (imprint_checksum.go) confirmed
+		// against this value AND a second real value on the same page
+		// (23495919-2-41, a different company mentioned further down).
+		{"Adószám", "HU", regexp.MustCompile(`(?i)\bAdószám\s*[:#]?\s*\d{8}-\d-\d{2}\b`)},
+		// Hungary — Cégjegyzékszám (the company-register number), written
+		// as county(2)-court(2)-serial(6) digits, space- or dash-separated
+		// (both forms confirmed real on the same szatmari-izek.shop.hu
+		// page: "15 09 069897" for the page's own entity, "01-09-968314"
+		// for a different company mentioned further down) — same class of
+		// register-only identifier as Czechia's IČO/Luxembourg's RCS above.
+		{"Cégjegyzékszám", "HU", regexp.MustCompile(`(?i)\bCégjegyzékszám\s*[:#]?\s*\d{2}[\s-]?\d{2}[\s-]?\d{6}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

@@ -562,6 +562,13 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 		// otherwise-recognisable VAT/register ID on it would silently skip
 		// extraction. Real evidence: simpelbootverhuurutrecht.nl/colofon/.
 		strings.Contains(low, "colofon") ||
+		// "impresszum" (Hungarian spelling — doubled "sz", not the German
+		// "impressum"'s doubled "s") is NOT a substring of "impressum"
+		// above (positions 7-8 diverge: "ss" vs "ssz"), so a real Hungarian
+		// imprint URL fell through this whole gate exactly like the Dutch
+		// "colofon" gap just above. Real evidence:
+		// szatmari-izek.shop.hu/impresszum/.
+		strings.Contains(low, "impresszum") ||
 		strings.Contains(low, "terms") || strings.Contains(low, "company") ||
 		strings.Contains(low, "about")
 	// decodeKnownAccentEntities is applied to the WHOLE page text here, not
@@ -757,9 +764,14 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// which would have discarded a real match before it ever
 			// reached the winning candidate's Register field. Real
 			// evidence: onlineshop.cz's real Obchodní podmínky page.
+			// "Cégjegyzékszám" (Hungary's company-register number) is the
+			// same round-16 addition as IČO just above — same failure
+			// shape, same fix. Real evidence: szatmari-izek.shop.hu's real
+			// Impresszum page.
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
-				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO":
+				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO",
+				"Cégjegyzékszám":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
@@ -777,7 +789,12 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// all — simanova.it's real Partita IVA, eurostarshotels.com's
 			// real CIF, and neptun.orlen.pl's real NIP were all found and
 			// then discarded before ever reaching the winning candidate.
-			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC":
+			// "Adószám" (Hungary) joins this VAT-equivalent group for the
+			// same reason NIP does: it IS the same 8-digit core the
+			// "HU"-prefixed EU VAT pattern matches, just written
+			// domestically with an appended VAT-status/county suffix. Real
+			// evidence: szatmari-izek.shop.hu's real Impresszum page.
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {
