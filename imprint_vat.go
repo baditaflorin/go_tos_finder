@@ -418,6 +418,34 @@ func init() {
 		// evidence: epic.com.cy's real page writes "VAT registration
 		// number 10141156Y".
 		{"VAT Number", "CY", regexp.MustCompile(`(?i)\bVAT\s+(?:registration\s+)?number\s*[:#]?\s*\d{8}[A-Z]\b`)},
+		// Lithuania — Įmonės kodas (the legal-entity code), 9 digits.
+		// Register-only, NOT VAT-equivalent: unlike Bulgaria's ЕИК/
+		// Greece's ΑΦΜ/Croatia's OIB, this is a genuinely SEPARATE number
+		// from Lithuania's own PVM kodas (VAT code) — real evidence,
+		// grupinispirkimas.lt's real page has Įmonės kodas 302983374
+		// alongside a completely different PVM kodas LT100007453916 (the
+		// existing "LT"-prefixed EU VAT pattern above already matches the
+		// PVM kodas form on its own, no new pattern needed for it).
+		// ltCompanyCodeValid (imprint_checksum.go) confirmed against this
+		// value AND a second real value independently found the same
+		// day (302662379, bigbox.lt).
+		//
+		// Deliberately NO leading `\b` (same RE2 gotcha rounds 18/19
+		// found for Greek/Cyrillic — it's not script-specific: "Į" is
+		// Latin Extended-A, U+012E, and RE2's `\b` is ASCII-only
+		// regardless of Unicode block). Verified directly this round
+		// rather than assumed: a leading `\b` here matches nothing at
+		// all, confirmed before shipping.
+		//
+		// Optional literal "&nbsp;" tolerated between the label's colon
+		// and the digits: this real page's own markup is "Įmonės
+		// kodas:&nbsp;<i>302983374 </i>" — the tag boundary right after
+		// "&nbsp;" inserts a stripTagsLines newline, which `\s*` alone
+		// bridges fine, but the literal 6-character "&nbsp;" TEXT itself
+		// (deliberately never decoded — see trimLeadingTrailingNBSP's doc
+		// comment) sits between the colon and that newline and is not
+		// whitespace, so `\s*` alone couldn't bridge it.
+		{"Įmonės kodas", "LT", regexp.MustCompile(`(?i)Įmonės\s+kodas\s*[:#]?\s*(?:&nbsp;)?\s*\d{9}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

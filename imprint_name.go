@@ -650,10 +650,30 @@ func extractEntityAround(text, suffix string) string {
 	if cleanCandidateName(candidate, suffix) {
 		return candidate
 	}
-	// Prefix-form fallback (see the doc comment above): only tried when
-	// nothing meaningful precedes the suffix on this line — a real
-	// name-then-suffix match earlier on the same line always wins first.
-	if strings.TrimSpace(text[startMin:idx]) == "" {
+	// Prefix-form fallback (see the doc comment above): tried when nothing
+	// meaningful precedes the suffix on this line — a real name-then-suffix
+	// match earlier on the same line always wins first — OR when the
+	// preceding text is just a role/label ending in a dash-style separator
+	// ("Pardavėjas – UAB „...\"", "Seller — Ltd ...").
+	// Real evidence: grupinispirkimas.lt's real Taisyklės page writes
+	// "Pardavėjas &#8211; UAB „GRUPINIS PIRKIMAS"" — the pure-blank check
+	// alone never tried the prefix-form path at all here, since "1.2.
+	// Pardavėjas &#8211;" precedes "UAB" and is not blank, even though it
+	// is unambiguously just a role label, not a failed name-then-suffix
+	// attempt. Recognising the dash separator narrows this without
+	// broadening the fallback to arbitrary non-blank prefixes (which
+	// would risk masking genuine name-then-suffix rejections elsewhere).
+	// The dash itself is a literal, un-decoded numeric HTML entity on
+	// this real page (stripTagsLines never decodes "&#8211;" — same
+	// deliberate non-decoding as "&nbsp;"/"&quot;"/"&copy;" elsewhere in
+	// this codebase), so both the real Unicode dash characters AND their
+	// common un-decoded entity spellings are checked.
+	preceding := strings.TrimSpace(text[startMin:idx])
+	hasDashSuffix := strings.HasSuffix(preceding, "–") || strings.HasSuffix(preceding, "—") ||
+		strings.HasSuffix(preceding, "-") || strings.HasSuffix(preceding, "&#8211;") ||
+		strings.HasSuffix(preceding, "&#8212;") || strings.HasSuffix(preceding, "&ndash;") ||
+		strings.HasSuffix(preceding, "&mdash;")
+	if preceding == "" || hasDashSuffix {
 		if after := extractEntityAfterSuffix(text, suffix, idx); after != "" {
 			return after
 		}
@@ -680,6 +700,7 @@ func extractEntityAfterSuffix(text, suffix string, idx int) string {
 		}
 	}
 	name := strings.TrimSpace(after[:cut])
+	name = stripQuoteDelimiters(name)
 	if name == "" {
 		return ""
 	}
@@ -687,6 +708,36 @@ func extractEntityAfterSuffix(text, suffix string, idx int) string {
 		return ""
 	}
 	return suffix + " " + name
+}
+
+// stripQuoteDelimiters trims a leading/trailing quote-style delimiter pair
+// wrapping a prefix-form trading name (e.g. "UAB „GRUPINIS PIRKIMAS"" —
+// the low-9-quote convention several European languages, including
+// Lithuanian, share). Real evidence: grupinispirkimas.lt's real Taisyklės
+// page writes this literally as un-decoded numeric entities
+// ("&#8222;GRUPINIS PIRKIMAS&#8221;") — stripTagsLines never decodes them
+// (same deliberate non-decoding as "&nbsp;"/"&quot;" elsewhere), so
+// cleanCandidateName's entity-corruption filter (which correctly rejects
+// genuinely broken "&#..." residue) was rejecting this real, well-formed
+// quoted name outright. The delimiters are pure punctuation around the
+// name, not part of it, so they're stripped here — BEFORE the corruption
+// check ever sees them — rather than loosening that filter itself. Real
+// Unicode quote characters are handled too, for a page that has already
+// decoded them.
+func stripQuoteDelimiters(s string) string {
+	for _, open := range []string{"&#8222;", "„"} {
+		if strings.HasPrefix(s, open) {
+			s = strings.TrimSpace(s[len(open):])
+			break
+		}
+	}
+	for _, closer := range []string{"&#8221;", "”"} {
+		if strings.HasSuffix(s, closer) {
+			s = strings.TrimSpace(s[:len(s)-len(closer)])
+			break
+		}
+	}
+	return s
 }
 
 // labeledNameRE matches an explicit trading-name label with no
@@ -1455,6 +1506,18 @@ func formatRegister(kind, value string) string {
 		break
 	}
 	v = strings.TrimLeft(v, " :.,#-")
+	// A literal, un-decoded "&nbsp;" (see trimLeadingTrailingNBSP's doc
+	// comment for why stripTagsLines never decodes it) commonly sits right
+	// between a label's colon and its value — real evidence,
+	// grupinispirkimas.lt's real "Įmonės kodas:&nbsp;302983374" left a
+	// stray "&nbsp;" in this function's output otherwise, since it isn't
+	// whitespace and the "#-." cutset above doesn't remove multi-character
+	// substrings. Stripped here (and re-stripped below, for a second
+	// "&nbsp;" or leftover punctuation immediately behind it) rather than
+	// changing stripTagsLines' deliberate non-decoding globally.
+	for strings.HasPrefix(v, "&nbsp;") {
+		v = strings.TrimSpace(v[len("&nbsp;"):])
+	}
 	for _, lbl := range []string{"No. ", "No.", "No ", "Nummer ", "Numer ",
 		"Number ", "Reg. ", "Reg ", "registered ", "Registered "} {
 		if strings.HasPrefix(v, lbl) {
@@ -1462,6 +1525,9 @@ func formatRegister(kind, value string) string {
 		}
 	}
 	v = strings.TrimLeft(v, " :.,#-")
+	for strings.HasPrefix(v, "&nbsp;") {
+		v = strings.TrimSpace(v[len("&nbsp;"):])
+	}
 	if v == "" {
 		return kind
 	}

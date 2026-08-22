@@ -122,6 +122,12 @@ func validateIdentifier(kind, value, country string) validity {
 		// number, just written without the "HR" prefix on a domestic
 		// imprint, same architecture as ЕИК/ΑΦΜ/Adószám above.
 		return validateVAT("HR", extractDigits(value))
+	case "Įmonės kodas":
+		// Lithuania's Įmonės kodas is register-only, NOT VAT-equivalent
+		// (see this Kind's vatPatterns doc comment) — its own dedicated
+		// checksum, unlike OIB/ЕИК/ΑΦΜ above which route through
+		// validateVAT since they share their country's VAT body.
+		return mod11Verdict(ltCompanyCodeValid(extractDigits(value)))
 	case "NIPC":
 		// Portugal's NIPC (legal-entity ID) shares the same 9-digit body
 		// and weighted-mod-11 checksum as validateVAT's "PT" case
@@ -380,6 +386,10 @@ func singleCountryIdentifierKind(kind string) string {
 		// Real evidence: epic.com.cy's real eStore Terms & Conditions
 		// page.
 		return "CY"
+	case "Įmonės kodas":
+		// Lithuanian-language term, no other country's registry uses it.
+		// Real evidence: grupinispirkimas.lt's real Taisyklės page.
+		return "LT"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
@@ -824,6 +834,39 @@ func hrOIBValid(s string) bool {
 	}
 	check := (11 - r) % 10
 	return check == int(s[10]-'0')
+}
+
+// ltCompanyCodeValid verifies a Lithuanian Įmonės kodas (9 digits) using
+// the published two-pass weighted modulo-11 algorithm over the first 8
+// digits: pass 1 uses weights 1,2,3,4,5,6,7,8; if that remainder is 10
+// (not itself a valid single check digit), pass 2 re-weights with
+// 3,4,5,6,7,8,9,10 (remainder 10 there maps to check digit 0) — the same
+// two-pass shape as Bulgaria's bgEIKValid. Confirmed against TWO
+// independent real values found the same day: grupinispirkimas.lt's real
+// Įmonės kodas (302983374: weighted sum 180, 180 mod 11 = 4, matches the
+// real value's own 9th digit) and bigbox.lt's real Įmonės kodas
+// (302662379: weighted sum 152, 152 mod 11 = 9, also matches) — neither
+// happened to hit the pass-2 fallback, so that branch is inferred-standard
+// rather than real-evidence-tested, same caveat as bgEIKValid's.
+func ltCompanyCodeValid(s string) bool {
+	if len(s) != 9 || !allDigits(s) {
+		return false
+	}
+	weighted := func(weights []int) int {
+		sum := 0
+		for i := 0; i < 8; i++ {
+			sum += int(s[i]-'0') * weights[i]
+		}
+		return sum
+	}
+	check := weighted([]int{1, 2, 3, 4, 5, 6, 7, 8}) % 11
+	if check == 10 {
+		check = weighted([]int{3, 4, 5, 6, 7, 8, 9, 10}) % 11
+		if check == 10 {
+			check = 0
+		}
+	}
+	return check == int(s[8]-'0')
 }
 
 // fiVATValid verifies a Finnish Y-tunnus (8 digits) using the documented
