@@ -1,10 +1,40 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.15"
+version: "1.7.16"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.16) - EU-market-expansion real-evidence round 21:
+# Slovakia. TRL stays at 6 (bug fix, single-sample evidence). Fetched a
+# real, live electrical-supplies retailer's Obchodne podmienky page
+# (elektro-siete.sk, naming Elektro-Siete, s.r.o.) and ran the shipped
+# 1.7.15 extractor against it. This round is the real test of round 16's
+# own foresight: Czechia's IČO identifier and s.r.o. suffix are BOTH
+# shared, letter-for-letter, with Slovakia (former Czechoslovakia) -
+# round 16 deliberately did NOT wire IČO into
+# singleCountryIdentifierKind, anticipating a future Slovak page should
+# self-heal via its own SK-prefixed VAT number instead. Confirmed (not
+# fixed): Country correctly resolves to SK, not the suffix-guessed CZ,
+# because this page also states an SK-prefixed VAT number - the
+# self-healing path worked exactly as anticipated, no code change
+# needed. Also confirmed Slovak IČO uses the identical checksum
+# algorithm as Czech IČO. Real bug found and fixed: this page's
+# IČO/DIČ/IČ DPH/IBAN block, plus a separate account-number line and a
+# court-register citation, all have long digit runs that wrongly got
+# absorbed into Address - extractAddressNearEntity had no stop-marker
+# for any of these Slovak labels (round 16 never needed one). Added
+# colon-anchored markers to avoid false-positiving on ordinary words -
+# this retroactively benefits round 16's Czech pages too. One real gap
+# honestly left NOT fixed: the real address never clears
+# looksAddressLine at all (same class of gap round 16 already left
+# undocumented for Czech postal codes). No checksum implemented for
+# Slovak VAT either (stays format_valid - the modern numbering scheme
+# has been reformed and this round lacked confidence in the current
+# algorithm). Three new regression tests
+# (imprint_extract_eu_round21_test.go); full existing suite still
+# green, no regressions. No dedicated Slovak ruleset added - consistent
+# with prior rounds' discipline.
 # 2026-08-23 (1.7.15) - EU-market-expansion real-evidence round 20:
 # Croatia. TRL stays at 6 (bug fixes plus one new identifier,
 # single-sample evidence). Fetched a real, live retailer's Opci uvjeti

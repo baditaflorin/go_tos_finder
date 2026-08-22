@@ -377,6 +377,40 @@ func extractAddressNearEntity(text, name string) string {
 			if strings.Contains(low, "еик") {
 				continue
 			}
+			// "ičo:"/"dič:"/"ič dph"/"iban": Czech/Slovak IČO's own domestic
+			// tax-registration labels (round 16 added the IČO identifier
+			// itself but never an address stop-marker for it, since that
+			// round's own fixture didn't need one — this round's real
+			// Slovak evidence does). Includes the colon in "ičo:"/"dič:"
+			// deliberately, unlike the bare-word markers elsewhere in this
+			// function: "IČO"/"DIČ" without it would risk false-positiving
+			// on ordinary Czech/Slovak words that happen to contain the
+			// same short letter run (e.g. "dedičom", "dič" mid-word) —
+			// the label is essentially always colon-terminated in real
+			// imprint text, so requiring it keeps the match specific.
+			// "ič dph" (Slovak "IČ DPH" = VAT number label, two words) and
+			// "iban" are both distinctive enough on their own. Real
+			// evidence: elektro-siete.sk's real Obchodné podmienky page
+			// lists "IČO: 46775994<br />DIČ: 2023571528<br />IČ DPH:
+			// SK2023571528" then "IBAN: SK67 ..." as four separate lines,
+			// each with a long digit run that cleared looksAddressLine and
+			// got wrongly absorbed into Address ahead of (and instead of)
+			// the real "Sídlo spoločnosti" address a few lines earlier.
+			if strings.Contains(low, "ičo:") || strings.Contains(low, "dič:") ||
+				strings.Contains(low, "ič dph") || strings.Contains(low, "iban") {
+				continue
+			}
+			// "číslo účtu" (Slovak "account number") and "obchodnom
+			// registri" (Slovak "Commercial Register", the phrase this
+			// page's own court-register citation line uses) — same real
+			// page, same failure shape as the IČO/DIČ/IBAN block just
+			// above: both lines have their own long digit runs (a bank
+			// account number; the register's own insert/vložka number)
+			// that cleared looksAddressLine and got wrongly absorbed once
+			// the IČO/DIČ/IBAN lines ahead of them were excluded.
+			if strings.Contains(low, "číslo účtu") || strings.Contains(low, "obchodnom registri") {
+				continue
+			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
 			// its own line, with no "tel"/"phone" label attached to THIS
 			// line (hasImprintContact/imprintPhoneRE find it independently
