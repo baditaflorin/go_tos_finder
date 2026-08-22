@@ -103,7 +103,14 @@ func init() {
 		{"SIRET", "FR", regexp.MustCompile(`(?i)\bSIRET\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\s?(?:\d{5}|\d{3}\s?\d{2})\b`)},
 		{"SIREN", "FR", regexp.MustCompile(`(?i)\bSIREN\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\b`)},
 		// Norway — Organisasjonsnummer / MVA (9 digits, often "NO" + "MVA").
-		{"OrgNr", "NO", regexp.MustCompile(`\b(?:Org(?:anisasjonsnr|\.?\s?nr)?|MVA)\.?\s*[:#]?\s*(?:NO)?\s*\d{3}\s?\d{3}\s?\d{3}(?:\s?MVA)?\b`)},
+		// Case-insensitive: real evidence, japanphoto.no's real kjøpsvilkår
+		// page opens with "...fra CEWE Norge AS med org.nr. 965 321 039..."
+		// — ordinary mid-sentence Norwegian prose lower-cases "org.nr" (only
+		// a sentence-initial or label form capitalizes it, e.g. the SAME
+		// page's later "Org.nr: 965 321 039"), which the previously
+		// case-sensitive pattern (requiring a literal capital "Org") never
+		// matched at all. Same class of fix as round 7's BE/FR spacing gap.
+		{"OrgNr", "NO", regexp.MustCompile(`(?i)\b(?:Org(?:anisasjonsnr|\.?\s?nr)?|MVA)\.?\s*[:#]?\s*(?:NO)?\s*\d{3}\s?\d{3}\s?\d{3}(?:\s?MVA)?\b`)},
 		// Switzerland — UID (CHE-###.###.###).
 		{"UID", "CH", regexp.MustCompile(`\bCHE[- ]?\d{3}\.?\d{3}\.?\d{3}(?:\s?(?:MWST|TVA|IVA|VAT))?\b`)},
 		// Spain — CIF/NIF on the imprint (letter + 7 digits + control).

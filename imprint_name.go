@@ -163,6 +163,15 @@ func looksAddressLine(s string) bool {
 		// was silently dropped — same failure shape as the "rue"/"aleja"
 		// cases above.
 		"vej",
+		// Real evidence: japanphoto.no's real Kjøpsvilkår
+		// "Kontaktinformasjon" section lists its postal address as
+		// "Postboks 4 Bjørndal" — a one-digit box number ("4") clears no
+		// digit-run threshold at all, so without this marker only the
+		// following postal-code/city line ("1214 Oslo") survived
+		// extractAddressNearEntity's scan and the PO-box line itself was
+		// silently dropped — same failure shape as the "rue"/"aleja"/"vej"
+		// cases above.
+		"postboks",
 	} {
 		if strings.Contains(low, marker) {
 			return true
@@ -973,6 +982,12 @@ func stripLabelPrefix(s string) string {
 		"CEO, ", "General Counsel, ", "General Counsel of ",
 		"Board of Directors ", "Authorized recipient for ",
 		"By Mail: ", "By Fax: ", "By Email: ", "By Phone: ",
+		// Real evidence: japanphoto.no's real Kjøpsvilkår "17.
+		// Kontaktinformasjon" section labels its postal-contact line
+		// "Brev: CEWE Norge AS" (Norwegian for "Letter:") — the Norwegian
+		// analogue of the existing "By Mail: " label above, which this
+		// English-only list had no equivalent for at all.
+		"Brev: ",
 		"Firma: ", "Disclaimer von ", "Impressum von ",
 		"Terms of Use: ", "Terms of Service: ",
 		"See the ", "See: ",
