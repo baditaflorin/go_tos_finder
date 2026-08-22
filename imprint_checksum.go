@@ -147,6 +147,31 @@ func isVATLikeIdentifierKind(kind string) bool {
 	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF"
 }
 
+// singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
+// label-anchored identifier Kind unambiguously belongs to, or "" if the
+// Kind isn't one of these. Unlike the generic "VAT" kind (whose 2-letter
+// country prefix is embedded in the value itself — see vatCountryHint),
+// these label-anchored patterns (imprint_vat.go) match bare digits with no
+// country prefix at all, but the LABEL itself only ever exists in one
+// country's national system — a Partita IVA or REA number cannot possibly
+// be Romanian, a KvK number cannot possibly be French. Used to let
+// ground-truth government-identifier evidence override a merely-
+// probabilistic legal-form-suffix country guess — see the real-evidence
+// comment at this function's call site in imprint.go.
+func singleCountryIdentifierKind(kind string) string {
+	switch kind {
+	case "PartitaIVA", "REA":
+		return "IT"
+	case "Hoja", "CIF":
+		return "ES"
+	case "SIRET", "SIREN":
+		return "FR"
+	case "KvK":
+		return "NL"
+	}
+	return ""
+}
+
 // validateVAT dispatches on the 2-letter VAT prefix (or the country code when
 // the value omits it) to the per-member-state check-digit routine. Returns
 // formatValid for member states whose algorithm we don't implement.

@@ -82,8 +82,17 @@ func init() {
 		{"ACN", "AU", regexp.MustCompile(`\bACN\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\b`)},
 		{"CUI", "RO", regexp.MustCompile(`\b(?:CUI|CIF)\s*[:#]?\s*(?:RO)?\d{2,10}\b`)},
 		{"KvK", "NL", regexp.MustCompile(`\bKvK[- ]?(?:nr\.?)?\s*[:#]?\s*\d{8}\b`)},
-		{"SIRET", "FR", regexp.MustCompile(`\bSIRET\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b`)},
-		{"SIREN", "FR", regexp.MustCompile(`\bSIREN\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\b`)},
+		// Case-insensitive: real evidence, humresto.fr's real mentions-légales
+		// writes "N° Siret : 980 184 584 000 12" (mixed case, not "SIRET"),
+		// which the previously case-sensitive pattern never matched at all —
+		// only surfaced once RulesetFRLCEN started requiring "register" and
+		// this real page's completeness score came up short. The trailing
+		// alternation ("(?:\d{5}|\d{3}\s?\d{2})") accepts the SIRET's last
+		// 5-digit NIC segment written either solid or as "3+2" — the same
+		// real page groups the full 14 digits "980 184 584 000 12" (3-3-3-
+		// 3-2), not the "3-3-3-5" grouping the pattern previously assumed.
+		{"SIRET", "FR", regexp.MustCompile(`(?i)\bSIRET\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\s?(?:\d{5}|\d{3}\s?\d{2})\b`)},
+		{"SIREN", "FR", regexp.MustCompile(`(?i)\bSIREN\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\b`)},
 		// Norway — Organisasjonsnummer / MVA (9 digits, often "NO" + "MVA").
 		{"OrgNr", "NO", regexp.MustCompile(`\b(?:Org(?:anisasjonsnr|\.?\s?nr)?|MVA)\.?\s*[:#]?\s*(?:NO)?\s*\d{3}\s?\d{3}\s?\d{3}(?:\s?MVA)?\b`)},
 		// Switzerland — UID (CHE-###.###.###).
@@ -102,6 +111,19 @@ func init() {
 		// observed across several other real Italian note-legali pages
 		// during the same search.
 		{"REA", "IT", regexp.MustCompile(`\b(?:Numero\s+)?REA\.?\s*(?:nr\.?)?\s*:?\s*\(?[A-Z]{0,2}\)?[\s.-]?\d{4,8}\b`)},
+		// Spain — Registro Mercantil "Hoja" number (e.g. "Hoja B-372183",
+		// "hoja SE - 76.664"), LSSICE Art. 10's register-inscription
+		// disclosure. A full citation also carries a tomo/folio/libro/
+		// sección, but "Hoja <province-code>-<number>" is the one
+		// consistently-present, uniquely-identifying part across every real
+		// citation observed — real evidence: eurostarshotels.com's real
+		// aviso legal ("Hoja B-372183") plus several other real Spanish
+		// aviso-legal pages found during the same search (Sevilla "hoja SE
+		// - 76.664", Málaga "Hoja MA-111580", another Barcelona filing
+		// "hoja B-493395"). Not in the original go_legal_entity table at
+		// all — a Spanish imprint's register disclosure was silently
+		// unmodeled (only CIF/NIF, the tax ID, was covered).
+		{"Hoja", "ES", regexp.MustCompile(`(?i)\bHoja\s*:?\s*[A-Z]{0,3}\s*[-.]?\s*\d[\d.]{2,9}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

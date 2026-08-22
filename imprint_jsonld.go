@@ -642,7 +642,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// the candidate's suffix-inferred country when they disagree.
 			switch id.Kind {
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
-				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA":
+				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}

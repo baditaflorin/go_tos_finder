@@ -1,10 +1,35 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.5.5"
+version: "1.6.0"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.6.0) — dedicated national imprint rulesets: fr_lcen (LCEN
+# Art. 6-III), it_dlgs70 (D.Lgs. 70/2003 Art. 7), es_lssice (LSSICE
+# Art. 10), nl_handelsregisterwet — each requires base fields + register,
+# deliberately NOT responsible_person (none of these four national laws
+# require naming an individual, unlike DE/AT). TRL stays at 6: this is new
+# capability (a checklist that now actually enforces what round-1/round-2
+# already showed extraction could reliably find), and while it's grounded
+# in real evidence, the sample is still small (1-2 real pages per country)
+# — not the broad population validation TRL 7 would need. Adding a
+# checklist item that actually gets checked surfaced three more real bugs
+# the eu_baseline-only checklist had let slide uncaught: (1) the French
+# SIRET pattern was case-sensitive and assumed a rigid 3-3-3-5 digit
+# grouping — humresto.fr's real page writes "Siret" (mixed case) grouped
+# 3-3-3-3-2; (2) Spain's Registro Mercantil "Hoja" citation had no pattern
+# modeled at all; (3) Italy's country resolving to "RO" — documented as a
+# known, deliberately-unfixed limitation in the 1.5.5 note below — is now
+# fixed, not by touching suffixTable's ambiguous case-sensitive matching
+# rules (which would have risked the SEPARATE real France-vs-Italy
+# "S.A.S." collision in that same table) but by giving ground-truth
+# single-country government-identifier evidence (a Partita IVA/REA number
+# cannot possibly be Romanian) precedence over a merely-probabilistic
+# suffix guess. Three new regression tests
+# (imprint_extract_eu_round4_test.go) plus updated assertions in the
+# round-1/round-2 tests reflecting the new, now-correct completeness
+# scores; full existing suite still green, no regressions.
 # 2026-08-22 (1.5.5) — EU-market-expansion real-evidence round 2: Italy and
 # Spain. TRL stays at 6 (bug fixes within the existing band — Italy and
 # Spain still fall back to eu_baseline, no dedicated ruleset yet). Fetched

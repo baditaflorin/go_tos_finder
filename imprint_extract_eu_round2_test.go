@@ -62,15 +62,19 @@ EUROSTARS es una compañía de GRUPO HOTUSA, más información en <a href="https
 // validated with Romania's CUI algorithm (see the Spain test below — this
 // fixture only exercises the PartitaIVA side of that same switch).
 //
-// Known, documented limitation NOT fixed in this round: Country resolves
-// to "RO", not "IT". The JSON-LD candidate's ALL-CAPS "S.R.L." is a
-// genuine literal-string collision with Romania's own native "S.R.L."
-// suffixTable entry (imprint_suffix.go) — Romanian companies write it
-// exactly this way natively, so this isn't purely an Italian-vs-Romanian
-// bug to resolve by fiat. A real fix needs a broader case-sensitivity/
-// confidence-model change across the whole suffixTable, which carries
-// regression risk this round did not have the evidence to fully audit.
-// Deliberately left as a documented gap rather than a rushed fix.
+// Country resolution (round 4 fix): the JSON-LD candidate's ALL-CAPS
+// "S.R.L." is a genuine literal-string collision with Romania's own native
+// "S.R.L." suffixTable entry (imprint_suffix.go) — Romanian companies
+// write it exactly this way natively too, so this was never a pure
+// Italian-vs-Romanian bug fixable by reordering/renaming table entries
+// (that risked shadowing genuine Romanian detections, or colliding with
+// the SEPARATE real France-vs-Italy "S.A.S." ambiguity elsewhere in the
+// same table — see singleCountryIdentifierKind's doc comment in
+// imprint_checksum.go for the full collision audit). Fixed instead by
+// giving ground-truth government-identifier evidence (a Partita IVA/REA
+// number cannot possibly be Romanian) precedence over the merely-
+// probabilistic suffix guess, once backfillWinnerIdentifiers pulls those
+// identifiers onto the winning JSON-LD candidate.
 func TestExtractImprintFieldsSimanovaItalianRealEvidence(t *testing.T) {
 	im := extractImprintFields("https://www.simanova.it/note-legali/", simanovaFixture, "simanova.it")
 
@@ -85,6 +89,9 @@ func TestExtractImprintFieldsSimanovaItalianRealEvidence(t *testing.T) {
 	if im.Address != wantAddr {
 		t.Errorf("Address = %q, want %q", im.Address, wantAddr)
 	}
+	if im.Country != "IT" {
+		t.Errorf("Country = %q, want IT (must not resolve to Romania despite the ALL-CAPS \"S.R.L.\" suffix collision — see singleCountryIdentifierKind)", im.Country)
+	}
 	if im.Register != "REA CE 362094" {
 		t.Errorf("Register = %q, want %q (REA had no pattern modeled at all before this fix)", im.Register, "REA CE 362094")
 	}
@@ -94,12 +101,15 @@ func TestExtractImprintFieldsSimanovaItalianRealEvidence(t *testing.T) {
 	if im.VATValidation != string(checksumValid) {
 		t.Errorf("VATValidation = %q, want checksum_valid (Partita IVA is Luhn-valid)", im.VATValidation)
 	}
+	if im.Ruleset != RulesetITDLgs70 {
+		t.Errorf("Ruleset = %q, want it_dlgs70 (round-4: Italy now has a dedicated ruleset — was unreachable until Country resolved correctly)", im.Ruleset)
+	}
 	if !containsStr(im.FieldsFound, "legal_name") || !containsStr(im.FieldsFound, "address") ||
-		!containsStr(im.FieldsFound, "contact") || !containsStr(im.FieldsFound, "vat_valid") {
-		t.Errorf("FieldsFound = %v, want legal_name+address+contact+vat_valid", im.FieldsFound)
+		!containsStr(im.FieldsFound, "contact") || !containsStr(im.FieldsFound, "register") || !containsStr(im.FieldsFound, "vat_valid") {
+		t.Errorf("FieldsFound = %v, want legal_name+address+contact+register+vat_valid", im.FieldsFound)
 	}
 	if im.CompletenessScore != 100 {
-		t.Errorf("CompletenessScore = %d, want 100 (eu_baseline: Italy has no dedicated ruleset yet)", im.CompletenessScore)
+		t.Errorf("CompletenessScore = %d, want 100", im.CompletenessScore)
 	}
 }
 
@@ -139,12 +149,18 @@ func TestExtractImprintFieldsEurostarsSpanishRealEvidence(t *testing.T) {
 	if im.VATValidation != string(checksumValid) {
 		t.Errorf("VATValidation = %q, want checksum_valid (a real Spanish CIF validated via esCIFValid, not Romania's roCUIValid)", im.VATValidation)
 	}
+	if im.Register != "Hoja B-372183" {
+		t.Errorf("Register = %q, want %q (round-4: Spain's Registro Mercantil \"Hoja\" citation had no pattern modeled at all before this fix)", im.Register, "Hoja B-372183")
+	}
+	if im.Ruleset != RulesetESLSSICE {
+		t.Errorf("Ruleset = %q, want es_lssice (round-4: Spain now has a dedicated ruleset)", im.Ruleset)
+	}
 	if !containsStr(im.FieldsFound, "legal_name") || !containsStr(im.FieldsFound, "address") ||
-		!containsStr(im.FieldsFound, "contact") || !containsStr(im.FieldsFound, "vat_valid") {
-		t.Errorf("FieldsFound = %v, want legal_name+address+contact+vat_valid", im.FieldsFound)
+		!containsStr(im.FieldsFound, "contact") || !containsStr(im.FieldsFound, "register") || !containsStr(im.FieldsFound, "vat_valid") {
+		t.Errorf("FieldsFound = %v, want legal_name+address+contact+register+vat_valid", im.FieldsFound)
 	}
 	if im.CompletenessScore != 100 {
-		t.Errorf("CompletenessScore = %d, want 100 (eu_baseline: Spain has no dedicated ruleset yet)", im.CompletenessScore)
+		t.Errorf("CompletenessScore = %d, want 100", im.CompletenessScore)
 	}
 }
 

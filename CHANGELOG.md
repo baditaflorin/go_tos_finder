@@ -2,6 +2,52 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.6.0 — 2026-08-22
+
+### Added
+
+Dedicated national imprint rulesets for France (`fr_lcen`, LCEN Art. 6-III),
+Italy (`it_dlgs70`, D.Lgs. 70/2003 Art. 7), Spain (`es_lssice`, LSSICE
+Art. 10), and the Netherlands (`nl_handelsregisterwet`) — each requires the
+`eu_baseline` base fields (legal_name/address/contact) plus `register`.
+Added now that round-1/round-2 real evidence confirmed register-number
+extraction is reliably working for all four (SIRET/SIREN, REA, the new
+Spanish "Hoja" Registro Mercantil pattern, KvK). Deliberately does NOT
+require `responsible_person` for any of the four — unlike Germany/Austria,
+none of these national laws require naming an individual (France's LCEN
+Art. 6-III-2 "directeur de la publication" requirement is a real exception,
+but this pass has no real evidence that extraction reliably finds it on a
+live French page, so it's left unmodelled rather than overclaiming
+validation that wasn't done).
+
+### Fixed
+
+Adding a checklist item that actually gets *checked* against real evidence
+surfaced three real bugs the eu_baseline-only checklist had let slide
+uncaught:
+
+- **French SIRET numbers went unmatched on real pages.** The pattern was
+  case-sensitive ("SIRET" only) and assumed a rigid 3-3-3-5 digit grouping;
+  humresto.fr's real mentions-légales writes "Siret" (mixed case) grouped
+  3-3-3-3-2 ("980 184 584 000 12"). Fixed both.
+- **Spain's Registro Mercantil citation had no pattern at all.** Added a
+  "Hoja &lt;province-code&gt;-&lt;number&gt;" pattern — the one
+  consistently-present, uniquely-identifying part across every real
+  citation observed (tomo/folio/libro/sección vary in order and presence;
+  Hoja does not).
+- **Italy's country resolution to "RO" (documented as a known limitation in
+  1.5.5) is now fixed** — not by touching the ambiguous suffix-matching
+  rules (which would risk the OTHER real collision in that table, France
+  vs. Italy's "S.A.S."), but by giving ground-truth single-country
+  government-identifier evidence (a Partita IVA/REA number cannot possibly
+  be Romanian) precedence over a merely-probabilistic suffix guess. New
+  `singleCountryIdentifierKind` helper.
+
+Three new permanent regression tests
+(imprint_extract_eu_round4_test.go) plus updated assertions in the round-1/
+round-2 real-evidence tests reflecting the new (now-correct) completeness
+scores; full existing suite still green, no regressions.
+
 ## 1.5.5 — 2026-08-22
 
 ### Fixed

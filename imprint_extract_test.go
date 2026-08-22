@@ -317,9 +317,10 @@ func TestValidateIdentifierChecksumsDEAndAT(t *testing.T) {
 	}
 }
 
-// TestRulesetForCountry: only DE/AT get the stricter checklist; everything
-// else — including an unresolved/empty country — falls back to
-// eu_baseline rather than over-claiming a ruleset that doesn't apply.
+// TestRulesetForCountry: DE/AT/FR/IT/ES/NL each get their own modelled
+// checklist; everything else — including an unresolved/empty country —
+// falls back to eu_baseline rather than over-claiming a ruleset that
+// doesn't apply.
 func TestRulesetForCountry(t *testing.T) {
 	cases := []struct {
 		country string
@@ -327,7 +328,11 @@ func TestRulesetForCountry(t *testing.T) {
 	}{
 		{"DE", RulesetDETMG},
 		{"AT", RulesetATECGMedienG},
-		{"FR", RulesetEUBaseline},
+		{"FR", RulesetFRLCEN},
+		{"IT", RulesetITDLgs70},
+		{"ES", RulesetESLSSICE},
+		{"NL", RulesetNLHandelsreg},
+		{"PL", RulesetEUBaseline},
 		{"", RulesetEUBaseline},
 	}
 	for _, c := range cases {

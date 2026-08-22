@@ -74,12 +74,18 @@ func TestExtractImprintFieldsHumRestoFrenchPrefixFormRealEvidence(t *testing.T) 
 	if im.VATValidation != string(checksumValid) {
 		t.Errorf("VATValidation = %q, want checksum_valid (French VAT = 2 check chars + Luhn-valid SIREN)", im.VATValidation)
 	}
+	if im.Register != "SIRET 980 184 584 000 12" {
+		t.Errorf("Register = %q, want %q (round-4: RulesetFRLCEN now requires register; also exercises the SIRET pattern's real-evidence fixes — case-insensitive \"Siret\" and the 3-3-3-3-2 digit grouping this real page uses instead of 3-3-3-5)", im.Register, "SIRET 980 184 584 000 12")
+	}
 	if !containsStr(im.FieldsFound, "legal_name") || !containsStr(im.FieldsFound, "address") ||
-		!containsStr(im.FieldsFound, "contact") || !containsStr(im.FieldsFound, "vat_valid") {
-		t.Errorf("FieldsFound = %v, want legal_name+address+contact+vat_valid", im.FieldsFound)
+		!containsStr(im.FieldsFound, "contact") || !containsStr(im.FieldsFound, "register") || !containsStr(im.FieldsFound, "vat_valid") {
+		t.Errorf("FieldsFound = %v, want legal_name+address+contact+register+vat_valid", im.FieldsFound)
+	}
+	if im.Ruleset != RulesetFRLCEN {
+		t.Errorf("Ruleset = %q, want fr_lcen (round-4: France now has a dedicated ruleset)", im.Ruleset)
 	}
 	if im.CompletenessScore != 100 {
-		t.Errorf("CompletenessScore = %d, want 100 (eu_baseline: France has no dedicated ruleset yet)", im.CompletenessScore)
+		t.Errorf("CompletenessScore = %d, want 100", im.CompletenessScore)
 	}
 }
 
@@ -128,10 +134,13 @@ func TestExtractImprintFieldsSimpelBootverhuurDutchSoleTraderRealEvidence(t *tes
 	if im.ResponsiblePerson != "" {
 		t.Errorf("ResponsiblePerson = %q, want empty (the trading name has no person embedded in it)", im.ResponsiblePerson)
 	}
-	if !containsStr(im.FieldsFound, "legal_name") || !containsStr(im.FieldsFound, "address") {
-		t.Errorf("FieldsFound = %v, want legal_name+address", im.FieldsFound)
+	if !containsStr(im.FieldsFound, "legal_name") || !containsStr(im.FieldsFound, "address") || !containsStr(im.FieldsFound, "register") {
+		t.Errorf("FieldsFound = %v, want legal_name+address+register", im.FieldsFound)
 	}
-	if im.CompletenessScore != 50 {
-		t.Errorf("CompletenessScore = %d, want 50 (eu_baseline: legal_name+address found, contact absent from this trimmed fixture, vat_valid unresolved)", im.CompletenessScore)
+	if im.Ruleset != RulesetNLHandelsreg {
+		t.Errorf("Ruleset = %q, want nl_handelsregisterwet (round-4: Netherlands now has a dedicated ruleset)", im.Ruleset)
+	}
+	if im.CompletenessScore != 60 {
+		t.Errorf("CompletenessScore = %d, want 60 (nl_handelsregisterwet: legal_name+address+register found (3/5) — contact absent from this trimmed fixture, vat_valid unresolved)", im.CompletenessScore)
 	}
 }

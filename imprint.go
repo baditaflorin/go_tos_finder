@@ -20,10 +20,32 @@ import (
 // footer says nothing about whether any of that is actually present.
 
 // Ruleset names. See imprintFieldChecklist for what each requires.
+//
+// RulesetFRLCEN / RulesetITDLgs70 / RulesetESLSSICE / RulesetNLHandelsreg
+// were added once round-1/round-2 EU-expansion real evidence confirmed
+// register-number extraction is reliably working for these four countries
+// (SIRET/SIREN, REA, Hoja-RM, KvK — see imprint_vat.go). Unlike
+// de_tmg/at_ecg_medieng, none of these four require a named responsible
+// person: LCEN Art. 6-III (France), D.Lgs. 70/2003 Art. 7 (Italy), LSSICE
+// Art. 10 (Spain), and the Dutch Handelsregisterwet/BW Art. 3:15d are all
+// entity-identification obligations (name, address, register number,
+// contact) — not the separate DE/AT media-law individual-accountability
+// requirement. France's LCEN Art. 6-III-2 does ALSO require naming a
+// "directeur de la publication" — responsiblePersonLabelRE (below)
+// already recognises the French phrasing ("responsable de la
+// publication", "représentant légal") — but that requirement is
+// deliberately NOT added to RulesetFRLCEN's checklist yet: no real
+// evidence in this expansion actually exercised that extraction path
+// against a live French page, and requiring a field this pass never
+// verified works would overclaim validation that wasn't done.
 const (
 	RulesetEUBaseline   = "eu_baseline"
 	RulesetDETMG        = "de_tmg"
 	RulesetATECGMedienG = "at_ecg_medieng"
+	RulesetFRLCEN       = "fr_lcen"
+	RulesetITDLgs70     = "it_dlgs70"
+	RulesetESLSSICE     = "es_lssice"
+	RulesetNLHandelsreg = "nl_handelsregisterwet"
 )
 
 // Imprint is the structured, field-level result of analysing a verified
@@ -502,21 +524,35 @@ func imprintFieldChecklist(ruleset string) []string {
 		// split them if AT-specific completeness ever needs to distinguish
 		// "ECG-compliant" from "MedienG-compliant" independently.
 		return append(append([]string{}, base...), "register", "responsible_person")
+	case RulesetFRLCEN, RulesetITDLgs70, RulesetESLSSICE, RulesetNLHandelsreg:
+		// Entity-identification-only obligations (see the Ruleset consts'
+		// doc comment above for the legal citations and why
+		// responsible_person is deliberately excluded here).
+		return append(append([]string{}, base...), "register")
 	default:
 		return base
 	}
 }
 
 // rulesetFor selects the applicable ruleset for a country. Defaults to
-// eu_baseline for anything not confidently DE/AT — deliberately: applying
-// the stricter DE/AT checklist to a country whose imprint law we haven't
-// modelled would over-claim requirements that don't actually apply there.
+// eu_baseline for anything not confidently modelled — deliberately:
+// applying a stricter national checklist to a country whose imprint law we
+// haven't modelled would over-claim requirements that don't actually apply
+// there.
 func rulesetFor(country string) string {
 	switch country {
 	case "DE":
 		return RulesetDETMG
 	case "AT":
 		return RulesetATECGMedienG
+	case "FR":
+		return RulesetFRLCEN
+	case "IT":
+		return RulesetITDLgs70
+	case "ES":
+		return RulesetESLSSICE
+	case "NL":
+		return RulesetNLHandelsreg
 	default:
 		return RulesetEUBaseline
 	}
@@ -601,6 +637,26 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 			// already cleaned when it was first attached).
 			if isVATLikeIdentifierKind(id.Kind) && cleanIdentifierValue(id.Kind, id.Value) == best.VAT {
 				vatValidation = id.Validation
+			}
+			// A single-country identifier kind (PartitaIVA/REA only ever
+			// exist in Italy, Hoja only in Spain, ...) is unambiguous
+			// evidence of country — unlike a bare legal-form suffix, which
+			// can genuinely collide across countries (ALL-CAPS "S.R.L." is
+			// both a real Italian stylization AND Romania's native form;
+			// imprint_suffix.go's suffixTable is case-sensitive precisely
+			// to keep them apart, but an ALL-CAPS JSON-LD name only ever
+			// matches Romania's entry). Real evidence: simanova.it's real
+			// JSON-LD name field is styled "SIMANOVA S.R.L." (all caps),
+			// which won as best candidate with the wrong Country="RO" from
+			// that suffix match — but the SAME page's real REA/Partita IVA,
+			// backfilled onto this candidate above, are only ever Italian.
+			// Overriding here lets ground-truth government-identifier
+			// evidence correct a merely-probabilistic suffix guess, without
+			// touching suffixTable's matching rules at all (which would
+			// risk regressing the OTHER real collisions in that table —
+			// e.g. "S.A.S." is both France's and Italy's own native form).
+			if cc := singleCountryIdentifierKind(id.Kind); cc != "" {
+				im.Country = cc
 			}
 		}
 	}
