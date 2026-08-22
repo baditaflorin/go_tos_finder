@@ -98,6 +98,16 @@ func validateIdentifier(kind, value, country string) validity {
 		// (ptVATValid) — same architecture as NIP/PL above. Real evidence:
 		// urbana.com.pt's real NIPC (508980186).
 		return mod11Verdict(ptVATValid(extractDigits(value)))
+	case "CVR":
+		// Denmark's CVR (Det Centrale Virksomhedsregister) business-
+		// register number shares the same 8-digit body and weighted-mod-11
+		// checksum as validateVAT's "DK" case (dkVATValid) — the
+		// DK-prefixed VAT number IS literally "DK" + this CVR body with no
+		// extra check digit. Same architecture as NIP/NIPC above. Real
+		// evidence: kims.dk's real CVR (15233877) and webshop.dn.dk's real
+		// CVR (60804214), both independently found during the same search
+		// and both verified to pass this checksum.
+		return mod11Verdict(dkVATValid(extractDigits(value)))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -212,6 +222,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "LU"
 	case "Organisationsnummer":
 		return "SE"
+	case "CVR":
+		return "DK"
 	}
 	return ""
 }

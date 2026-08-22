@@ -2,6 +2,54 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.7 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 12: Denmark. Fetched a real, live
+webshop's handelsbetingelser (terms-of-sale) page (kims.dk — Denmark's
+closest analogue to an imprint page, naming Orkla Snacks Danmark A/S as
+the operating legal entity) and ran the shipped 1.7.6 extractor against
+it — it extracted **nothing at all** (CompletenessScore 0), despite
+"Orkla Snacks Danmark A/S" being trivially suffix-matchable ("A/S") right
+next to its CVR number. Found and fixed three compounding real bugs:
+
+- **Denmark's CVR-nr (Det Centrale Virksomhedsregister, the Central
+  Business Register number) had no identifier pattern at all** — same
+  class of gap as round 5's Polish NIP/KRS/REGON and round 11's Swedish
+  Organisationsnummer. Without it, `findIdentifiers` found nothing on this
+  non-"imprint"/"legal"/"terms"-URLed page, so the whole suffix-anchored
+  scan bailed out before it ever ran. Added a dedicated `CVR` vatPattern,
+  wired into the Register field and validated via the existing "DK"
+  weighted-mod-11 checksum (`dkVATValid`) — a DK-prefixed VAT number IS
+  literally "DK" + the CVR body with no extra check digit. Confirmed
+  against both kims.dk's real CVR (15233877) and webshop.dn.dk's real CVR
+  (60804214, an independently found real Danish nonprofit association's
+  page), both of which pass.
+- **The real street line ("Sømarksvej 31") had no address-vocabulary
+  marker** — "vej" (Danish for "road"/"way", the single most common
+  Danish street-name ending) glued onto a 2-digit house number clears no
+  digit-run threshold at all. Same failure shape as round 1's French
+  "rue" and round 5's Polish "aleja". Added "vej" as a marker.
+- **Fixing the first bug exposed a third, pre-existing bug:** the address
+  scan starts from the FIRST line naming the winning candidate, which on
+  this real page is an earlier sentence followed by an unrelated
+  age-disclaimer sentence containing the ordinary Danish verb "have"
+  ("...eller have en forældre/værge tilladelse...") — the bare "ave"
+  marker (meant for the US "Ave." street abbreviation) substring-matched
+  INSIDE "have", wrongly absorbing that whole unrelated sentence into the
+  address. Re-anchored "ave" to its own word-boundary regexp. Also added
+  "cvr" to the address scan's identifier skip-list (alongside the
+  existing Dutch KvK/BTW-id precedent), since the page's own
+  "CVR.nr. 15233877" line otherwise cleared the digit-run heuristic and
+  got absorbed into the address too.
+
+Four new permanent regression tests (imprint_extract_eu_round12_test.go);
+full existing suite still green, no regressions. No dedicated Danish
+ruleset added: § 7's CVR-nr requirement is conditional ("hvor det er
+relevant"/where applicable), the same conditionality as round 11's
+Swedish 8 § precedent.
+
 ## 1.7.6 — 2026-08-22
 
 ### Fixed

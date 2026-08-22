@@ -213,6 +213,29 @@ func init() {
 		// bqredovisning.se's real, live privacy-policy page ("BQ
 		// Redovisning &amp; Rådgivning AB (org.nr 559086-2809)").
 		{"Organisationsnummer", "SE", regexp.MustCompile(`(?i)\borg(?:anisationsnummer|\.?\s?nr)\.?\s*:?\s*\d{6}-\d{4}\b`)},
+		// Denmark — CVR-nr. (Det Centrale Virksomhedsregister, the
+		// Central Business Register number), the domestic label-anchored
+		// form written WITHOUT the "DK" country prefix the existing VAT/DK
+		// pattern above requires — same architecture as Sweden's
+		// Organisationsnummer immediately above (an 8-digit body that
+		// doubles as the base of the DK-prefixed VAT number: "DK" + this
+		// CVR body has no extra check digit at all). The register
+		// disclosure Lov om tjenester i informationssamfundet, herunder
+		// visse aspekter af elektronisk handel (Denmark's e-Commerce
+		// Directive transposition), § 7 requires "hvor det er relevant"
+		// (where applicable) alongside name/address/contact — same
+		// conditionality as Sweden's 8 §, so no dedicated Danish ruleset is
+		// added (see the "no ruleset" note at this Kind's
+		// singleCountryIdentifierKind entry). The label separator varies
+		// across real pages ("CVR.nr." parenthetical form, "CVR-nr.:"
+		// standalone form, "CVR nr." with no punctuation at all) hence the
+		// permissive `[.\-\s]?` between "CVR" and "nr". Real evidence:
+		// kims.dk's real, live handelsbetingelser page ("Orkla Snacks
+		// Danmark A/S (CVR.nr. 15233877)"); the "CVR-nr.:" form was
+		// independently observed on webshop.dn.dk's real handelsbetingelser
+		// page during the same search ("CVR-nr.: 60804214") — both values
+		// pass the DK weighted-mod-11 checksum below.
+		{"CVR", "DK", regexp.MustCompile(`(?i)\bCVR[.\-\s]?nr\.?\s*:?\s*\d{8}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.
