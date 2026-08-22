@@ -2,6 +2,54 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.9 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 14 (final round of this series):
+Norway. Fetched a real, live photo-printing webshop's Kjøpsvilkår
+(terms-of-purchase) page (japanphoto.no, naming CEWE Norge AS) and ran the
+shipped 1.7.8 extractor against it — it extracted NOTHING at all
+(CompletenessScore 0), despite "CEWE Norge AS" being trivially
+suffix-matchable ("AS") right next to its org.nr. Found and fixed four
+compounding real bugs, all affecting the same real Norwegian identifier:
+
+- **The "OrgNr" vatPattern was case-sensitive**, requiring a literal
+  capital "Org" — but ordinary mid-sentence Norwegian prose lower-cases it
+  ("...fra CEWE Norge AS med org.nr. 965 321 039..."). Made the pattern
+  case-insensitive.
+- **"OrgNr" had never been listed in extractImprintText's Kind switch at
+  all** — present in the vatPatterns table since this codebase's very
+  first EU-expansion round, but silently dropped every single time it
+  matched. Added "OrgNr" to the Register-field case.
+- **Norway's organisasjonsnummer had no checksum-validation case at all**,
+  despite the published Brønnøysundregistrene weighted-mod-11 algorithm
+  being well documented — it always fell through to formatValid. Added
+  `norwayOrgNrValid` and wired it in; confirmed against the real org.nr
+  (965321039), which passes.
+- **The page's "Brev: CEWE Norge AS" postal-contact label** (Norwegian for
+  "Letter:") had no stripLabelPrefix entry, and its "Postboks 4
+  Bjørndal" PO-box line had no address-vocabulary marker (a 1-digit box
+  number clears no digit-run threshold) — same failure shape as round
+  12's Danish "vej". Added "Brev: " and "postboks".
+
+One real, NOT-fixed gap honestly documented rather than overclaimed: the
+page's own first-paragraph mention of the entity ("...fra CEWE Norge AS
+med org.nr...") never produces a usable legal_name candidate — the
+80-char backward-scan window in extractEntityAround can't reach a
+sentence boundary before that long opening clause. The permanent
+regression test uses a fixture trimmed to the page's own separate, clean
+"Kontaktinformasjon" section instead.
+
+Four new permanent regression tests (imprint_extract_eu_round14_test.go);
+full existing suite still green, no regressions. No dedicated Norwegian
+ruleset added, consistent with every other Nordic country in this series.
+
+This is the final round of the EU-market-expansion real-evidence series
+(rounds 1-14): Germany, Austria, France, Italy, Spain, Netherlands,
+Poland, Belgium, Portugal, Ireland, Luxembourg, Sweden, Denmark, Finland,
+and Norway all now have real-evidence-verified extraction coverage.
+
 ## 1.7.8 — 2026-08-22
 
 ### Fixed

@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.8"
+version: "1.7.9"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
@@ -546,6 +546,38 @@ trl_assessor: "claude-trl-reaudit-2026-07-31"
 # ruleset added: this real page has no physical street address on it at
 # all - CompletenessScore reflects that honestly, same discipline as
 # round 11's Swedish fixture.
+# 2026-08-22 (1.7.9) - EU-market-expansion real-evidence round 14 (FINAL
+# round of this series): Norway. TRL stays at 6 (bug fixes plus new
+# checksum validation, single-sample evidence). Fetched a real, live
+# photo-printing webshop's Kjopsvilkar page (japanphoto.no, naming CEWE
+# Norge AS) and ran the shipped 1.7.8 extractor against it - it extracted
+# NOTHING at all (CompletenessScore 0), despite "CEWE Norge AS" being
+# trivially suffix-matchable ("AS") right next to its org.nr. Found and
+# fixed four compounding real bugs: (1) the "OrgNr" vatPattern was
+# case-sensitive (required literal capital "Org"), but ordinary
+# mid-sentence Norwegian prose lower-cases it ("...med org.nr. 965 321
+# 039..."); made it case-insensitive. (2) "OrgNr" had never been listed
+# in extractImprintText's Kind switch at all - present in the table since
+# this codebase's very first EU-expansion round, but silently dropped
+# every time it matched; added it to the Register-field case. (3)
+# Norway's organisasjonsnummer had no checksum-validation case at all
+# despite the published Bronnoysundregistrene weighted-mod-11 algorithm
+# being well documented; added norwayOrgNrValid, confirmed against the
+# real org.nr (965321039). (4) the page's "Brev: CEWE Norge AS"
+# postal-contact label (Norwegian for "Letter:") had no stripLabelPrefix
+# entry, and its "Postboks 4 Bjorndal" PO-box line had no
+# address-vocabulary marker; added both, same shape as round 12's Danish
+# "vej". One real, NOT-fixed gap honestly documented: the page's own
+# first-paragraph entity mention never produces a usable legal_name
+# candidate (the 80-char backward-scan window can't reach a sentence
+# boundary before that long opening clause) - the regression test uses
+# the page's separate, clean Kontaktinformasjon section instead. Four new
+# regression tests (imprint_extract_eu_round14_test.go); full existing
+# suite still green, no regressions. No dedicated Norwegian ruleset
+# added, consistent with every other Nordic country in this series. This
+# closes the EU-market-expansion real-evidence series (rounds 1-14):
+# DE/AT/FR/IT/ES/NL/PL/BE/PT/IE/LU/SE/DK/FI/NO all now have
+# real-evidence-verified extraction coverage.
 port: 8316
 
 api:

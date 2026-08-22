@@ -116,6 +116,14 @@ func validateIdentifier(kind, value, country string) validity {
 		// CVR/DK above. Real evidence: finnprotec.fi's real Y-tunnus
 		// (1938183-5), verified to pass this checksum.
 		return mod11Verdict(fiVATValid(extractDigits(value)))
+	case "OrgNr":
+		// Norway's organisasjonsnummer had NO checksum-validation case at
+		// all before this fix — it always fell through to the default
+		// formatValid below, despite the published mod-11 algorithm being
+		// well documented (see norwayOrgNrValid's doc comment). Real
+		// evidence: japanphoto.no's real org.nr (965321039), verified to
+		// pass.
+		return mod11Verdict(norwayOrgNrValid(extractDigits(value)))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -234,6 +242,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "DK"
 	case "Y-tunnus":
 		return "FI"
+	case "OrgNr":
+		return "NO"
 	}
 	return ""
 }
@@ -465,6 +475,35 @@ func dkVATValid(s string) bool {
 		sum += int(s[i]-'0') * weights[i]
 	}
 	return sum%11 == 0
+}
+
+// norwayOrgNrValid verifies a Norwegian organisasjonsnummer (9 digits)
+// using the published Brønnøysundregistrene weighted modulo-11: weights
+// 3,2,7,6,5,4,3,2 across the first 8 digits; the check digit (9th digit) is
+// (11 - remainder) when the remainder is not 0 or 1, 0 when the remainder
+// is 0, and the number has no valid check digit at all when the remainder
+// is 1 (rejected as invalid here, same as the elsewhere-documented "10 is
+// unencodable" shape of these mod-11 schemes). Real evidence:
+// japanphoto.no's real org.nr (965321039) verifies correctly under this
+// algorithm.
+func norwayOrgNrValid(s string) bool {
+	if len(s) != 9 || !allDigits(s) {
+		return false
+	}
+	weights := []int{3, 2, 7, 6, 5, 4, 3, 2}
+	sum := 0
+	for i := 0; i < 8; i++ {
+		sum += int(s[i]-'0') * weights[i]
+	}
+	rem := sum % 11
+	if rem == 1 {
+		return false
+	}
+	check := 0
+	if rem != 0 {
+		check = 11 - rem
+	}
+	return check == int(s[8]-'0')
 }
 
 // fiVATValid verifies a Finnish Y-tunnus (8 digits) using the documented

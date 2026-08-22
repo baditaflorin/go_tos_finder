@@ -728,9 +728,18 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// precedence afterwards: the identifier's own country outranks
 			// the candidate's suffix-inferred country when they disagree.
 			switch id.Kind {
+			// "OrgNr" (Norway) was ALSO silently dropped here — same
+			// failure shape as the PartitaIVA/CIF/NIP note just below:
+			// present in imprint_vat.go's vatPatterns table since this
+			// codebase's very first EU-expansion round, but never listed
+			// in EITHER switch case, so a real, live Norwegian org.nr match
+			// (see the "OrgNr" vatPattern's real-evidence doc comment) was
+			// found by findIdentifiers and then discarded before ever
+			// reaching the winning candidate's Register field. Real
+			// evidence: japanphoto.no's real kjøpsvilkår page.
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
-				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus":
+				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
