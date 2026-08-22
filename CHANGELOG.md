@@ -2,6 +2,40 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.21 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 26: Estonia. Fetched a real, live
+garden-supplies e-shop's Müügitingimused page (voluaed.ee, naming OÜ Iru
+Aiakeskus) and ran the shipped 1.7.20 extractor against it. Entity name,
+suffix, country, and VAT already extracted correctly — "OÜ" is an existing
+high-confidence suffixTable entry, and the pre-existing bare
+"EE"-prefixed EU VAT pattern already matched "KMKR nr: EE101490959"
+without needing a label anchor. Found and fixed two compounding real bugs:
+
+- **Estonia's "registrikood" (company registry code) had no identifier
+  pattern at all.** Added it, wired as Register-only — a genuinely
+  separate 8-digit number from Estonia's own 9-digit KMKR nr (VAT
+  number), same architecture as Lithuania's Įmonės kodas/Latvia's split
+  (not Bulgaria/Greece/Croatia's shared-body architecture). No dedicated
+  checksum implemented this round.
+- **The "KMKR nr: EE101490959" line leaked into Address** (sits right
+  after the entity's own line) — added "kmkr"/"registrikood" as
+  skip-past markers.
+
+One real, honestly-documented gap NOT fixed: Address stays empty — the
+real address sits on the SAME line as the entity name and its
+registrikood parenthetical, the same class of gap already left
+undocumented for Romania/Croatia/Slovenia/Lithuania. Also honestly
+note-worthy (not a bug): LegalName includes the source's own parenthetical
+register annotation verbatim ("OÜ Iru Aiakeskus (registrikood 12178134)")
+— a faithful quote of the real page, left as-is since the register number
+is already separately and correctly captured in Register regardless.
+Three new regression tests (imprint_extract_eu_round26_test.go); full
+existing suite still green, no regressions. No dedicated Estonian ruleset
+added — consistent with prior rounds' discipline.
+
 ## 1.7.20 — 2026-08-23
 
 ### Fixed

@@ -463,6 +463,21 @@ func init() {
 		// (unlike Lithuania's "Į"-leading pattern) the leading `\b` is
 		// safe — verified directly, not assumed.
 		{"Reģistrācijas numurs", "LV", regexp.MustCompile(`(?i)\bReģistrācijas\s+numurs\s*[:#]?\s*\d{11}\b`)},
+		// Estonia — registrikood (the company registry code), 8 digits.
+		// Register-only, NOT VAT-equivalent: this is a genuinely SEPARATE
+		// number from Estonia's own KMKR nr (VAT number) — real evidence,
+		// voluaed.ee's real Müügitingimused page has "registrikood
+		// 12178134" (8 digits) alongside a completely different "KMKR nr:
+		// EE101490959" (a different 9-digit body under the existing
+		// "EE"-prefixed EU VAT pattern above, no new pattern needed for
+		// it) — same shape as Lithuania's Įmonės kodas/Latvia's PVN split,
+		// not Bulgaria/Greece/Croatia's shared-body architecture. No
+		// dedicated checksum algorithm confirmed this round (same
+		// discipline as Ireland's CRO/Croatia's MBS: format-matching +
+		// Register wiring, no invented checksum). Both boundary
+		// characters are plain ASCII, so no RE2 `\b` workaround is needed
+		// — verified directly.
+		{"registrikood", "EE", regexp.MustCompile(`(?i)\bregistrikood\s*[:#]?\s*\d{8}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

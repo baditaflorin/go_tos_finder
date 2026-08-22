@@ -458,6 +458,17 @@ func extractAddressNearEntity(text, name string) string {
 			if strings.Contains(low, "reģistrācijas numurs") || strings.Contains(low, "pvn maksātāja numurs") {
 				continue
 			}
+			// "kmkr"/"registrikood": Estonian VAT-number and registry-code
+			// labels (see the "registrikood" vatPatterns entry in
+			// imprint_vat.go). Same shape as the markers above: real
+			// evidence, voluaed.ee's real Müügitingimused page has "KMKR
+			// nr: EE101490959" on its own line, whose own digit run
+			// cleared looksAddressLine and got wrongly absorbed. "kmkr" is
+			// a 4-letter acronym, not an ordinary word in any language
+			// this codebase covers — safe as a plain substring check.
+			if strings.Contains(low, "kmkr") || strings.Contains(low, "registrikood") {
+				continue
+			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
 			// its own line, with no "tel"/"phone" label attached to THIS
 			// line (hasImprintContact/imprintPhoneRE find it independently

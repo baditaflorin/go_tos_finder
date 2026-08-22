@@ -406,6 +406,10 @@ func singleCountryIdentifierKind(kind string) string {
 		// Latvian-language term, no other country's registry uses it.
 		// Real evidence: gatavosana.lv's real Juridiskā informācija page.
 		return "LV"
+	case "registrikood":
+		// Estonian-language term, no other country's registry uses it.
+		// Real evidence: voluaed.ee's real Müügitingimused page.
+		return "EE"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
