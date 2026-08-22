@@ -10,8 +10,13 @@ This is a discovery tool — it does **not** assess compliance. For that, see
 ## API
 
 ```
-GET /t/{token}/go_tos_finder?target=https://example.com
+GET /?target=https://example.com
 ```
+
+Authenticate via `Authorization: Bearer <key>`, `X-API-Key: <key>`, or
+`?api_key=<key>` (browser/demo convenience — leaks the key into logs, avoid
+for anything but manual testing). The legacy `/t/{token}/go_tos_finder?target=<url>`
+path form is deprecated fleet-wide and no longer routable.
 
 Response (truncated for brevity):
 
@@ -93,5 +98,17 @@ docker build -t ghcr.io/baditaflorin/go_tos_finder:1.0.0 .
 
 ```
 docker compose up -d
-curl 'http://localhost:8316/t/default_token/?target=https://github.com'
+```
+
+The public demo key (`default_token`) shown against the hosted
+`https://tos-finder.0crawl.com` endpoint has been sunset fleet-wide (it was
+a security risk — a static, undifferentiated bypass in front of the
+keystore) and no longer authenticates there. Against a locally-run
+container (as above, no fleet gateway in front of it), this binary's own
+built-in local-dev fallback key may still apply — verify against the
+running container rather than assuming either way. For hosted access,
+use a real fleet-issued key:
+
+```
+curl 'http://localhost:8316/?api_key=<your-key>&target=https://github.com'
 ```

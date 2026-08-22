@@ -199,8 +199,15 @@ health:
   endpoint: /health
   expected_status: 200
 
+# NOTE (2026-08-22): rewritten from the deprecated /t/default_token/ path
+# form (fleet-wide 410/404 since 2026-05-14) to the canonical ?api_key=
+# query form. `default_token` itself was separately sunset fleet-wide as a
+# security risk and no longer authenticates against the hosted gateway —
+# this smoke test will 401 until fleet tooling injects a real provisioned
+# key in its place — left as-is rather than guessing at a replacement
+# mechanism for shared fleet-runner smoke-test automation.
 test:
-  url: /t/default_token/go_tos_finder?target=https://github.com
+  url: /?api_key=default_token&target=https://github.com
   expected_status: 200
 
 deploy:
