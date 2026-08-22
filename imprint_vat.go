@@ -236,6 +236,19 @@ func init() {
 		// page during the same search ("CVR-nr.: 60804214") — both values
 		// pass the DK weighted-mod-11 checksum below.
 		{"CVR", "DK", regexp.MustCompile(`(?i)\bCVR[.\-\s]?nr\.?\s*:?\s*\d{8}\b`)},
+		// Finland — Y-tunnus (Yritys- ja yhteisötunnus, the Finnish Business
+		// ID), the domestic label-anchored form written WITHOUT the "FI"
+		// country prefix the existing VAT/FI pattern above requires — same
+		// architecture as Denmark's CVR-nr immediately above (an 8-digit body
+		// that doubles as the base of the FI-prefixed VAT number: "FI" + this
+		// Y-tunnus body with its hyphen removed has no extra check digit at
+		// all). Written with a hyphen before the final check digit
+		// ("1938183-5"), a different shape from the plain 8-digit VAT/FI
+		// form. Real evidence: finnprotec.fi's real, live
+		// toimitus-ja-sopimusehdot (delivery-and-contract-terms) page
+		// ("Finnprotec Oy (Y-tunnus: 1938183-5)") — the value passes the FI
+		// weighted-mod-11 checksum below once the hyphen is stripped.
+		{"Y-tunnus", "FI", regexp.MustCompile(`(?i)\bY-tunnus\s*:?\s*\d{7}-\d\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.
