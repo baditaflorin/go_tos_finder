@@ -304,6 +304,23 @@ func extractAddressNearEntity(text, name string) string {
 				continue
 			}
 			low := strings.ToLower(clean)
+			// A line that itself repeats the entity's own `name` marks a
+			// SEPARATE mention of the entity (e.g. a footer signature
+			// block restating "epic ltd | 87 Kennedy Avenue | ..." further
+			// down the same page), not a continuation of the CURRENT
+			// occurrence's address — stop here rather than absorbing that
+			// whole separate block (which would otherwise re-include the
+			// entity name itself, along with whatever it lists, as
+			// "address" content). Real evidence: epic.com.cy's real
+			// eStore Terms & Conditions page mentions "epic ltd" once
+			// mid-paragraph (whose own candidate-name extraction fails —
+			// a separate, honestly-documented gap) and again, cleanly, in
+			// its real page footer much further down; without this stop,
+			// the mid-paragraph occurrence's forward scan reached all the
+			// way down to that footer line and absorbed it whole.
+			if strings.Contains(low, strings.ToLower(name)) {
+				break
+			}
 			// KvK/BTW-id: real Dutch register/VAT labels. Skip (not break)
 			// so scanning continues past them to the real address — unlike
 			// the break-markers below, this page's real address comes AFTER
@@ -840,7 +857,25 @@ func cleanCandidateName(name, suffix string) bool {
 		}
 	}
 	if firstAlpha >= 'a' && firstAlpha <= 'z' {
-		return false
+		// A lowercase-initial candidate is usually a mid-sentence fragment
+		// ("...through the eStore of epic ltd." captured from too far
+		// back) — looksLikeSentencePhrase above already rejects most of
+		// those via stop-word density, but this check exists as a second,
+		// blunter net for the ones that slip through. Real evidence,
+		// round 23: epic.com.cy's real footer line "epic ltd | 87 Kennedy
+		// Avenue | ..." names its OWN entity as deliberately all-lowercase
+		// "epic ltd" (a real brand-styling choice, not a sentence
+		// fragment) — an unconditional reject here discarded the one
+		// clean candidate this real page actually has. Narrowed to word
+		// count: a genuine sentence fragment needs several words
+		// (articles/prepositions/verbs) to be grammatical; a brand-name
+		// stem is virtually always 1-2 words. Only reject 3-plus-word
+		// stems — a stronger, more specific signal than "starts lowercase"
+		// alone, and it doesn't touch the (already-uppercase, unaffected)
+		// vast majority of real candidates this codebase has verified.
+		if stemWords := strings.Fields(strings.TrimSpace(strings.TrimSuffix(name, suffix))); len(stemWords) > 2 {
+			return false
+		}
 	}
 	stem := strings.TrimSpace(strings.TrimSuffix(name, suffix))
 	if strings.EqualFold(strings.TrimSuffix(stem, ":"), "Handelsregister") {

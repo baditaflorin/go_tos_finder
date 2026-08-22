@@ -1,10 +1,44 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.17"
+version: "1.7.18"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.18) - EU-market-expansion real-evidence round 23:
+# Cyprus. TRL stays at 6 (bug fixes plus two new identifiers,
+# single-sample evidence). Fetched a real, live electronics retailer's
+# eStore Terms & Conditions page (epic.com.cy, naming epic ltd -
+# English-language text, a legacy of Cyprus's common-law tradition) and
+# ran the shipped 1.7.17 extractor against it - it extracted NOTHING at
+# all (CompletenessScore 0). Found and fixed six compounding real bugs,
+# an unusually dense round: (1) Cyprus's HE (Registrar of Companies
+# file-number) and domestic VAT number had no identifier patterns at
+# all; added HE as Register-only and a new "VAT Number" Kind as
+# VAT-equivalent with its own dedicated cleaner (reusing the bare "VAT"
+# Kind would have corrupted its generic cleanup for every other
+# country, since this match necessarily swallows its own anchoring
+# label text). (2) the real entity uses an all-lowercase brand
+# stylization ("epic ltd") the existing capitalised suffix entries
+# never matched; added lowercase "ltd", same shape as the pre-existing
+# PLC/plc pair. (3) the real T&C paragraph states everything in one
+# 526-rune sentence with no line breaks, over the existing 300-rune
+# cap; raised to 600. (4) cleanCandidateName unconditionally rejected
+# any lowercase-initial candidate, discarding the genuine lowercase
+# brand name outright; narrowed to only reject when the stem has 3+
+# words. (5) the address-scan had no stop condition for a later line
+# repeating the entity's own name, so it absorbed a separate footer
+# signature whole; added a stop check. Country correctly resolves to
+# CY (not the suffix-guessed GB) via the HE/VAT Number ground-truth
+# identifiers, confirming the same self-healing mechanism rounds 20-22
+# already established. One real gap honestly left NOT fixed: the T&C
+# paragraph's own mid-sentence mention still produces no usable
+# candidate (same shape as round 14's Norway gap) - the regression test
+# uses the page's separate clean footer signature instead. No checksum
+# implemented for Cypriot VAT either (stays format_valid). Four new
+# regression tests (imprint_extract_eu_round23_test.go); full existing
+# suite still green, no regressions. No dedicated Cypriot ruleset added
+# - consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.17) - EU-market-expansion real-evidence round 22:
 # Slovenia. TRL stays at 6 (bug fixes plus one new identifier,
 # single-sample evidence). Fetched a real, live retailer's Splosni
