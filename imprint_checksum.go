@@ -124,6 +124,11 @@ func validateIdentifier(kind, value, country string) validity {
 		// evidence: japanphoto.no's real org.nr (965321039), verified to
 		// pass.
 		return mod11Verdict(norwayOrgNrValid(extractDigits(value)))
+	case "IČO":
+		// Czechia's IČO had NO checksum-validation case at all before this
+		// fix — see czICOValid's doc comment for the algorithm and the
+		// real-evidence confirmation (onlineshop.cz's real IČO, 24717509).
+		return mod11Verdict(czICOValid(extractDigits(value)))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -264,6 +269,19 @@ func singleCountryIdentifierKind(kind string) string {
 		// country-correction path.
 		return "RO"
 	}
+	// Deliberately NOT a case here: "IČO" (Czechia, added round 16) is NOT
+	// single-country the way the cases above are. Former Czechoslovakia
+	// left BOTH Czechia and Slovakia using the identical "IČO" label for
+	// their (different-checksum) domestic business ID — unlike KvK/CRO/
+	// CVR/Y-tunnus/OrgNr/CUI, which only ever exist in one jurisdiction's
+	// own national system. Mapping Kind="IČO" to "CZ" here would silently
+	// mis-flag a future real Slovak page (once Slovakia gets its own
+	// real-evidence round) as Czech. This round's real evidence
+	// (onlineshop.cz) didn't need this override anyway — its "s.r.o."
+	// suffix is CZ-unambiguous in the current suffixTable (no Slovak
+	// "s.r.o." entry exists yet) — so there is no real-evidence basis to
+	// add it, and doing so pre-emptively would risk exactly the kind of
+	// overclaiming this methodology avoids.
 	return ""
 }
 
@@ -523,6 +541,33 @@ func norwayOrgNrValid(s string) bool {
 		check = 11 - rem
 	}
 	return check == int(s[8]-'0')
+}
+
+// czICOValid verifies a Czech IČO (Identifikační číslo osoby, 8 digits)
+// using the published weighted modulo-11 algorithm: weights 8,7,6,5,4,3,2
+// applied to the first 7 digits; remainder 0 maps to check digit 1,
+// remainder 1 maps to check digit 0, any other remainder r maps to
+// 11-r. Confirmed against onlineshop.cz's real IČO (24717509): weighted
+// sum 134, 134 mod 11 = 2, check digit 11-2 = 9 — matches the real value's
+// own trailing digit.
+func czICOValid(s string) bool {
+	if len(s) != 8 || !allDigits(s) {
+		return false
+	}
+	weights := []int{8, 7, 6, 5, 4, 3, 2}
+	sum := 0
+	for i := 0; i < 7; i++ {
+		sum += int(s[i]-'0') * weights[i]
+	}
+	rem := sum % 11
+	check := 11 - rem
+	switch rem {
+	case 0:
+		check = 1
+	case 1:
+		check = 0
+	}
+	return check == int(s[7]-'0')
 }
 
 // fiVATValid verifies a Finnish Y-tunnus (8 digits) using the documented

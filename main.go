@@ -9,7 +9,7 @@ import (
 //go:embed agent.json
 var agentFS embed.FS
 
-const Version = "1.7.10"
+const Version = "1.7.11"
 const serviceName = "go_tos_finder"
 
 // main mirrors server.Run (config load + keystore auth + the canonical /,

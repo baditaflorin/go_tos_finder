@@ -256,6 +256,22 @@ func init() {
 		// ("Finnprotec Oy (Y-tunnus: 1938183-5)") — the value passes the FI
 		// weighted-mod-11 checksum below once the hyphen is stripped.
 		{"Y-tunnus", "FI", regexp.MustCompile(`(?i)\bY-tunnus\s*:?\s*\d{7}-\d\b`)},
+		// Czechia — IČO (Identifikační číslo osoby, the Czech business ID),
+		// an 8-digit domestic identifier with its own published weighted-
+		// mod-11 checksum (czICOValid, imprint_checksum.go) — same class of
+		// gap as CVR/Y-tunnus/CRO above: had no pattern at all before this,
+		// so a real Czech imprint page's own identifier was never matched,
+		// which (via extractImprintText's isLegalPage-or-identifiers gate)
+		// silently skipped the ENTIRE suffix-anchored scan on any Czech
+		// page whose URL doesn't happen to contain an English keyword like
+		// "terms"/"legal" — "obchodni-podminky" (Czech for "terms and
+		// conditions") does not. "IČ" (no trailing O) is accepted too — an
+		// equally common older/short form of the same label. Real evidence:
+		// onlineshop.cz's real Obchodní podmínky page writes "IČO: 247 17
+		// 509" (3-2-3 grouped); the plain ungrouped 8-digit form is also
+		// accepted since IČO is always exactly 8 digits regardless of how a
+		// given page chooses to space it.
+		{"IČO", "CZ", regexp.MustCompile(`(?i)\bIČO?\s*[:#]?\s*(?:\d{3}\s?\d{2}\s?\d{3}|\d{8})\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 )
@@ -607,7 +608,19 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 		// (imprint.go) already guards the false-positive risk this cap was
 		// presumably meant to bound, by requiring a nearby address/
 		// register/VAT before a plain-text suffix match can win at all.
-		if line == "" || len(line) > 220 {
+		//
+		// Round 16 (Czechia): onlineshop.cz's real Obchodní podmínky page
+		// has an even longer unbroken sentence (name + address + IČO +
+		// commercial-register citation, no <br> breaks) — 280 runes but
+		// 307 BYTES, since Czech diacritics (í/š/ě/ř/ů/...) are 2 bytes
+		// each in UTF-8. The cap had always been a byte-length check
+		// (len() on a Go string), so it was effectively STRICTER for
+		// accented-heavy languages than for plain ASCII text of the same
+		// visible length. Switched to utf8.RuneCountInString so the
+		// threshold means what it says (a visible-character budget)
+		// regardless of script, and raised to 300 to comfortably fit this
+		// page's 280-rune sentence.
+		if line == "" || utf8.RuneCountInString(line) > 300 {
 			continue
 		}
 		if strings.Contains(line, "&quot;") || strings.Contains(line, "&nbsp;") ||
@@ -737,9 +750,16 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// found by findIdentifiers and then discarded before ever
 			// reaching the winning candidate's Register field. Real
 			// evidence: japanphoto.no's real kjøpsvilkår page.
+			// "IČO" (Czechia) was ALSO silently dropped here before this
+			// fix — same failure shape as the other register-only Kinds
+			// noted above: present in imprint_vat.go's vatPatterns table
+			// (added this same round) but not yet listed in this switch,
+			// which would have discarded a real match before it ever
+			// reached the winning candidate's Register field. Real
+			// evidence: onlineshop.cz's real Obchodní podmínky page.
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
-				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr":
+				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
