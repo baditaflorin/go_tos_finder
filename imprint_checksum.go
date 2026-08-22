@@ -92,6 +92,18 @@ func validateIdentifier(kind, value, country string) validity {
 		// a domestic imprint. Real evidence: neptun.orlen.pl's real NIP
 		// (5252855028) validates correctly.
 		return mod11Verdict(plVATValid(extractDigits(value)))
+	case "Adószám":
+		// Hungary's domestic Adószám is 11 digits ("########-#-##"), but
+		// only the first 8 (the same core the "HU"-prefixed EU VAT pattern
+		// matches) carry the check digit — the trailing "-#-##" is a
+		// VAT-status code and county code, not part of the checksum. See
+		// huAdoszamValid's doc comment for the algorithm and real-evidence
+		// confirmation.
+		d := extractDigits(value)
+		if len(d) < 8 {
+			return formatValid
+		}
+		return mod11Verdict(huAdoszamValid(d[:8]))
 	case "NIPC":
 		// Portugal's NIPC (legal-entity ID) shares the same 9-digit body
 		// and weighted-mod-11 checksum as validateVAT's "PT" case
@@ -190,6 +202,12 @@ func cleanIdentifierValue(kind, value string) string {
 			d = d[len(d)-9:]
 		}
 		return d
+	case "Adószám":
+		d := extractDigits(value)
+		if len(d) > 11 {
+			d = d[len(d)-11:]
+		}
+		return d
 	case "VAT":
 		// Now that BE/FR (and potentially others) tolerate optional
 		// internal spaces to match real-world formatting, the raw match
@@ -209,7 +227,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -249,6 +267,13 @@ func singleCountryIdentifierKind(kind string) string {
 		return "FI"
 	case "OrgNr":
 		return "NO"
+	case "Cégjegyzékszám", "Adószám":
+		// Both Hungary-only: "Cégjegyzékszám" (company-register number) and
+		// "Adószám" (domestic tax number, VAT-equivalent — see
+		// isVATLikeIdentifierKind) are Hungarian-language terms with no
+		// other country's business-register system using either label.
+		// Real evidence: szatmari-izek.shop.hu's real Impresszum page.
+		return "HU"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
@@ -567,6 +592,26 @@ func czICOValid(s string) bool {
 	case 1:
 		check = 0
 	}
+	return check == int(s[7]-'0')
+}
+
+// huAdoszamValid verifies the 8-digit core of a Hungarian Adószám using the
+// published weighted modulo-10 algorithm: weights 9,7,3,1,9,7,3 applied to
+// the first 7 digits; check digit = (10 - (sum mod 10)) mod 10. Confirmed
+// against TWO independent real values found on szatmari-izek.shop.hu's real
+// Impresszum page: 13495413 (weighted sum 127, 127 mod 10 = 7, check
+// (10-7)%10 = 3 — matches the real value's own 8th digit) and 23495919
+// (weighted sum 171, 171 mod 10 = 1, check (10-1)%10 = 9 — also matches).
+func huAdoszamValid(s string) bool {
+	if len(s) != 8 || !allDigits(s) {
+		return false
+	}
+	weights := []int{9, 7, 3, 1, 9, 7, 3}
+	sum := 0
+	for i := 0; i < 7; i++ {
+		sum += int(s[i]-'0') * weights[i]
+	}
+	check := (10 - (sum % 10)) % 10
 	return check == int(s[7]-'0')
 }
 

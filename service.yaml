@@ -1,10 +1,37 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.11"
+version: "1.7.12"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.7.12) - EU-market-expansion real-evidence round 17:
+# Hungary. TRL stays at 6 (bug fixes plus two new identifiers,
+# single-sample evidence). Fetched a real, live specialty-foods e-shop's
+# Impresszum page (szatmari-izek.shop.hu, naming Szatmari Izek Kft.) and
+# ran the shipped 1.7.11 extractor against it - it extracted almost
+# nothing (only "contact", CompletenessScore 33), despite "Szatmari Izek
+# Kft." being trivially suffix-matchable right next to its register
+# number and tax number. Found and fixed four compounding real bugs: (1)
+# isLegalPage doesn't recognise the Hungarian "impresszum" (not a
+# substring of the English "impressum" it already checked for - same
+# shape as round 14's Dutch "colofon" gap); added it. (2) a "Nev: "
+# (Hungarian "Name:") label leaked into LegalName; added it to
+# stripLabelPrefix. (3) Hungary's Adoszam and Cegjegyzekszam had no
+# identifier patterns at all, so findIdentifiers found nothing; added
+# both - Cegjegyzekszam as Register-only (same shape as round 16's Czech
+# ICO), Adoszam as VAT-equivalent (its 8-digit core is the same number
+# the HU-prefixed EU VAT pattern matches, same shape as Poland's NIP) -
+# plus a new huAdoszamValid weighted-mod-10 checksum confirmed against
+# TWO independent real values on the same page. (4) both new identifier
+# lines leaked into Address (the real address comes AFTER them on this
+# page); added both as skip-past markers, same shape as round 5's Polish
+# NIP/KRS/REGON. Both identifiers also added to
+# singleCountryIdentifierKind (-> HU) - genuinely single-country, unlike
+# round 16's Czech ICO. Three new regression tests
+# (imprint_extract_eu_round17_test.go); full existing suite still green,
+# no regressions. No dedicated Hungarian ruleset added - consistent with
+# round 15/16's discipline.
 # 2026-08-22 (1.7.11) - EU-market-expansion real-evidence round 16:
 # Czechia. TRL stays at 6 (bug fixes plus one new identifier, single-sample
 # evidence). Fetched a real, live white-goods e-shop's Obchodni podminky

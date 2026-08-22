@@ -2,6 +2,46 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.12 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 17: Hungary. Fetched a real, live
+specialty-foods e-shop's Impresszum page (szatmari-izek.shop.hu, naming
+Szatmári Ízek Kft.) and ran the shipped 1.7.11 extractor against it — it
+extracted almost nothing (only "contact", CompletenessScore 33), despite
+"Szatmári Ízek Kft." being trivially suffix-matchable ("Kft.", an existing
+native HU suffixTable entry) right next to its register number and tax
+number. Found and fixed four compounding real bugs:
+
+- **isLegalPage doesn't recognise the Hungarian "impresszum"**: it's NOT a
+  substring of the English "impressum" the gate already checked for (the
+  Hungarian doubles "sz" where German doubles "s") — same failure shape as
+  round 14's Dutch "colofon" gap. Added "impresszum" to the keyword list.
+- **"Név: " (Hungarian "Name:") label leaked into LegalName**: no Hungarian
+  entry existed in stripLabelPrefix's list. Added it.
+- **Hungary's Adószám and Cégjegyzékszám had no identifier patterns at
+  all**, so `findIdentifiers` found nothing and (combined with the first
+  bug) the whole suffix-anchored scan never ran. Added dedicated patterns
+  for both: "Cégjegyzékszám" (company-register number) wired as
+  Register-only (same shape as round 16's Czech IČO); "Adószám" (domestic
+  tax number) wired as VAT-equivalent (its 8-digit core IS the same number
+  the "HU"-prefixed EU VAT pattern matches, same shape as Poland's NIP),
+  plus a new `huAdoszamValid` weighted-mod-10 checksum confirmed against
+  TWO independent real values on the same page (13495413 and 23495919).
+- **Both new identifier lines leaked into Address**: the real page's
+  "Cégjegyzékszám: ...<br />Adószám: ...<br />Székhely: ..." sequence has
+  the real address AFTER both identifier lines — extractAddressNearEntity
+  had no skip marker for either, same failure shape as round 5's Polish
+  NIP/KRS/REGON. Added both as skip-past (not stop) markers.
+
+Both "Cégjegyzékszám" and "Adószám" also added to
+`singleCountryIdentifierKind` (-> "HU") — genuinely single-country, unlike
+round 16's Czech "IČO" (deliberately excluded there since it's shared with
+Slovakia). Three new regression tests (imprint_extract_eu_round17_test.go);
+full existing suite still green, no regressions. No dedicated Hungarian
+ruleset added — consistent with round 15/16's discipline.
+
 ## 1.7.11 — 2026-08-22
 
 ### Fixed
