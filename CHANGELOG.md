@@ -2,6 +2,45 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.5.0 — 2026-08-22
+
+### Added
+
+- **Structured imprint (Impressum) field extraction.** `documents[]` for
+  `DocImprint` previously carried only a bare `imprint_present` boolean — a
+  `merged[DocImprint]` map-presence check backed by verify.go's
+  `docTypeSignalRE[DocImprint]` vocabulary sanity-check. That confirms a page
+  plausibly IS an imprint page but says nothing about whether it discloses
+  what EU e-Commerce Directive Art. 5 / Germany's TMG §5 (→DDG §5) / Austria's
+  ECG §5 + Mediengesetz §§24-25 actually require: legal entity name, address,
+  register number, VAT ID, responsible person, contact. The response now also
+  carries a structured `imprint` object (`imprint_present` is unchanged, and
+  is now derived from `imprint.present`) with: `legal_name` + `suffix`
+  (legal-form, e.g. "GmbH"), `address`, `country` (ISO-3166-1 alpha-2),
+  `register` (e.g. "HRB 12345, Amtsgericht Berlin" / "FN 123456a,
+  Firmenbuchgericht Wien"), `vat` + `vat_validation` (real per-country
+  check-digit validation, not just regex-shape matching), `responsible_person`,
+  and `fields_found`/`fields_missing`/`completeness_score`/`ruleset` scored
+  against one of three field checklists (`eu_baseline` / `de_tmg` /
+  `at_ecg_medieng`) selected by the extracted country.
+- Extraction runs on the imprint page's already-fetched, already-verified
+  body (no extra HTTP round trip) via a priority chain — Schema.org JSON-LD
+  `Organization` > a suffix-anchored plain-text line-scan > hCard/vCard
+  microformats > footer copyright lines > `og:site_name` — vendored (and
+  adapted) from the sibling `go_legal_entity` service's mature (TRL 6)
+  field-extraction pipeline rather than re-derived from scratch: its
+  27-EU-country+non-EU VAT/register identifier table (`imprint_vat.go`,
+  extended here with an Austrian FN pattern the upstream table was missing),
+  per-country VAT checksum algorithms (`imprint_checksum.go`), ISO-3166-1
+  country normalisation (`imprint_country.go`), a trimmed Latin-script
+  legal-entity-suffix table (`imprint_suffix.go`), and the
+  false-positive-hardened candidate name/address cleanup
+  (`imprint_name.go`, `imprint_jsonld.go`).
+- New multi-language responsible-person regex
+  (Geschäftsführer/vertretungsberechtigt/verantwortlich für den Inhalt for
+  DE/AT, managing director/legal representative for EN, représentant légal
+  for FR).
+
 ## 1.4.4 — 2026-08-20
 
 DomainScope extraction fixes promoted; distinct tool_version for this production rollout.

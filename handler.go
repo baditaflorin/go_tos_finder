@@ -57,6 +57,14 @@ type DocFinding struct {
 	// discovered link from collapsing to "low" when its target body GET fails
 	// (a frequent timeout behind the fleet fetch proxy in production).
 	LinkConfidence string `json:"-"`
+
+	// Body is the verified page's raw fetched body (bounded to
+	// verifyBodyBytes — see probe.go), captured only for DocImprint so the
+	// structured imprint field-extraction pass (imprint.go's
+	// extractImprintFields) can run on content already fetched during
+	// discovery/verification instead of costing a second HTTP round trip.
+	// Internal extraction input — not serialised.
+	Body string `json:"-"`
 }
 
 // DetectionSummary is an aggregate evidence trail describing how the result
@@ -106,17 +114,23 @@ type Response struct {
 	// machine-readable enricher-level classification domainscope keys on
 	// (alongside the HTTP status code). Additive to the historical body:
 	// the success shape is unchanged except for this field.
-	Result           string           `json:"result,omitempty"`
-	Reason           string           `json:"reason,omitempty"`
-	FetchedURL       string           `json:"fetched_url,omitempty"`
-	ResolvedIP       string           `json:"resolved_ip,omitempty"`
-	Documents        []DocFinding     `json:"documents"`
-	DocumentsFound   int              `json:"documents_found"`
-	DocumentsMissing []DocType        `json:"documents_missing"`
-	ImprintPresent   bool             `json:"imprint_present"`
-	Verdict          string           `json:"verdict"`
-	Detection        DetectionSummary `json:"detection"`
-	Error            string           `json:"error,omitempty"`
+	Result           string       `json:"result,omitempty"`
+	Reason           string       `json:"reason,omitempty"`
+	FetchedURL       string       `json:"fetched_url,omitempty"`
+	ResolvedIP       string       `json:"resolved_ip,omitempty"`
+	Documents        []DocFinding `json:"documents"`
+	DocumentsFound   int          `json:"documents_found"`
+	DocumentsMissing []DocType    `json:"documents_missing"`
+	ImprintPresent   bool         `json:"imprint_present"`
+	// Imprint is structured, field-level imprint/Impressum compliance
+	// evidence (legal name, address, register, VAT + checksum validation,
+	// responsible person, completeness against the applicable EU/DE/AT
+	// ruleset) — see imprint.go. ImprintPresent above is kept unchanged for
+	// backward compatibility and is equal to Imprint.Present.
+	Imprint   Imprint          `json:"imprint"`
+	Verdict   string           `json:"verdict"`
+	Detection DetectionSummary `json:"detection"`
+	Error     string           `json:"error,omitempty"`
 }
 
 // renderMode is resolved once from env. The fleet JS-render proxy

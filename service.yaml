@@ -1,10 +1,49 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.4.4"
+version: "1.5.0"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 — new capability, not a re-audit (trl left at 6; this is
+# additive functionality within the existing band, not new evidence toward
+# TRL 7). Closes a real gap: DocImprint detection previously emitted only a
+# boolean `imprint_present` (a bare `merged[DocImprint]` map-presence check),
+# backed by verify.go's docTypeSignalRE[DocImprint] vocab sanity-check —
+# enough to confirm a page plausibly IS an imprint page, but nothing about
+# whether it actually discloses what EU e-Commerce Directive Art. 5 /
+# Germany's TMG §5 (→DDG §5) / Austria's ECG §5 + Mediengesetz §§24-25
+# require (legal entity name, address, register number, VAT ID, responsible
+# person, contact). A new `imprint` object now runs structured field
+# extraction on the already-fetched, already-verified imprint page body:
+# legal name + legal-form suffix (via a trimmed, Latin-script port of
+# go_legal_entity's entity-suffix table), address, country, register number
+# (HRB/HRA/FN + court, via a vendored 27-EU-country+non-EU VAT/register
+# identifier table — extended with an Austrian FN pattern the upstream table
+# was missing), VAT + real per-country checksum validation (not just
+# regex-shape matching), and a responsible-person name (new multi-language
+# regex: Geschäftsführer/vertretungsberechtigt/verantwortlich für den Inhalt
+# DE/AT, managing director/legal representative EN, représentant légal FR).
+# Country-appropriate completeness scoring against one of three rulesets
+# (eu_baseline / de_tmg / at_ecg_medieng), with the VAT's own country prefix
+# taking precedence over a DE/AT-ambiguous legal-form-suffix guess (a bare
+# "GmbH" alone cannot tell DE from AT) — found and fixed during this pass via
+# a real Austrian-imprint fixture that initially resolved to the wrong
+# country. 8 new test cases (imprint_extract_test.go): complete DE imprint
+# (100% completeness, all fields), complete AT imprint (country-precedence
+# regression coverage), a sparse imprint (low-but-nonzero completeness,
+# correct fields_missing), a JSON-LD Organization page (proves the
+# structured-data path is preferred over the plain-text line-scan, and that
+# same-entity candidates from different sources on one page get merged
+# rather than the non-selected source's fields being silently dropped), a
+# false-positive guard (a blog post ABOUT the Impressum requirement must not
+# hallucinate a company/register/VAT from the prose), a no-body
+# graceful-degradation case, plus direct unit tests of the ported VAT
+# checksum algorithms and the ruleset-selection function. Honest limitation:
+# this is new capability, NOT yet validated against a live real-domain
+# sample — that validation is planned for a later phase of this project,
+# against real Austria/gambling-sector domains, and has not happened yet as
+# of this note.
 # 2026-07-31 genuine re-audit (fresh 60-domain sample, different hosts than
 # the 2026-07-29 sample below; full source re-read end-to-end; safehttp
 # fetch-cache-masking check done explicitly — see PR for the writeup): no

@@ -179,6 +179,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				Title:        vr.Title,
 				Evidence:     vr.Evidence,
 			}
+			if cand.DocType == DocImprint {
+				// vr.IsReal is already confirmed true above — capture the
+				// verified body so extractImprintFields can run on it
+				// without a second fetch. See DocFinding.Body.
+				hit.Body = pm.body
+			}
 			probedMu.Lock()
 			if cur, exists := probedHits[cand.DocType]; !exists || confidenceRank(vr.Confidence) > confidenceRank(cur.Confidence) {
 				probedHits[cand.DocType] = hit
@@ -265,6 +271,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 						hit.Confidence = hit.LinkConfidence
 					}
 					hit.Evidence = append(hit.Evidence, vr.Evidence...)
+					if t == DocImprint {
+						// Verified real above — capture the body for
+						// extractImprintFields. See DocFinding.Body.
+						hit.Body = pm.body
+					}
 				}
 			} else {
 				hit.Confidence = ConfLow
@@ -334,7 +345,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	resp.Documents = docs
 	resp.DocumentsFound = countSuccess(docs)
 	resp.DocumentsMissing = missingFinal
-	_, resp.ImprintPresent = merged[DocImprint]
+	if imprintHit, ok := merged[DocImprint]; ok {
+		hostname := ""
+		if base != nil {
+			hostname = base.Hostname()
+		}
+		resp.Imprint = extractImprintFields(imprintHit.URL, imprintHit.Body, hostname)
+	}
+	resp.ImprintPresent = resp.Imprint.Present
 	resp.Verdict = verdictOf(resp.DocumentsFound, missingFinal)
 
 	// Extraction-service no-data rule: the homepage was reached and scanned,
