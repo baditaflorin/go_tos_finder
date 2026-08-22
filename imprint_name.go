@@ -526,6 +526,23 @@ func extractEntityAround(text, suffix string) string {
 			leftCut = i + 1
 			break
 		}
+		// A literal "•" (U+2022 BULLET) list-marker character is the same
+		// kind of line/list-item boundary as '\n' above, just rendered as
+		// plain text instead of a tag — real evidence: mako.hr's real Opći
+		// uvjeti page writes each defined term as its own bullet line
+		// ("<br />\n• Mako znači Mako d.o.o., sa sjedištem..."), and
+		// without this stop the backward scan climbed straight through the
+		// bullet into the PRECEDING sentence, capturing "• Mako znači Mako
+		// d.o.o." (the bullet plus the defining clause's own subject and
+		// verb) as the candidate name instead of just "Mako d.o.o.".
+		// Checked via HasPrefix (not a plain byte comparison) since "•" is
+		// a 3-byte UTF-8 sequence and this loop walks the string one byte
+		// at a time; HasPrefix still correctly fires only when i lands
+		// exactly on the bullet's own leading byte.
+		if strings.HasPrefix(text[i:], "•") {
+			leftCut = i + len("•")
+			break
+		}
 		// A full-stop followed by a space is a sentence boundary — stop
 		// climbing so we don't pull the previous sentence into the name.
 		// Except a KNOWN abbreviation ("Soc." — see
@@ -943,7 +960,15 @@ func trimAtConjunction(s, suffix string) string {
 	if suffIdx < 0 {
 		return s
 	}
-	for _, conj := range []string{" and ", " y ", " et ", " und ", " e "} {
+	// " znači " (Croatian "means") isn't grammatically a conjunction like
+	// the others below, but plays the same mechanical role for this
+	// function's purpose: real evidence, mako.hr's real Opći uvjeti page
+	// defines its entity as "Mako znači Mako d.o.o., sa sjedištem..." — a
+	// repeated-name defining clause ("[Term] means [Full legal name]").
+	// Without trimming at "znači", the backward-scanned candidate captured
+	// "Mako znači Mako d.o.o." (the defining clause's own subject) instead
+	// of just the real name "Mako d.o.o." that follows it.
+	for _, conj := range []string{" and ", " y ", " et ", " und ", " e ", " znači "} {
 		i := strings.LastIndex(s[:suffIdx], conj)
 		if i > 0 {
 			s = strings.TrimSpace(s[i+len(conj):])

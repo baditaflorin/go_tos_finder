@@ -278,6 +278,29 @@ var suffixTable = []suffixEntry{
 	{"АД", "BG", "medium"},
 	{"ЕАД", "BG", "high"},
 
+	// Croatia, round 20 — no prior HR suffix entries existed at all. Real
+	// evidence: mako.hr's real Opći uvjeti page names "Mako d.o.o.". "j.d.o.o."
+	// (simple LLC, a reduced-capital variant introduced 2012) and "d.d."
+	// (joint-stock company) added alongside it on the same
+	// well-established-sibling-forms basis used for Greece/Bulgaria in
+	// rounds 18-19.
+	//
+	// Known, accepted collision risk (same class already tolerated
+	// elsewhere in this table for "S.A."/France-Romania and
+	// "S.R.L."/Italy-Romania): "d.o.o." is shared, letter-for-letter, by
+	// EVERY former-Yugoslav-republic legal system — Slovenia writes its
+	// own "družba z omejeno odgovornostjo" the identical way. Slovenia is
+	// a later target in this same real-evidence series and has no entry
+	// here yet, so this table has no ACTUAL collision to resolve today —
+	// but ground-truth identifier evidence (OIB/MBS, imprint_vat.go) is
+	// wired below via singleCountryIdentifierKind precisely so a future
+	// Slovenian real-evidence round can self-heal the same way the
+	// existing S.A./S.R.L. collisions already do, rather than needing
+	// suffixTable itself to somehow encode the ambiguity.
+	{"d.o.o.", "HR", "high"},
+	{"j.d.o.o.", "HR", "high"},
+	{"d.d.", "HR", "medium"},
+
 	// Greece (Latin transliteration; native Greek forms out of scope here)
 	{"A.E.", "GR", "high"},
 	{"E.P.E.", "GR", "high"},
