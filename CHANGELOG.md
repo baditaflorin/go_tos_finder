@@ -2,6 +2,27 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.8.1 — 2026-08-23
+
+### Changed
+- **Internal refactor, no behavior change intended**: `imprint_suffix.go`'s
+  vendored `containsSuffix`/`isWordRune`/`prevRune` trio (a byte-for-byte
+  copy from `go_legal_entity`'s `entity_contains.go`/`entity_is.go`/
+  `entity.go`, flagged as tech debt in this file's own header comment) was
+  promoted to `go-common`'s new `wordbound` package (go-common v0.89.0),
+  the same package `go_legal_entity` itself now uses. `detectSuffix` calls
+  `wordbound.ContainsToken` directly; the local copies are removed. Added
+  a direct regression test
+  (`imprint_suffix_wordbound_migration_test.go`) pinning the Latvian
+  "S.-Sv. Slēgts" false-positive-immunity (the real-evidence bug that
+  prompted this consolidation, found in `go_gdpr_compliance` round 26/29)
+  and real suffix matches. `wordbound.ContainsToken` auto-detects glued
+  (Han/Hangul/Hiragana/Katakana) scripts internally, which is a safe
+  no-op here since this repo's trimmed suffix table carries no such
+  entries. Full suite (161/161) still green — go build/go vet/gofmt/go
+  test all clean, no regressions. Does not raise trl: pure internal
+  dependency consolidation, no observable behavior change.
+
 ## 1.8.0 — 2026-08-23
 
 ### Added

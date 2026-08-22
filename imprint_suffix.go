@@ -3,8 +3,8 @@ package main
 import (
 	"sort"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/baditaflorin/go-common/wordbound"
 )
 
 // Vendored (trimmed) from go_legal_entity's entity_suffix.go / entity.go /
@@ -17,14 +17,22 @@ import (
 // (the legal form precedes the name — Russian "ООО «Яндекс»", Indonesian
 // "PT Telkom", Vietnamese "Công ty TNHH ...") which need extra
 // script-detection and reversed-extraction machinery upstream carries
-// (isGluedScript, isPrefixForm, extractEntityAfterPrefix). This pass's
-// rulesets (eu_baseline / de_tmg / at_ecg_medieng — see imprint.go) are all
+// (isPrefixForm, extractEntityAfterPrefix). This pass's rulesets
+// (eu_baseline / de_tmg / at_ecg_medieng — see imprint.go) are all
 // Latin-script, name-then-suffix jurisdictions, so that machinery is left out
 // here rather than carried in unused; a future pass adding non-EU/non-Latin
 // imprint rulesets should port it from go_legal_entity rather than
 // reinventing it. All Latin-script, name-follows-suffix entries from the
 // upstream table are kept (minus the two Vietnamese prefix-form entries,
 // which the trimmed extractor here cannot correctly anchor).
+//
+// The loose-word-boundary suffix-matching trio (containsSuffix/isWordRune/
+// prevRune) that WAS vendored byte-for-byte here is no longer a local copy:
+// both this repo and go_legal_entity now call go-common's wordbound package
+// (v0.89.0+) directly — see detectSuffix below. wordbound.ContainsToken
+// auto-detects glued (Han/Hangul/Hiragana/Katakana) scripts internally via
+// wordbound.IsGluedScript, which is a safe no-op here since this trimmed
+// table carries no such entries.
 
 // suffixEntry maps a legal-entity suffix (as it tends to appear in text) to
 // its likely jurisdiction and confidence. Ordering only matters via
@@ -380,56 +388,19 @@ func init() {
 // the first (longest) hit.
 func detectSuffix(text string) (suffix, country, confidence string, ok bool) {
 	for _, e := range suffixOrder {
-		if containsSuffix(text, e.suffix) {
+		if wordbound.ContainsToken(text, e.suffix) {
 			return e.suffix, e.country, e.confidence, true
 		}
 	}
 	return "", "", "", false
 }
 
-// containsSuffix returns true if text contains the suffix as a token (loose
-// word boundary) — avoids e.g. matching "Inc." inside "Inca". Also rejects
-// suffixes preceded by '(' — that shape is almost always a parenthetical
-// aside like "Equity crowdfunding (Limited availability)", not a corporate
-// suffix. Boundary detection is Unicode-aware: an accented Latin letter
-// immediately adjacent to the match is treated as a continuing word
-// character.
-func containsSuffix(text, suffix string) bool {
-	idx := 0
-	for {
-		j := strings.Index(text[idx:], suffix)
-		if j < 0 {
-			return false
-		}
-		start := idx + j
-		end := start + len(suffix)
-		if end < len(text) {
-			if r, _ := utf8.DecodeRuneInString(text[end:]); isWordRune(r) {
-				idx = end
-				continue
-			}
-		}
-		if start > 0 {
-			r := prevRune(text, start)
-			if isWordRune(r) || r == '(' {
-				idx = end
-				continue
-			}
-		}
-		return true
-	}
-}
-
-// isWordRune reports whether r is a letter or digit in any script.
-func isWordRune(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r)
-}
-
-// prevRune decodes the rune ending immediately before byte offset pos.
-func prevRune(s string, pos int) rune {
-	r, _ := utf8.DecodeLastRuneInString(s[:pos])
-	return r
-}
+// containsSuffix/isWordRune/prevRune (the Unicode-safe, loose-word-boundary
+// suffix-matching trio this file vendored, byte-for-byte, from
+// go_legal_entity's entity_contains.go/entity_is.go/entity.go) were promoted
+// to go-common's wordbound package so both repos — and any future consumer —
+// share one implementation instead of maintaining duplicate copies. See
+// wordbound.ContainsToken's doc comment for the full algorithm description.
 
 // suffixHasSlash reports whether a legal-form suffix legitimately contains a
 // '/' (A/S, K/S, I/S, P/S, NV/SA) — relaxes the slash-reject in
