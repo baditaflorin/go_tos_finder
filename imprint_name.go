@@ -411,6 +411,26 @@ func extractAddressNearEntity(text, name string) string {
 			if strings.Contains(low, "číslo účtu") || strings.Contains(low, "obchodnom registri") {
 				continue
 			}
+			// "matična številka" (Slovenian company-registration-number
+			// label) and "davčna številka" (Slovenian tax-number label) —
+			// same failure shape as the Czech/Slovak block just above:
+			// real evidence, sgermobil.si's real Splošni pogoji page lists
+			// both right after the real "2000 Maribor" postal-code/city
+			// line, each with its own long digit run that cleared
+			// looksAddressLine and got wrongly absorbed alongside it.
+			if strings.Contains(low, "matična številka") || strings.Contains(low, "davčna številka") {
+				continue
+			}
+			// "vložno številko" (Slovenian "insert number" — the court
+			// commercial-register citation, e.g. "registrirana pri
+			// Okrožnem sodišču v Mariboru ... pod vložno številko
+			// 1/12603/00"). Same failure shape as round 10's Luxembourg
+			// "RCS Luxembourg n°..." fix: the citation's own digit run
+			// cleared looksAddressLine and got wrongly absorbed into the
+			// address on the same real sgermobil.si page.
+			if strings.Contains(low, "vložno številko") {
+				continue
+			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
 			// its own line, with no "tel"/"phone" label attached to THIS
 			// line (hasImprintContact/imprintPhoneRE find it independently

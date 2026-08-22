@@ -1,10 +1,40 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.16"
+version: "1.7.17"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.17) - EU-market-expansion real-evidence round 22:
+# Slovenia. TRL stays at 6 (bug fixes plus one new identifier,
+# single-sample evidence). Fetched a real, live retailer's Splosni
+# pogoji page (sgermobil.si, naming SGERM d.o.o.) and ran the shipped
+# 1.7.16 extractor against it - it extracted NOTHING at all
+# (CompletenessScore 0). This is the ACTUAL Croatia/Slovenia "d.o.o."
+# collision round 20's suffixTable comment anticipated. Found and fixed
+# four compounding real bugs: (1) Slovenia's Davcna stevilka (tax
+# number) had no domestic pattern, and the existing SI-prefixed EU VAT
+# pattern required zero space, but this real page space-separates it;
+# fixed with the same optional-space tolerance already used for BE/FR -
+# alone enough to unblock the whole identifier-gated extraction. (2)
+# Slovenia's Maticna stevilka (company registration number) had no
+# identifier pattern at all; added it as Register-only. (3) both
+# identifier values leaked into Address; added skip-past markers. (4) a
+# separate court-registration citation sentence also leaked into
+# Address (its own insert-number digit run cleared the address
+# heuristic, same shape as round 10's Luxembourg RCS citation); added a
+# third skip-past marker. Maticna stevilka also added to
+# singleCountryIdentifierKind (-> SI) - the concrete confirmation that
+# round 20's self-healing design works end to end: this page's
+# suffix-guessed country would otherwise have been HR, but the
+# ground-truth identifier correctly overrides it to SI, exactly as
+# anticipated. One real gap honestly left NOT fixed: the real street
+# line never clears the address heuristic (same class of gap already
+# left undocumented for Czech/Slovak/Croatian street lines). No
+# checksum implemented for Slovenian VAT either (stays format_valid).
+# Four new regression tests (imprint_extract_eu_round22_test.go); full
+# existing suite still green, no regressions. No dedicated Slovenian
+# ruleset added - consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.16) - EU-market-expansion real-evidence round 21:
 # Slovakia. TRL stays at 6 (bug fix, single-sample evidence). Fetched a
 # real, live electrical-supplies retailer's Obchodne podmienky page
