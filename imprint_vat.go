@@ -349,6 +349,23 @@ func init() {
 		// so `\bЕИК` would silently never match anything, for the exact
 		// same reason `\bΑΦΜ` never matched Greek text.
 		{"ЕИК", "BG", regexp.MustCompile(`(?i)ЕИК\s*[:#]?\s*\d{9}\b`)},
+		// Croatia — OIB (Osobni identifikacijski broj, the personal/legal
+		// identification number used for both individuals and companies),
+		// 11 digits with no separators. Treated as VAT-equivalent (see
+		// isVATLikeIdentifierKind and validateIdentifier below) since it IS
+		// the same 11-digit body the "HR"-prefixed EU VAT pattern above
+		// matches, same architecture as Bulgaria's ЕИК/Greece's ΑΦΜ. Real
+		// evidence: mako.hr's real Opći uvjeti page writes "OIB:
+		// 31448356613"; hrOIBValid (imprint_checksum.go) confirmed against
+		// this real value via the published ISO 7064 MOD 11-10 algorithm.
+		{"OIB", "HR", regexp.MustCompile(`\bOIB\s*[:#]?\s*\d{11}\b`)},
+		// Croatia — MBS (Matični broj subjekta, the court-register entry
+		// number), a variable-length digit run. Register-only — no
+		// dedicated checksum algorithm confirmed this round (same
+		// discipline as Ireland's CRO/Luxembourg's RCS/Greece's Γ.Ε.ΜΗ.:
+		// format-matching + Register wiring, no invented checksum). Real
+		// evidence: mako.hr's real page writes "MBS: 030013817".
+		{"MBS", "HR", regexp.MustCompile(`\bMBS\s*[:#]?\s*\d{5,15}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

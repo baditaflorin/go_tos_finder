@@ -769,11 +769,14 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// shape, same fix. Real evidence: szatmari-izek.shop.hu's real
 			// Impresszum page. "Γ.Ε.ΜΗ." (Greece's General Commercial
 			// Registry number) is the same round-18 addition, same shape.
-			// Real evidence: thikishop.gr's real Όροι Χρήσης page.
+			// Real evidence: thikishop.gr's real Όροι Χρήσης page. "MBS"
+			// (Croatia's court-register entry number) is the same round-20
+			// addition, same shape. Real evidence: mako.hr's real Opći
+			// uvjeti page.
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
 				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO",
-				"Cégjegyzékszám", "Γ.Ε.ΜΗ.":
+				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
@@ -801,8 +804,10 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// thikishop.gr's real Όροι Χρήσης page. "ЕИК" (Bulgaria) joins
 			// for the same reason: the same 9-digit body the "BG"-prefixed
 			// EU VAT pattern matches. Real evidence: cressi.bg's real Общи
-			// условия page.
-			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК":
+			// условия page. "OIB" (Croatia) joins for the same reason: the
+			// same 11-digit body the "HR"-prefixed EU VAT pattern matches.
+			// Real evidence: mako.hr's real Opći uvjeti page.
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК", "OIB":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {

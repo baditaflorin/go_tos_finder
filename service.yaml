@@ -1,10 +1,38 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.14"
+version: "1.7.15"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.15) - EU-market-expansion real-evidence round 20:
+# Croatia. TRL stays at 6 (bug fixes plus one new identifier,
+# single-sample evidence). Fetched a real, live retailer's Opci uvjeti
+# page (mako.hr, naming Mako d.o.o.) and ran the shipped 1.7.14 extractor
+# against it - it extracted NOTHING at all (CompletenessScore 0).
+# suffixTable had zero Croatian entries of any kind. Found and fixed
+# four compounding real bugs: (1) no Croatian suffix entries at all;
+# added d.o.o. (real-evidence-confirmed) plus j.d.o.o./d.d. sibling
+# forms - documented, accepted collision risk with Slovenia's identical
+# "d.o.o." term (same class already tolerated for the existing
+# S.A./S.R.L. collisions). (2) Croatia's OIB (personal/legal ID) and MBS
+# (court-register number) had no identifier patterns at all; added both
+# - OIB as VAT-equivalent (same 11-digit body as the HR-prefixed EU VAT
+# pattern), MBS as Register-only - plus a new hrOIBValid ISO 7064 MOD
+# 11-10 checksum confirmed against a real value. (3) a literal bullet
+# character (U+2022) precedes each defined-term line on this real page,
+# and the entity-name backward-scan had no stop condition for it (unlike
+# newline characters), capturing the bullet plus the preceding clause
+# into the candidate name; added it as a stop character. (4) the
+# defining clause itself ("Mako znaci Mako d.o.o." - "[Term] means [Full
+# legal name]") still duplicated the short name even with the bullet
+# fixed; added the Croatian word for "means" to the existing
+# conjunction-trimming marker list. One real gap honestly left NOT
+# fixed: Address stays empty on this page (same-line entity+register
+# embedding, same class as round 15's Romanian gap). Four new regression
+# tests (imprint_extract_eu_round20_test.go); full existing suite still
+# green, no regressions. No dedicated Croatian ruleset added -
+# consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.14) - EU-market-expansion real-evidence round 19:
 # Bulgaria. TRL stays at 6 (bug fixes plus one new identifier,
 # single-sample evidence). Fetched a real, live diving/sports-equipment

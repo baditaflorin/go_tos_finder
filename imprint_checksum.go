@@ -116,6 +116,12 @@ func validateIdentifier(kind, value, country string) validity {
 		// number, just written without the "BG" prefix on a domestic
 		// imprint, same architecture as ΑΦΜ/Adószám above.
 		return validateVAT("BG", extractDigits(value))
+	case "OIB":
+		// Croatia's domestic OIB is exactly the same 11-digit body as
+		// validateVAT's "HR" case (hrOIBValid) below — it's the same
+		// number, just written without the "HR" prefix on a domestic
+		// imprint, same architecture as ЕИК/ΑΦΜ/Adószám above.
+		return validateVAT("HR", extractDigits(value))
 	case "NIPC":
 		// Portugal's NIPC (legal-entity ID) shares the same 9-digit body
 		// and weighted-mod-11 checksum as validateVAT's "PT" case
@@ -232,6 +238,12 @@ func cleanIdentifierValue(kind, value string) string {
 			d = d[len(d)-9:]
 		}
 		return d
+	case "OIB":
+		d := extractDigits(value)
+		if len(d) > 11 {
+			d = d[len(d)-11:]
+		}
+		return d
 	case "VAT":
 		// Now that BE/FR (and potentially others) tolerate optional
 		// internal spaces to match real-world formatting, the raw match
@@ -251,7 +263,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК" || kind == "OIB"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -327,6 +339,15 @@ func singleCountryIdentifierKind(kind string) string {
 		// Cyrillic term for its own, different registry. Real evidence:
 		// cressi.bg's real Общи условия page.
 		return "BG"
+	case "OIB", "MBS":
+		// Both Croatia-only: "OIB" (Osobni identifikacijski broj) and
+		// "MBS" (Matični broj subjekta, the court-register entry number)
+		// are Croatian-specific administrative terms — unlike the
+		// suffixTable's "d.o.o." collision risk with Slovenia (see that
+		// entry's doc comment), no other country uses either of these
+		// exact labels for its own registry. Real evidence: mako.hr's
+		// real Opći uvjeti page.
+		return "HR"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
@@ -470,6 +491,11 @@ func validateVAT(country, raw string) validity {
 			return formatValid
 		}
 		return mod11Verdict(bgEIKValid(raw))
+	case "HR":
+		// Croatia's OIB/VAT: 11 digits, ISO 7064 MOD 11-10 — see
+		// hrOIBValid's doc comment for the algorithm and real-evidence
+		// confirmation.
+		return mod11Verdict(hrOIBValid(raw))
 	case "LU", "GB":
 		// Recognised format; algorithms are documented but we only claim
 		// format_valid here to keep the false-"invalid" rate at zero.
@@ -742,6 +768,30 @@ func bgEIKValid(s string) bool {
 		}
 	}
 	return check == int(s[8]-'0')
+}
+
+// hrOIBValid verifies a Croatian OIB (11 digits) using the published ISO
+// 7064 MOD 11-10 algorithm over the first 10 digits: starting from
+// remainder 10, for each digit in turn compute
+// r = (digit + r) mod 10 (mapping a 0 result to 10), then r = (r*2) mod 11;
+// the final check digit is (11 - r) mod 10. Confirmed against mako.hr's
+// real OIB (31448356613): the running remainder after all 10 digits is 8,
+// check digit (11-8) mod 10 = 3 — matches the real value's own 11th digit.
+func hrOIBValid(s string) bool {
+	if len(s) != 11 || !allDigits(s) {
+		return false
+	}
+	r := 10
+	for i := 0; i < 10; i++ {
+		d := int(s[i] - '0')
+		r = (d + r) % 10
+		if r == 0 {
+			r = 10
+		}
+		r = (r * 2) % 11
+	}
+	check := (11 - r) % 10
+	return check == int(s[10]-'0')
 }
 
 // fiVATValid verifies a Finnish Y-tunnus (8 digits) using the documented

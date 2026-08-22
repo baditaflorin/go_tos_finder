@@ -2,6 +2,46 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.15 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 20: Croatia. Fetched a real, live
+retailer's Opći uvjeti page (mako.hr, naming Mako d.o.o.) and ran the
+shipped 1.7.14 extractor against it — it extracted NOTHING at all
+(CompletenessScore 0). suffixTable had zero Croatian entries of any kind.
+Found and fixed four compounding real bugs:
+
+- **No Croatian suffix entries at all.** Added "d.o.o." (real-evidence-
+  confirmed) plus "j.d.o.o."/"d.d." (sibling forms, same basis as rounds
+  18-19). Known, accepted collision risk documented at the entry:
+  "d.o.o." is shared letter-for-letter by every former-Yugoslav-republic
+  legal system including Slovenia (a later target in this series) — the
+  same class of risk already tolerated for the existing "S.A."(FR/RO)/
+  "S.R.L."(IT/RO) collisions.
+- **Croatia's OIB (personal/legal ID) and MBS (court-register number) had
+  no identifier patterns at all.** Added both — "OIB" as VAT-equivalent
+  (same 11-digit body as the "HR"-prefixed EU VAT pattern), "MBS" as
+  Register-only — plus a new `hrOIBValid` ISO 7064 MOD 11-10 checksum
+  confirmed against the real value (31448356613). Both use plain ASCII
+  letters, so no leading-`\b` RE2 gotcha applied here.
+- **A literal "•" (U+2022) bullet-marker character** precedes each
+  defined-term line on this real page, and `extractEntityAround`'s
+  backward-scan had no stop condition for it (unlike '\n'/'\r'/'|'),
+  capturing the bullet plus the whole preceding clause into the
+  candidate name. Added "•" as a stop character.
+- **The defining clause itself** ("Mako znači Mako d.o.o." — "[Term]
+  means [Full legal name]") still duplicated the short name even with
+  the bullet fixed. Added " znači " (Croatian "means") to
+  `trimAtConjunction`'s marker list.
+
+One real, honestly-documented gap NOT fixed: Address stays empty on this
+page — the real address sits on the SAME line as the entity+register
+clause, same class of gap as round 15's Romanian same-line address. Four
+new regression tests (imprint_extract_eu_round20_test.go); full existing
+suite still green, no regressions. No dedicated Croatian ruleset added —
+consistent with prior rounds' discipline.
+
 ## 1.7.14 — 2026-08-23
 
 ### Fixed
