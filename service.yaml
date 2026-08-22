@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.2"
+version: "1.7.3"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
@@ -393,6 +393,21 @@ trl_assessor: "claude-trl-reaudit-2026-07-31"
 #     this service, and the JS-render limitation (naver.com-style SPA
 #     footers) is unchanged and still real. See PR description for the full
 #     writeup this comment summarises.
+# 2026-08-22 (1.7.3) — precision fix, no new evidence gathering: synced back
+# a checksum-dispatch refinement discovered while porting this same NL VAT
+# fallback to the sibling go_legal_entity repo. That repo's pre-existing
+# test suite caught the previous fix's blanket "any elfproef failure on an
+# NL VAT -> format_valid" fallback as a real regression — it also silently
+# swallowed a genuinely broken/typo'd company VAT as format_valid instead of
+# checksum_invalid. Narrowed here to the same precise condition: only fall
+# back when the elfproef weighted sum lands on remainder 10 (the one
+# remainder the algorithm cannot encode as any check digit at all —
+# nlVATIndeterminate), which is what the real evidence
+# (simpelbootverhuurutrecht.nl's NL005444107B41) actually hits; any other
+# mismatch still reports checksum_invalid. This repo had no NL checksum
+# test at all before now — added one (imprint_checksum_nl_test.go)
+# asserting both directions. TRL stays at 6 (bug fix within the existing
+# band, not a new capability).
 port: 8316
 
 api:

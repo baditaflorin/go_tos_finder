@@ -237,10 +237,15 @@ func validateVAT(country, raw string) validity {
 		// necessarily invalid, then: it may simply be one of these. Real
 		// evidence: simpelbootverhuurutrecht.nl (a real Dutch eenmanszaak)
 		// publishes NL005444107B41, which fails elfproef outright despite
-		// being the business's own genuine, live BTW-id. Falling back to
-		// formatValid (not checksumInvalid) avoids false-flagging this
-		// entire, real population of Dutch one-person businesses — same
-		// precedent as the LU/GB case below.
+		// being the business's own genuine, live BTW-id — its body lands on
+		// elfproef remainder 10, the one remainder the classical algorithm
+		// cannot encode as any check digit at all (see nlVATIndeterminate).
+		// Falling back to formatValid only for that specific ambiguous
+		// remainder avoids false-flagging this real population of Dutch
+		// one-person businesses — same precedent as the LU/GB case below —
+		// while any other definite digit mismatch still reports
+		// checksumInvalid, so a plain typo'd or fabricated NL VAT is still
+		// caught.
 		body := raw
 		if i := strings.IndexByte(raw, 'B'); i == 9 {
 			body = raw[:9]
@@ -248,7 +253,10 @@ func validateVAT(country, raw string) validity {
 		if nlVATValid(body) {
 			return checksumValid
 		}
-		return formatValid
+		if nlVATIndeterminate(body) {
+			return formatValid
+		}
+		return checksumInvalid
 	case "IT":
 		return mod11Verdict(luhnValid(extractDigitsStr(raw)))
 	case "FR":
@@ -336,6 +344,35 @@ func nlVATValid(s string) bool {
 		return false
 	}
 	return check == int(s[8]-'0')
+}
+
+// nlVATIndeterminate reports whether s's elfproef weighted sum lands on a
+// remainder of exactly 10 — a value the classical algorithm cannot encode
+// as any single check digit (0-9) at all, so nlVATValid's "false" there
+// means "the elfproef doesn't apply", not "definitely wrong". Since
+// 2020-01-01 the Belastingdienst issues sole-trader (eenmanszaak/zzp)
+// btw-identificatienummers independently of elfproef (a privacy reform, not
+// derived from the owner's BSN), so these land on any remainder uniformly —
+// including 10, about 1-in-11 of the time — with no way to tell them apart
+// from an ordinary company number by structure alone. Real evidence:
+// simpelbootverhuurutrecht.nl (a genuine Dutch eenmanszaak) publishes
+// NL005444107B41, whose body lands on remainder 10. Used by validateVAT's
+// NL case to fall back to formatValid (ambiguous) only for this specific
+// remainder, while a definite digit mismatch elsewhere still reports
+// checksumInvalid — a plain typo'd or fabricated NL VAT (any other wrong
+// remainder) is still caught. Sibling fix in the go_legal_entity repo,
+// where a pre-existing test for exactly this case (a synthetic broken NL
+// VAT that must stay checksumInvalid) caught the previous blanket
+// formatValid fallback as a real regression.
+func nlVATIndeterminate(s string) bool {
+	if len(s) != 9 || !allDigits(s) {
+		return false
+	}
+	sum := 0
+	for i := 0; i < 8; i++ {
+		sum += int(s[i]-'0') * (9 - i)
+	}
+	return sum%11 == 10
 }
 
 // atVATValid verifies an Austrian UID (8 digits after the "U") using the

@@ -2,6 +2,22 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.3 — 2026-08-22
+
+### Fixed
+- Dutch VAT (NL) validation precision: post-2020 sole-trader
+  (eenmanszaak/zzp) numbers are issued independently of the classical
+  elfproef and legitimately fail it — the previous fix reported these as
+  `format_valid` via a blanket fallback on ANY elfproef failure, which also
+  silently swallowed genuinely broken/typo'd company VATs as `format_valid`
+  instead of `checksum_invalid`. Now narrowed to fall back only when the
+  elfproef lands on remainder 10 — the one remainder the algorithm cannot
+  encode as any check digit at all (see `nlVATIndeterminate`) — while any
+  other definite digit mismatch still reports `checksum_invalid`. Caught as
+  a real regression by the sibling go_legal_entity repo's pre-existing test
+  suite when this same fix was ported there; synced back here with a new
+  permanent test since this repo had no NL checksum test at all before now.
+
 ## 1.7.2 — 2026-08-22
 
 ### Fixed
