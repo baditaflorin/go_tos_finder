@@ -2,6 +2,57 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.8.0 — 2026-08-23
+
+### Added
+
+EU-market-expansion real-evidence round 27: Malta — the LAST of the 13
+target EU countries for this multi-round expansion (rounds 15-27 now
+cover all of Romania, Czechia, Hungary, Greece, Bulgaria, Croatia,
+Slovakia, Slovenia, Cyprus, Lithuania, Latvia, Estonia, and Malta, on top
+of the 15 countries covered by the 14 prior rounds). Fetched a real, live
+art gallery/e-commerce site's Terms of Sale page (artemisialtd.com, naming
+Artemisia Fine Arts & Antiques Limited) and ran the shipped 1.7.21
+extractor against it: Present=true but every other field empty
+(CompletenessScore=0). Found and fixed three compounding real bugs:
+
+- **Malta's VAT format uses an optional dash between the two 4-digit
+  halves** ("MT2336-6423") — the existing bare-adjacent `\bMT\d{8}\b`
+  pattern never matched it. Loosened to `\bMT\d{4}-?\d{4}\b`.
+- **Malta's "Company Registration Number" (Malta Business Registry's own
+  "C"+4-6-digits convention, e.g. "C 71943") had no identifier pattern at
+  all.** Added, anchored on the English label text (the bare "C NNNNN"
+  shape alone would be dangerously generic to match unlabelled anywhere
+  in text) — wired Register-only (same "format-match, no invented
+  checksum" discipline as Ireland's CRO/Croatia's MBS) and connected to
+  `singleCountryIdentifierKind` so it self-heals Country away from the
+  suffix-guessed "GB" (a bare "Limited" suffix collides with
+  suffixTable's existing GB entry) to the correct "MT".
+- **UK/Malta-style same-line "&lt;Name&gt; (&lt;number&gt;) of &lt;address&gt;
+  (\"&lt;nickname&gt;\")" drafting was invisible to address extraction** —
+  `extractAddressNearEntity`'s forward per-line scan only ever looks at
+  lines AFTER the one naming the entity, so an address on the SAME line
+  as the name was never seen. Added a same-line inline extraction
+  (`inlineOfAddressRE`) anchored to the "of " token immediately following
+  the name/company-number clause, capturing up to the next "(" (which
+  always opens the nickname clause in this drafting style).
+
+Also fixed `formatRegister` to strip a leading "is "/"Is " token, since
+this Kind's raw identifier match deliberately keeps the optional "is"
+inside it (`findIdentifiers` needs the RAW match for proximity-attachment;
+cleanup happens only at display time).
+
+One honestly-documented non-fix: no VAT checksum algorithm was
+independently verified against a real fetched value, so VATValidation
+stays "format_valid" (not "checksum_valid") — same discipline as
+Ireland/Croatia/Slovakia/Cyprus/Luxembourg/Latvia before it. Also NOT
+matched: the page's other, bare-parenthetical restatement of the same
+company number, "(C 71943)" directly after the entity name with no label
+at all — deliberately excluded as too generic to match unlabelled. Four
+new regression tests (imprint_extract_eu_round27_test.go); full existing
+suite green twice in a row, no regressions. No dedicated Maltese ruleset
+added — consistent with prior rounds' discipline.
+
 ## 1.7.21 — 2026-08-23
 
 ### Fixed

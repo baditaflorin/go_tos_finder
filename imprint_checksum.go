@@ -429,6 +429,19 @@ func singleCountryIdentifierKind(kind string) string {
 		// like OrgNr before round 14, was never connected to the
 		// country-correction path.
 		return "RO"
+	case "Company Registration Number":
+		// The Malta Business Registry's own English-language label for its
+		// bare "C"+digits company-number convention (see that Kind's
+		// vatPatterns doc comment) — no other EU member state's registry
+		// uses this exact phrase paired with that number shape, so it is
+		// unambiguous evidence of Malta the same way "registrikood" is for
+		// Estonia. This correction matters here because Malta's real
+		// evidence page names its entity "... Antiques Limited" — a bare
+		// "Limited" suffix collides with suffixTable's existing GB entry
+		// and would otherwise win Country="GB" as best candidate. Real
+		// evidence: artemisialtd.com's real Terms of Sale page states
+		// "Our company registration number is C 71943".
+		return "MT"
 	}
 	// Deliberately NOT a case here: "IČO" (Czechia, added round 16) is NOT
 	// single-country the way the cases above are. Former Czechoslovakia
