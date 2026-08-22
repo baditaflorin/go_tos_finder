@@ -2,6 +2,42 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.20 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 25: Latvia. Fetched a real, live
+household-goods e-shop's Juridiskā informācija page (gatavosana.lv, naming
+SIA SOLLER.LV) and ran the shipped 1.7.19 extractor against it — it
+extracted NOTHING at all (CompletenessScore 0), despite "SIA" being an
+existing, already-high-confidence suffixTable entry. Found and fixed three
+compounding real bugs:
+
+- **Latvia's "Reģistrācijas numurs" (registration number) had no
+  identifier pattern at all.** Added it as VAT-equivalent (its 11-digit
+  body IS the same number the "LV"-prefixed EU VAT pattern matches — the
+  same architecture as Bulgaria's ЕИК/Greece's ΑΦΜ/Croatia's OIB, unlike
+  round 24's Lithuanian Įmonės kodas, which is genuinely separate). No
+  checksum implemented (stays `format_valid` — several plausible weight
+  sequences were tried by hand against the one real value and none
+  matched, so nothing was guessed).
+- **A general bug in `extractEntityAfterSuffix`** (the prefix-form name
+  extractor round 24 introduced): this page's real entity name,
+  "SIA SOLLER.LV", is a domain-style brand name containing its own period.
+  The "stop at the first period" rule truncated it to just "SOLLER",
+  dropping the genuine ".LV" suffix. Added a narrow structural check
+  (`looksLikeDomainSuffixPeriod`): a period immediately followed by 2-4
+  uppercase letters and then a non-letter reads as a domain suffix, not a
+  sentence boundary — a genuine sentence-ending period still stops the
+  scan exactly as before.
+- **"Reģistrācijas numurs"/"PVN maksātāja numurs" values leaked into
+  Address** (both sit right before the real "Juridiskā adrese:" line) —
+  added both as skip-past markers.
+
+Three new regression tests (imprint_extract_eu_round25_test.go); full
+existing suite still green, no regressions. No dedicated Latvian ruleset
+added — consistent with prior rounds' discipline.
+
 ## 1.7.19 — 2026-08-23
 
 ### Fixed

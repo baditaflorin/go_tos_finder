@@ -819,7 +819,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// условия page. "OIB" (Croatia) joins for the same reason: the
 			// same 11-digit body the "HR"-prefixed EU VAT pattern matches.
 			// Real evidence: mako.hr's real Opći uvjeti page.
-			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК", "OIB", "VAT Number":
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК", "OIB", "VAT Number", "Reģistrācijas numurs":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {

@@ -448,6 +448,16 @@ func extractAddressNearEntity(text, name string) string {
 			if strings.Contains(low, "vložno številko") {
 				continue
 			}
+			// "reģistrācijas numurs" (Latvian registration-number label)
+			// and "pvn maksātāja numurs" (Latvian VAT-payer-number label)
+			// — same shape as the markers above: real evidence,
+			// gatavosana.lv's real Juridiskā informācija page lists both
+			// right BEFORE the real "Juridiskā adrese:" (legal address)
+			// line, each with its own long digit run that cleared
+			// looksAddressLine and got wrongly absorbed ahead of it.
+			if strings.Contains(low, "reģistrācijas numurs") || strings.Contains(low, "pvn maksātāja numurs") {
+				continue
+			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
 			// its own line, with no "tel"/"phone" label attached to THIS
 			// line (hasImprintContact/imprintPhoneRE find it independently
@@ -694,7 +704,25 @@ func extractEntityAfterSuffix(text, suffix string, idx int) string {
 	after := text[idx+len(suffix):]
 	cut := len(after)
 	for i, r := range after {
-		if r == '\n' || r == '\r' || r == '|' || r == '.' || r == ',' {
+		if r == '\n' || r == '\r' || r == '|' || r == ',' {
+			cut = i
+			break
+		}
+		if r == '.' {
+			// A period immediately followed by a short run of uppercase
+			// letters, then a non-letter (or end of string), reads as a
+			// domain-style suffix ("SOLLER.LV") rather than a sentence
+			// boundary — real evidence, gatavosana.lv's real Juridiskā
+			// informācija page names its own entity "SIA SOLLER.LV"; the
+			// unconditional "stop at the first period" rule truncated the
+			// real trading name to just "SOLLER", silently dropping its
+			// own genuine ".LV" suffix. Only recognised for this specific
+			// shape (not periods in general) so a genuine sentence
+			// boundary right after the suffix ("SARL. Fondée en 2020...")
+			// still stops the scan exactly as before.
+			if looksLikeDomainSuffixPeriod(after, i) {
+				continue
+			}
 			cut = i
 			break
 		}
@@ -708,6 +736,27 @@ func extractEntityAfterSuffix(text, suffix string, idx int) string {
 		return ""
 	}
 	return suffix + " " + name
+}
+
+// looksLikeDomainSuffixPeriod reports whether the '.' at byte offset
+// periodIdx in s is immediately followed by 2-4 uppercase ASCII letters
+// and then either the end of the string or a non-letter character — the
+// shape of a domain-style suffix (".LV", ".COM", ".INFO", ...) rather than
+// a sentence-ending full stop.
+func looksLikeDomainSuffixPeriod(s string, periodIdx int) bool {
+	rest := s[periodIdx+1:]
+	n := 0
+	for n < len(rest) && rest[n] >= 'A' && rest[n] <= 'Z' {
+		n++
+	}
+	if n < 2 || n > 4 {
+		return false
+	}
+	if n == len(rest) {
+		return true
+	}
+	next := rest[n]
+	return !((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z'))
 }
 
 // stripQuoteDelimiters trims a leading/trailing quote-style delimiter pair
