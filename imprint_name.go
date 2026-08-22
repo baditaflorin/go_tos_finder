@@ -182,6 +182,15 @@ var aveWordRE = regexp.MustCompile(`\bave\.?\b`)
 // every real label form ("CUI:", "CUI 123", "CIF#123", ...).
 var cuiWordRE = regexp.MustCompile(`(?i)\b(?:cui|cif)\b`)
 
+// inlineOfAddressRE matches the UK/Malta-style company-law drafting
+// convention "<Name> (<company number>) of <address> ("<nickname>")" —
+// see extractAddressNearEntity's doc comment below for the real evidence.
+// Anchored to the START of the text immediately following the entity name
+// (optionally through one short parenthetical, e.g. a company-number
+// citation) so it only fires on that specific adjacent-clause shape, not
+// on any later "of" appearing deeper in the same line/sentence.
+var inlineOfAddressRE = regexp.MustCompile(`^\s*(?:\([^()]{0,40}\)\s*)?of\s+`)
+
 // looksAddressLine is a loose heuristic for "this line is part of a postal
 // address": either it carries a postal-code/house-number-shaped digit run
 // (hasDigitRun — see its doc comment for why "any digit at all" was too
@@ -289,6 +298,35 @@ func extractAddressNearEntity(text, name string) string {
 			continue
 		}
 		var parts []string
+		// Same-line inline address: UK/Malta-style company-law drafting
+		// states "<Name> (<company number>) of <address> ("<nickname>")
+		// is a ..." — the whole clause sits on ONE line (no <br> splits
+		// name from address), so the forward per-line scan below (which
+		// only ever looks at lines AFTER the one naming `name`) never
+		// sees it; the line containing `name` is itself skipped for
+		// address purposes everywhere else in this function. Captured as
+		// the text between the adjacent "of " token (inlineOfAddressRE,
+		// anchored right after the name/company-number clause) and the
+		// next "(" on the same line, since that paren always opens the
+		// defined-term nickname clause in this drafting style. Real
+		// evidence: artemisialtd.com's real Terms of Sale page:
+		// "Artemisia Fine Arts & Antiques Limited (C 71943) of 'Ridge
+		// View', Triq is-Sagra Familja, Bidnija, Mosta MST 5012, Malta
+		// ("Artemisia"; "we"; "us"; or "our") is a specialist vendor...".
+		if nameIdx := strings.Index(line, name); nameIdx >= 0 {
+			rest := line[nameIdx+len(name):]
+			if loc := inlineOfAddressRE.FindStringIndex(rest); loc != nil {
+				seg := rest[loc[1]:]
+				if pIdx := strings.IndexByte(seg, '('); pIdx >= 0 {
+					seg = seg[:pIdx]
+				}
+				seg = collapseSpaces(strings.TrimSpace(seg))
+				seg = strings.Trim(seg, " ,;")
+				if seg != "" && looksAddressLine(seg) {
+					parts = append(parts, seg)
+				}
+			}
+		}
 		// Real evidence: simpelbootverhuurutrecht.nl's real colofon lists
 		// the KvK number and BTW-id BEFORE the street address (name,
 		// Eenmanszaak, KvK, BTW-id, THEN the address) — the reverse of the
@@ -1579,7 +1617,15 @@ func formatRegister(kind, value string) string {
 		v = strings.TrimSpace(v[len("&nbsp;"):])
 	}
 	for _, lbl := range []string{"No. ", "No.", "No ", "Nummer ", "Numer ",
-		"Number ", "Reg. ", "Reg ", "registered ", "Registered "} {
+		"Number ", "Reg. ", "Reg ", "registered ", "Registered ",
+		// Malta's "Company Registration Number IS C 71943" pattern
+		// deliberately keeps the optional "is" inside its regex match (see
+		// that Kind's vatPatterns doc comment — findIdentifiers keeps the
+		// RAW match), so it needs stripping here too, the same way "No."/
+		// "Reg."/"registered" already are. Real evidence: artemisialtd.com's
+		// real Terms of Sale page: "Our company registration number is
+		// C 71943".
+		"is ", "Is "} {
 		if strings.HasPrefix(v, lbl) {
 			v = strings.TrimSpace(v[len(lbl):])
 		}

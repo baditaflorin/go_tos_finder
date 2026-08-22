@@ -61,7 +61,12 @@ func init() {
 		{"VAT", "LT", regexp.MustCompile(`\bLT(\d{9}|\d{12})\b`)},
 		{"VAT", "LU", regexp.MustCompile(`\bLU\d{8}\b`)},
 		{"VAT", "LV", regexp.MustCompile(`\bLV\d{11}\b`)},
-		{"VAT", "MT", regexp.MustCompile(`\bMT\d{8}\b`)},
+		// Optional dash between the two 4-digit halves: real evidence,
+		// artemisialtd.com's real Terms of Sale page writes its own VAT
+		// number as "MT2336-6423" — grouped for readability, unlike the
+		// bare-adjacent form this pattern originally required. Same class
+		// of fix as the earlier BE/FR/SI space-tolerance fixes.
+		{"VAT", "MT", regexp.MustCompile(`\bMT\d{4}-?\d{4}\b`)},
 		{"VAT", "NL", regexp.MustCompile(`\bNL\d{9}B\d{2}\b`)},
 		{"VAT", "PL", regexp.MustCompile(`\bPL\d{10}\b`)},
 		{"VAT", "PT", regexp.MustCompile(`\bPT\d{9}\b`)},
@@ -478,6 +483,23 @@ func init() {
 		// characters are plain ASCII, so no RE2 `\b` workaround is needed
 		// — verified directly.
 		{"registrikood", "EE", regexp.MustCompile(`(?i)\bregistrikood\s*[:#]?\s*\d{8}\b`)},
+		// Malta — the Malta Business Registry's own company-number
+		// convention: a bare "C" prefix directly followed by 4-6 digits
+		// (e.g. "C 71943"). Register-only — no dedicated checksum
+		// algorithm confirmed this round (same discipline as Ireland's
+		// CRO/Croatia's MBS: format-matching + Register wiring, no
+		// invented checksum). Anchored on the English "company
+		// registration number" label (Malta's business-facing legal text
+		// is commonly English) rather than the bare "C NNNNN" shape
+		// alone, which would be dangerously generic to match unlabelled
+		// anywhere in text — real evidence, artemisialtd.com's real Terms
+		// of Sale page ALSO states this bare-parenthetical form right
+		// after the entity name, "(C 71943)", with no label at all, but
+		// that shape is deliberately NOT matched here (see
+		// singleCountryIdentifierKind's doc comment for why the labelled
+		// form is sufficient for this round's real evidence). Real
+		// evidence: "Our company registration number is C 71943".
+		{"Company Registration Number", "MT", regexp.MustCompile(`(?i)\bcompany\s+registration\s+number\s+(?:is\s+)?C\s?\d{4,6}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

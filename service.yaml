@@ -1,10 +1,40 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.21"
+version: "1.8.0"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.8.0) - EU-market-expansion real-evidence round 27: Malta -
+# the LAST of the 13 target EU countries for this multi-round expansion
+# (rounds 15-27 now cover Romania, Czechia, Hungary, Greece, Bulgaria,
+# Croatia, Slovakia, Slovenia, Cyprus, Lithuania, Latvia, Estonia, and
+# Malta). TRL stays at 6 (bug fixes plus one new identifier plus one new
+# address-extraction path, single-sample evidence). Fetched a real, live
+# art gallery/e-commerce site's Terms of Sale page (artemisialtd.com,
+# naming Artemisia Fine Arts & Antiques Limited) and ran the shipped
+# 1.7.21 extractor against it: Present=true but every other field empty.
+# Found and fixed three compounding real bugs: (1) Malta's VAT format
+# uses an optional dash between the two 4-digit halves ("MT2336-6423");
+# loosened the pattern to tolerate it. (2) Malta's "Company Registration
+# Number" (Malta Business Registry's own "C"+4-6-digits convention) had
+# no identifier pattern at all; added it, anchored on the English label
+# text, wired Register-only (no invented checksum) and connected to the
+# country-correction path so it self-heals Country away from the
+# suffix-guessed GB (a bare "Limited" suffix collides with the existing
+# GB suffix entry) to the correct MT. (3) a UK/Malta-style same-line
+# "Name (number) of address (nickname)" clause was invisible to address
+# extraction, since the forward per-line scan never looks at the line
+# naming the entity itself; added a same-line inline-address extraction
+# anchored on the "of" token. Also fixed the Register display formatter
+# to strip a leading "is" token left over from this Kind's raw match.
+# One honestly-documented non-fix: no VAT checksum algorithm was
+# independently verified, so VAT validation stays format-valid, not
+# checksum-valid - same discipline as Ireland/Croatia/Slovakia/Cyprus/
+# Luxembourg/Latvia before it. Four new regression tests
+# (imprint_extract_eu_round27_test.go); full existing suite green twice
+# in a row, no regressions. No dedicated Maltese ruleset added -
+# consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.21) - EU-market-expansion real-evidence round 26:
 # Estonia. TRL stays at 6 (bug fixes plus one new identifier,
 # single-sample evidence). Fetched a real, live garden-supplies
