@@ -471,8 +471,11 @@ func backfillWinnerIdentifiers(best *imprintCandidate, cands []imprintCandidate)
 	if best.VAT == "" {
 		if c := find(func(c *imprintCandidate) bool { return c.VAT != "" }); c != nil {
 			best.VAT = c.VAT
+			// isVATLikeIdentifierKind (imprint_checksum.go): PartitaIVA/CIF
+			// count as VAT-equivalent here too, same reasoning as the
+			// caller's own vatValidation lookup just above.
 			for _, id := range c.Identifiers {
-				if id.Kind == "VAT" && id.Value == c.VAT {
+				if isVATLikeIdentifierKind(id.Kind) && cleanIdentifierValue(id.Kind, id.Value) == c.VAT {
 					best.Identifiers = append(best.Identifiers, id)
 				}
 			}
@@ -591,7 +594,12 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 		im.VAT = best.VAT
 		im.Country = best.Country
 		for _, id := range best.Identifiers {
-			if id.Kind == "VAT" && id.Value == best.VAT {
+			// isVATLikeIdentifierKind (imprint_jsonld.go) also covers
+			// "PartitaIVA"/"CIF" — VAT-equivalent identifiers whose raw
+			// regex match carries a label prefix, so cleanIdentifierValue
+			// must be applied on BOTH sides before comparing (best.VAT was
+			// already cleaned when it was first attached).
+			if isVATLikeIdentifierKind(id.Kind) && cleanIdentifierValue(id.Kind, id.Value) == best.VAT {
 				vatValidation = id.Validation
 			}
 		}

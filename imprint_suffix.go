@@ -97,6 +97,15 @@ var suffixTable = []suffixEntry{
 	// Italy
 	{"S.r.l.", "IT", "high"},
 	{"Srl", "IT", "high"},
+	// "S. R. L." (each letter separately dotted and spaced, all caps) is a
+	// distinct real-world stylization from "S.r.l." — common on official
+	// pages and in ALL-CAPS structured data/branding. Without its own
+	// entry it matched nothing at all (imprint_suffix.go's suffixTable is
+	// case-sensitive), or — worse — an all-caps "S.R.L." with NO internal
+	// spaces would match Romania's own-name "S.R.L." entry below, giving a
+	// genuinely Italian company the wrong country. Real evidence:
+	// simanova.it's real note legali visibly reads "SIMANOVA S. R. L.".
+	{"S. R. L.", "IT", "high"},
 	{"S.p.A.", "IT", "high"},
 	{"SpA", "IT", "medium"},
 	{"S.n.c.", "IT", "high"},
@@ -107,6 +116,11 @@ var suffixTable = []suffixEntry{
 	{"S.A.U.", "ES", "high"},
 	{"S.L.", "ES", "high"},
 	{"S.L", "ES", "medium"},
+	// Undotted "SL" — a common real-world stylization with no entry at
+	// all before this fix. Real evidence: eurostarshotels.com's real,
+	// official aviso legal reads "EUROSTARS HOTEL COMPANY SL" (no periods
+	// anywhere in the suffix).
+	{"SL", "ES", "medium"},
 	{"S. Coop.", "ES", "high"},
 
 	// Poland

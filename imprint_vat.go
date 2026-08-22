@@ -92,6 +92,16 @@ func init() {
 		{"CIF", "ES", regexp.MustCompile(`\b(?:CIF|NIF)\s*[:#]?\s*[A-HJ-NP-SUVW]\d{7}[0-9A-J]\b`)},
 		// Italy — Codice Fiscale / Partita IVA (11 digits) with explicit label.
 		{"PartitaIVA", "IT", regexp.MustCompile(`\b(?:Partita\s*IVA|P\.?\s?IVA|C\.?F\.?)\s*[:#]?\s*\d{11}\b`)},
+		// Italy — REA (Repertorio Economico Amministrativo), the Chamber of
+		// Commerce business-register number D.Lgs. 70/2003 Art. 7 requires
+		// alongside the Partita IVA. Not in the original go_legal_entity
+		// table at all — an Italian imprint's register disclosure was
+		// silently unmodeled. Real evidence: simanova.it's real note legali
+		// ("REA CE 362094"); the optional province-code and label variants
+		// below ("Numero REA: (AL) 217552", "REA nr. MI - 2677988") were
+		// observed across several other real Italian note-legali pages
+		// during the same search.
+		{"REA", "IT", regexp.MustCompile(`\b(?:Numero\s+)?REA\.?\s*(?:nr\.?)?\s*:?\s*\(?[A-Z]{0,2}\)?[\s.-]?\d{4,8}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

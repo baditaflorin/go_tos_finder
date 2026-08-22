@@ -1,10 +1,45 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.5.4"
+version: "1.5.5"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.5.5) — EU-market-expansion real-evidence round 2: Italy and
+# Spain. TRL stays at 6 (bug fixes within the existing band — Italy and
+# Spain still fall back to eu_baseline, no dedicated ruleset yet). Fetched
+# one real, live small/mid-size business imprint page per country
+# (simanova.it's real note legali, eurostarshotels.com's real aviso legal)
+# and ran the shipped 1.5.4 extractor against them. Found and fixed six
+# real bugs: (1) Italy's REA business-register number had no pattern
+# modeled at all; (2) Partita IVA and Spanish CIF were matched by
+# findIdentifiers but silently dropped before reaching the winning
+# candidate, since neither Kind appeared in extractImprintText's
+# register/VAT attachment switch; (3) a genuine Kind-name collision made
+# every Spanish CIF validate with Romania's roCUIValid algorithm instead of
+# esCIFValid; (4) the emitted VAT value stored the raw label-anchored regex
+# match (label text + embedded newlines) instead of the clean code; (5) the
+# ALL-CAPS "S. R. L." (Italy, spaced) and undotted "SL" (Spain) suffix
+# stylizations had no suffixTable entries at all; (6) a real
+# 172-character unbroken legal-boilerplate sentence (name+register+CIF+
+# phone, no <br> breaks — common Spanish/civil-law style) was silently
+# skipped entirely by the 140-char per-line cap, raised to 220. Also fixed
+# two smaller false positives found on the same two real pages: a "the
+# owner of this website is: X" Spanish prose lead-in leaking into the
+# extracted name, and a bare unlabelled international phone number (split
+# from its "teléfono" label by a <a href="tel:..."> anchor) leaking into
+# the address. One real, honestly-documented limitation deliberately left
+# UNFIXED: simanova.it's JSON-LD name is ALL-CAPS "S.R.L.", which is a
+# genuine literal-string collision with Romania's own native "S.R.L."
+# suffixTable entry — Romanian companies write it exactly this way too, so
+# this isn't a fixable-by-fiat Italy-vs-Romania bug; Country resolves to
+# "RO" for this one page (VAT/register/completeness are all still correct).
+# A real fix needs a broader case-sensitivity/confidence-model audit across
+# the whole 200+-entry suffixTable that this round did not have budget to
+# do safely. Two new permanent regression tests plus a direct CIF/CUI
+# checksum unit test (imprint_extract_eu_round2_test.go); full existing
+# suite (including round 1's France/Netherlands real-evidence tests) still
+# green, no regressions.
 # 2026-08-22 (1.5.4) — EU-market-expansion real-evidence round 1: France and
 # the Netherlands. TRL stays at 6 (bug fixes within the existing band, not a
 # new capability/ruleset — France and NL still fall back to eu_baseline, no

@@ -52,11 +52,39 @@ func validateIdentifier(kind, value, country string) validity {
 			d = d[len(d)-9:] // last 9 digits = the USt-IdNr body
 		}
 		return validateVAT("DE", d)
-	case "CUI", "CIF":
+	case "CUI":
 		// Romanian fiscal code (Cod Unic de Înregistrare / Cod de
 		// Identificare Fiscală), with or without the leading "RO". Validate
 		// the published check-digit algorithm.
 		return mod11Verdict(roCUIValid(extractDigits(value)))
+	case "CIF":
+		// Spain's CIF (letter + 7 digits + check char) — a DIFFERENT
+		// identifier from Romania's CUI/CIF above, despite the shared
+		// "CIF" name (Romania's own regex pattern in imprint_vat.go
+		// matches "CUI"/"CIF" as label synonyms but always reports
+		// Kind="CUI"; imprint_vat.go's separate Spain pattern reports
+		// Kind="CIF"). These used to be lumped into one switch case here,
+		// which ran every Spanish CIF through Romania's roCUIValid — wrong
+		// format, wrong algorithm, would have silently downgraded every
+		// real Spanish CIF to checksum_invalid. Real evidence:
+		// eurostarshotels.com's real aviso legal CIF (B64930910).
+		// onlyAlnum(value) glues the 3-letter "CIF"/"NIF" label onto the
+		// front of the 9-char code, so the trailing 9 alnum characters are
+		// always the code itself.
+		if len(digits) < 9 {
+			return formatValid
+		}
+		return mod11Verdict(esCIFValid(digits[len(digits)-9:]))
+	case "PartitaIVA":
+		// Italy's Partita IVA — 11 digits, Luhn-valid (same algorithm
+		// validateVAT's IT case already uses for the "IT"-prefixed VAT
+		// form). Real evidence: simanova.it's real note legali page
+		// publishes "Partita IVA" / "04869580615" as a labelled identifier
+		// (not the "IT"-prefixed VAT form vatPatterns' VAT/IT entry
+		// matches), which this function previously had no case for at all
+		// and silently fell through to formatValid without even checking
+		// the checksum.
+		return mod11Verdict(luhnValid(extractDigits(value)))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -79,6 +107,44 @@ func validateIdentifier(kind, value, country string) validity {
 		return checksumInvalid
 	}
 	return formatValid
+}
+
+// cleanIdentifierValue strips a matched identifier down to just its code,
+// discarding the label text (and any embedded whitespace/newlines) the
+// vatPatterns regex had to capture alongside it to anchor the match at all.
+// Needed specifically for label-anchored patterns whose regex spans from
+// the label to the code (PartitaIVA, CIF) — unlike a plain "COUNTRYCODE +
+// digits" VAT pattern, which matches nothing but the code itself. Real
+// evidence: simanova.it's Partita IVA regex hit captured the literal string
+// "Partita IVA\n\n\n\n04869580615" (label, plus the blank lines
+// stripTagsLines left between the two separate <p> elements) — storing that
+// verbatim as the emitted `vat` field would be visibly wrong output, not
+// just an internal formatting nit.
+func cleanIdentifierValue(kind, value string) string {
+	switch kind {
+	case "PartitaIVA":
+		d := extractDigits(value)
+		if len(d) > 11 {
+			d = d[len(d)-11:]
+		}
+		return d
+	case "CIF":
+		a := onlyAlnum(value)
+		if len(a) > 9 {
+			a = a[len(a)-9:]
+		}
+		return a
+	}
+	return value
+}
+
+// isVATLikeIdentifierKind reports whether kind is a VAT-equivalent
+// identifier — the plain "VAT" patterns plus PartitaIVA (Italy) and CIF
+// (Spain), which serve the same VAT-identification role domestically even
+// though they're captured by their own label-anchored patterns rather than
+// vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
+func isVATLikeIdentifierKind(kind string) bool {
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF"
 }
 
 // validateVAT dispatches on the 2-letter VAT prefix (or the country code when

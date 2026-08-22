@@ -510,7 +510,17 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 		lineStart := cursor
 		cursor += len(raw) + 1 // +1 for the '\n' separator
 		line := strings.TrimSpace(raw)
-		if line == "" || len(line) > 140 {
+		// Real evidence: eurostarshotels.com's real aviso legal states its
+		// identity as one unbroken sentence — name, register entry, CIF,
+		// and phone all in a single 172-character paragraph with no <br>
+		// breaks at all (common in Spanish/civil-law legal-boilerplate
+		// style). The original 140-char cap silently dropped it entirely
+		// before ever reaching detectSuffix. Raised to 220 — still well
+		// short of unrelated marketing prose, and hasProximityCorroboration
+		// (imprint.go) already guards the false-positive risk this cap was
+		// presumably meant to bound, by requiring a nearby address/
+		// register/VAT before a plain-text suffix match can win at all.
+		if line == "" || len(line) > 220 {
 			continue
 		}
 		if strings.Contains(line, "&quot;") || strings.Contains(line, "&nbsp;") ||
@@ -632,14 +642,25 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// the candidate's suffix-inferred country when they disagree.
 			switch id.Kind {
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
-				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN":
+				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
 				out[best].Identifiers = append(out[best].Identifiers, id)
-			case "VAT":
+			// "PartitaIVA" (Italy) and "CIF" (Spain) are VAT-equivalent —
+			// literally what their labels mean ("Partita IVA" = VAT number;
+			// Spain's CIF/NIF doubles as the domestic VAT identifier under
+			// LSSICE) — not a separate company register number the way
+			// KvK/SIRET/HRB are. Real evidence: both were previously
+			// matched by findIdentifiers (imprint_vat.go already had
+			// patterns for them) but silently dropped here since neither
+			// Kind appeared in EITHER switch case at all — simanova.it's
+			// real Partita IVA and eurostarshotels.com's real CIF were both
+			// found and then discarded before ever reaching the winning
+			// candidate.
+			case "VAT", "PartitaIVA", "CIF":
 				if out[best].VAT == "" {
-					out[best].VAT = id.Value
+					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {
 						out[best].Country = id.Country
 						out[best].Confidence = "high"

@@ -103,6 +103,11 @@ func containsCI(haystack, needle string) bool {
 	return strings.Contains(strings.ToLower(haystack), strings.ToLower(needle))
 }
 
+// bareIntlPhoneRE matches a line that is NOTHING but an international
+// phone number in "(+NN)NNNNNNNNN"-or-similar shape — see
+// extractAddressNearEntity's doc comment for the real evidence.
+var bareIntlPhoneRE = regexp.MustCompile(`^\(?\+\d{1,3}\)?[\d\s()\-./]{5,20}$`)
+
 // looksAddressLine is a loose heuristic for "this line is part of a postal
 // address": either it carries a postal-code/house-number-shaped digit run
 // (hasDigitRun — see its doc comment for why "any digit at all" was too
@@ -190,6 +195,19 @@ func extractAddressNearEntity(text, name string) string {
 			// the break-markers below, this page's real address comes AFTER
 			// these lines, not before.
 			if strings.Contains(low, "kvk") || strings.Contains(low, "btw-id") {
+				continue
+			}
+			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
+			// its own line, with no "tel"/"phone" label attached to THIS
+			// line (hasImprintContact/imprintPhoneRE find it independently
+			// elsewhere — see imprint.go). Real evidence:
+			// eurostarshotels.com's real aviso legal puts "teléfono" and
+			// its value in separate <a href="tel:..."> markup, so
+			// stripTagsLines splits them onto different lines — the bare
+			// value line then cleared looksAddressLine's digit-run
+			// heuristic and got absorbed into the address as a false
+			// positive.
+			if bareIntlPhoneRE.MatchString(clean) {
 				continue
 			}
 			// Stop before absorbing an identifier/register/contact line
@@ -637,7 +655,8 @@ var contactLabels = []string{
 	"editor", "éditeur", "editeur", "redaktion", "redaction", "rédaction",
 }
 
-// hostingProsePrefixes are leading "this site is hosted by …" disclaimers.
+// hostingProsePrefixes are leading "this site is hosted by …" / "the owner
+// of this website is …" disclaimers.
 var hostingProsePrefixes = []string{
 	"le site est hébergé par les ", "le site est hébergé par le ",
 	"le site est hébergé par la ", "le site est hébergé par ",
@@ -647,6 +666,11 @@ var hostingProsePrefixes = []string{
 	"this site is hosted by ", "the site is hosted by ",
 	"website hosted by ", "site hosted by ", "hosted by ",
 	"diese website wird gehostet von ", "gehostet von ", "gehostet bei ",
+	// Spanish "owner of this website is" — real evidence:
+	// eurostarshotels.com's real aviso legal opens "El propietario de esta
+	// web es: EUROSTARS HOTEL COMPANY SL". "web" and "sitio web" are pure
+	// synonyms in this construction (not a separate unevidenced pattern).
+	"el propietario de esta web es: ", "el propietario de este sitio web es: ",
 }
 
 // trimAtConjunction handles "YOOX and Meta Platforms Ireland Limited" by

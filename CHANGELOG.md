@@ -2,6 +2,74 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.5.5 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 2: Italy and Spain.
+Found by fetching real, live business imprint pages (simanova.it's real
+note legali, eurostarshotels.com's real aviso legal) and running the
+shipped 1.5.4 extractor against them.
+
+- **Italian REA business-register number never modeled at all.** No
+  pattern existed for REA (Repertorio Economico Amministrativo), the
+  Chamber-of-Commerce number D.Lgs. 70/2003 Art. 7 requires alongside the
+  Partita IVA. Added.
+- **Partita IVA and Spanish CIF matched by `findIdentifiers` but silently
+  dropped.** Neither Kind appeared in `extractImprintText`'s
+  register/VAT attachment switch at all, so a real, found identifier never
+  reached the winning candidate. Both are VAT-equivalent (that's literally
+  what "Partita IVA" means; Spain's CIF doubles as its domestic VAT ID
+  under LSSICE) — wired into the VAT case, not the register case.
+- **A Kind-name collision made every Spanish CIF validate with Romania's
+  checksum algorithm.** Romania's CUI/CIF fiscal code and Spain's CIF are
+  structurally unrelated identifiers that used to share one switch case in
+  `validateIdentifier`. Split into separate cases; Spain's CIF now
+  validates via `esCIFValid`.
+- **VAT field stored the raw label-anchored regex match, not the clean
+  code.** `PartitaIVA`/`CIF`'s regex has to capture the label alongside the
+  code to anchor the match at all (unlike a plain "COUNTRYCODE + digits"
+  VAT pattern) — e.g. a real hit was stored verbatim as `"Partita
+  IVA\n\n\n\n04869580615"`. Added `cleanIdentifierValue`, applied
+  everywhere a VAT-equivalent value is compared or emitted.
+- **ALL-CAPS "S.R.L." (Italy) and undotted "SL" (Spain) suffix
+  stylizations had no matching entries.** Real JSON-LD/branding text
+  commonly presents legal names in all caps; real official Spanish legal
+  pages commonly drop the periods entirely. Added "S. R. L." (spaced,
+  Italy) and "SL" (Spain) to the suffix table.
+- **A 172-character unbroken legal-boilerplate sentence was silently
+  skipped entirely.** The per-line suffix-scan's 140-character cap was
+  too tight for real Spanish/civil-law imprint style, which routinely
+  states name + register + tax ID + phone as one sentence with no `<br>`
+  breaks. Raised to 220.
+- **A "the owner of this website is: X" prose lead-in leaked into the
+  extracted name.** Added the Spanish "El propietario de esta web es:"
+  variant to the existing hosting/ownership-prose-prefix stripper.
+- **A bare, unlabelled international phone number leaked into the
+  address.** A `<a href="tel:...">` anchor splits the label ("teléfono")
+  from its value onto separate lines after `stripTagsLines`; the bare
+  value line cleared the address digit-run heuristic. Added a dedicated
+  bare-phone-number skip pattern.
+
+Two new permanent regression tests
+(imprint_extract_eu_round2_test.go) plus a direct unit test of the CIF/CUI
+split; full existing suite still green, no regressions.
+
+**Known, documented limitation NOT fixed this round:** simanova.it's real
+JSON-LD name field is ALL-CAPS "S.R.L." — a genuine literal-string
+collision with Romania's own native "S.R.L." suffixTable entry (Romanian
+companies write it exactly this way natively too, so this isn't purely an
+Italian-vs-Romanian bug fixable by fiat). Country resolves to "RO" instead
+of "IT" for this one page. A real fix needs a broader case-sensitivity/
+confidence-model change across the whole 200+-entry suffixTable, which
+this round did not have the evidence to audit safely — left as a
+documented gap in `imprint_extract_eu_round2_test.go` rather than a rushed
+fix. VAT/register/completeness are all unaffected and correct.
+
+Sample size: 1 real page per country (Italy, Spain), same discipline as
+round 1. Italy and Spain still fall back to the generic `eu_baseline`
+ruleset (no dedicated `it_dlgs70`/`es_lssice` checklist yet).
+
 ## 1.5.4 — 2026-08-22
 
 ### Fixed
