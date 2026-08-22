@@ -104,6 +104,12 @@ func validateIdentifier(kind, value, country string) validity {
 			return formatValid
 		}
 		return mod11Verdict(huAdoszamValid(d[:8]))
+	case "ΑΦΜ":
+		// Greece's domestic ΑΦΜ is exactly the same 9-digit body as
+		// validateVAT's "EL" case (grVATValid) below — it's the same
+		// number, just written without the "EL" country prefix on a
+		// domestic imprint, same architecture as NIP/Adószám above.
+		return validateVAT("EL", extractDigits(value))
 	case "NIPC":
 		// Portugal's NIPC (legal-entity ID) shares the same 9-digit body
 		// and weighted-mod-11 checksum as validateVAT's "PT" case
@@ -208,6 +214,12 @@ func cleanIdentifierValue(kind, value string) string {
 			d = d[len(d)-11:]
 		}
 		return d
+	case "ΑΦΜ":
+		d := extractDigits(value)
+		if len(d) > 9 {
+			d = d[len(d)-9:]
+		}
+		return d
 	case "VAT":
 		// Now that BE/FR (and potentially others) tolerate optional
 		// internal spaces to match real-world formatting, the raw match
@@ -227,7 +239,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -274,6 +286,26 @@ func singleCountryIdentifierKind(kind string) string {
 		// other country's business-register system using either label.
 		// Real evidence: szatmari-izek.shop.hu's real Impresszum page.
 		return "HU"
+	case "Γ.Ε.ΜΗ.":
+		// Greece's General Commercial Registry (Γενικό Εμπορικό Μητρώο) is
+		// a specific Greek institution established by Greek law 3419/2005
+		// — unlike "ΑΦΜ" just below (deliberately NOT a case here), this
+		// names a jurisdiction-specific REGISTRY, not a generic Greek-
+		// language label a different Greek-speaking jurisdiction (Cyprus)
+		// might also use for its own, differently-run companies registrar.
+		// Real evidence: thikishop.gr's real Όροι Χρήσης page.
+		return "GR"
+		// Deliberately NOT a case here: "ΑΦΜ" (Greece, round 18) is not
+		// given the same single-country treatment. Greek is ALSO an
+		// official language of Cyprus, and "ΑΦΜ" (literally "tax registry
+		// number") reads as a generic administrative term rather than a
+		// named Greek-only institution the way "Γ.Ε.ΜΗ." above is — the
+		// same Czech/Slovak "IČO" caution from round 16 applies here:
+		// mapping it to "GR" could mis-flag a future real Cypriot page
+		// once Cyprus gets its own real-evidence round. Not needed for
+		// this round's fixture anyway: the native Greek suffix forms
+		// (Ι.Κ.Ε./Α.Ε./Ε.Π.Ε./Ο.Ε., imprint_suffix.go) are GR-unambiguous
+		// on their own.
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
@@ -397,6 +429,13 @@ func validateVAT(country, raw string) validity {
 	case "RO":
 		// CUI/CIF: 2–10 digits, weighted mod-11 over all but the last digit.
 		return mod11Verdict(roCUIValid(raw))
+	case "EL", "GR":
+		// Greece's ΑΦΜ/VAT: 9 digits, weighted mod-11 over the first 8 —
+		// see grVATValid's doc comment for the algorithm and real-evidence
+		// confirmation. Both "EL" (the VAT prefix ISO uses for Greece) and
+		// "GR" (the ordinary country code, in case a caller passes that
+		// instead) are accepted here.
+		return mod11Verdict(grVATValid(raw))
 	case "LU", "GB":
 		// Recognised format; algorithms are documented but we only claim
 		// format_valid here to keep the false-"invalid" rate at zero.
@@ -613,6 +652,31 @@ func huAdoszamValid(s string) bool {
 	}
 	check := (10 - (sum % 10)) % 10
 	return check == int(s[7]-'0')
+}
+
+// grVATValid verifies a Greek ΑΦΜ/VAT (9 digits) using the published
+// weighted modulo-11 algorithm: weights 2^8,2^7,...,2^1 (256, 128, 64, 32,
+// 16, 8, 4, 2) applied to the first 8 digits; the weighted sum mod 11 is
+// the check digit directly (a remainder of 10 maps to check digit 0, the
+// same "exceptional remainder" shape as several other checksums in this
+// file — not itself hit by the one real value available to confirm this
+// round, so treated as inferred-standard rather than real-evidence-tested).
+// Confirmed against thikishop.gr's real ΑΦΜ (800617296): weighted sum 2338,
+// 2338 mod 11 = 6 — matches the real value's own 9th digit.
+func grVATValid(s string) bool {
+	if len(s) != 9 || !allDigits(s) {
+		return false
+	}
+	weights := []int{256, 128, 64, 32, 16, 8, 4, 2}
+	sum := 0
+	for i := 0; i < 8; i++ {
+		sum += int(s[i]-'0') * weights[i]
+	}
+	check := sum % 11
+	if check == 10 {
+		check = 0
+	}
+	return check == int(s[8]-'0')
 }
 
 // fiVATValid verifies a Finnish Y-tunnus (8 digits) using the documented

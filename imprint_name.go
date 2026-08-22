@@ -83,8 +83,30 @@ func stripTagsLines(body string) string {
 		}
 		i++
 	}
-	return tagBoundaryPunctRE.ReplaceAllString(b.String(), "$1$2")
+	out := tagBoundaryPunctRE.ReplaceAllString(b.String(), "$1$2")
+	return labelColonDigitBoundaryRE.ReplaceAllString(out, ": $1")
 }
+
+// labelColonDigitBoundaryRE collapses a tag-boundary newline sitting right
+// after a label's own colon when a digit follows (skipping at most one
+// literal space) — the "<strong>Label:</strong> 123456789" shape, distinct
+// from tagBoundaryPunctRE just above (that one fixes a letter immediately
+// before the break; this one fixes a colon immediately before it, with a
+// DIGIT — not general prose — immediately after). Real evidence:
+// thikishop.gr's real Όροι Χρήσης page writes "<strong>ΑΦΜ:</strong>
+// 800617296" and "<strong>Αρ. Γ.Ε.ΜΗ.:</strong> 132389607000" — both labels
+// sit entirely inside their own <strong>, so (unlike round 16's Czech
+// "s.r.o." case) the LABEL text itself was never split — but the VALUE
+// landing on its own line, with no label of its own on that same line,
+// meant extractAddressNearEntity's per-line stop-marker checks (which only
+// ever inspect the CURRENT line) had nothing to recognise and wrongly
+// absorbed the orphaned value line into the address ahead of the real
+// address further down the page. Restricted to "colon directly followed by
+// a digit" (not any character) to avoid the broader, riskier scope of
+// merging every colon-terminated line break unconditionally — a genuine
+// section heading followed by non-numeric prose on the next line is left
+// untouched.
+var labelColonDigitBoundaryRE = regexp.MustCompile(`:\n ?(\d)`)
 
 // tagBoundaryPunctRE collapses a newline that stripTagsLines just inserted
 // at a tag boundary when the very next character is a bare "." or "," —
@@ -323,6 +345,24 @@ func extractAddressNearEntity(text, name string) string {
 			// unlike "cui" (an ordinary short Romanian word) which needed
 			// cuiWordRE's word-boundary regex further below.
 			if strings.Contains(low, "cégjegyzékszám") || strings.Contains(low, "adószám") {
+				continue
+			}
+			// "αφμ"/"γ.ε.μη.": Greece's own tax/register-number labels (see
+			// the "ΑΦΜ"/"Γ.Ε.ΜΗ." vatPatterns entries in imprint_vat.go).
+			// Same shape as the Hungarian markers just above: real
+			// evidence, thikishop.gr's real Όροι Χρήσης page lists both
+			// BEFORE the real "Έδρα/Διεύθυνση:" (registered-seat) address
+			// line — skip (not break) so scanning continues past them.
+			// "γ.ε.μη." (with its periods) is distinctive enough for a
+			// plain substring check; "αφμ" is short like "cui" was
+			// (round 15), but Go's RE2 \b is ASCII-only and can never
+			// match adjacent to a Greek letter (see the "ΑΦΜ" vatPattern's
+			// doc comment) — cuiWordRE's word-boundary-regex approach isn't
+			// available here, so this stays a plain substring check. Real
+			// evidence found no unrelated Greek word containing "αφμ" as a
+			// substring; accepted as the same low residual risk this
+			// codebase already tolerates for "rcs"/"tva"/"nip" below.
+			if strings.Contains(low, "αφμ") || strings.Contains(low, "γ.ε.μη.") {
 				continue
 			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
@@ -1268,8 +1308,17 @@ func stripCopyrightPrefix(s string) string {
 // kind token if the regex already captured it (e.g. value="HRB 6089" + kind
 // "HRB" would otherwise yield "HRB HRB 6089"). Also strips trailing colons
 // and label residue ("No.", "Nummer", "Numer").
+//
+// collapseSpaces first: findIdentifiers (imprint_vat.go) deliberately keeps
+// `value` as the RAW regex match, byte-identical to the source text, so
+// extractImprintText's proximity-attachment step can look it back up via
+// strings.Index — but a pattern whose label and digits sit on opposite
+// sides of an HTML tag boundary (stripTagsLines inserts a real "\n" there)
+// can match ACROSS that boundary, leaking a literal newline into this
+// function's output otherwise. Real evidence: thikishop.gr's real
+// "<strong>Αρ. Γ.Ε.ΜΗ.:</strong> 132389607000" markup, round 18.
 func formatRegister(kind, value string) string {
-	v := strings.TrimSpace(value)
+	v := strings.TrimSpace(collapseSpaces(value))
 	lowKind := strings.ToLower(kind)
 	for {
 		lv := strings.ToLower(v)

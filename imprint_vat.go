@@ -291,6 +291,49 @@ func init() {
 		// for a different company mentioned further down) — same class of
 		// register-only identifier as Czechia's IČO/Luxembourg's RCS above.
 		{"Cégjegyzékszám", "HU", regexp.MustCompile(`(?i)\bCégjegyzékszám\s*[:#]?\s*\d{2}[\s-]?\d{2}[\s-]?\d{6}\b`)},
+		// Greece — ΑΦΜ (Αριθμός Φορολογικού Μητρώου, the domestic tax
+		// registry number), 9 digits with no separators. Treated as
+		// VAT-equivalent (see isVATLikeIdentifierKind and validateIdentifier
+		// below) since it IS the same 9-digit body the "EL"-prefixed EU VAT
+		// pattern above matches, just written domestically without the
+		// country prefix — same architecture as Hungary's Adószám. Real
+		// evidence: thikishop.gr's real Όροι Χρήσης page writes "ΑΦΜ:
+		// 800617296"; grVATValid (imprint_checksum.go) confirmed against
+		// this real value.
+		//
+		// Deliberately NO leading `\b` here (unlike every ASCII-anchored
+		// pattern elsewhere in this table): Go's RE2 `\b`/`\w` are
+		// ASCII-only — they do NOT recognise Greek (or any non-ASCII)
+		// letters as "word" characters at all, so `\bΑΦΜ` can never match
+		// ANYTHING (there's no ASCII word/non-word transition immediately
+		// before a Greek letter, ever). Every other non-ASCII-labelled
+		// pattern in this table (IČO, Adószám, Cégjegyzékszám) happens to
+		// start/end on a plain ASCII character, so this RE2 gotcha never
+		// surfaced before this round. The trailing `\b` after `\d{9}` is
+		// still safe — digits ARE in RE2's ASCII \w class. Real-world
+		// false-positive risk from dropping the leading boundary is low:
+		// "αφμ" is an unusual consonant run in Greek and, even if it did
+		// appear inside an unrelated word, would ALSO need to be
+		// immediately followed by exactly 9 digits to match at all.
+		{"ΑΦΜ", "EL", regexp.MustCompile(`(?i)ΑΦΜ\s*[:#]?\s*\d{9}\b`)},
+		// Greece — Γ.Ε.ΜΗ. (Γενικό Εμπορικό Μητρώο, the General Commercial
+		// Registry number), a variable-length digit run (commonly 12
+		// digits) optionally preceded by "Αρ." (Greek "No."). Register-only
+		// — no dedicated checksum algorithm confirmed this round (same
+		// discipline as Ireland's CRO/Luxembourg's RCS: format-matching +
+		// Register wiring, no invented checksum). Real evidence:
+		// thikishop.gr's real page writes "Αρ. Γ.Ε.ΜΗ.: 132389607000".
+		//
+		// Same RE2 fix as ΑΦΜ just above: no leading `\b` (Greek "Α"/"Γ"
+		// would silently never match one). This page's own real markup is
+		// "<strong>Αρ. Γ.Ε.ΜΗ.:</strong> 132389607000" — the tag boundary
+		// between "</strong>" and the value inserts a stripTagsLines
+		// newline right before the digits, which the existing `\s*` right
+		// after the label already bridges fine (a bare newline, not the
+		// literal-un-decoded "&nbsp;" some other real pages in this
+		// codebase have used at the same spot — checked byte-for-byte
+		// against the actual fetched page here, not assumed).
+		{"Γ.Ε.ΜΗ.", "GR", regexp.MustCompile(`(?i)(?:Αρ\.\s*)?Γ\.?\s?Ε\.?\s?ΜΗ\.?\s*[:#]?\s*\d{6,15}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.
@@ -314,6 +357,13 @@ func findIdentifiers(text string, max int) []identifierHit {
 	seen := map[string]bool{}
 	for _, p := range vatPatterns {
 		for _, m := range p.re.FindAllString(text, -1) {
+			// m is kept as the RAW match (byte-identical to `text`)
+			// deliberately — extractImprintText's proximity-attachment
+			// step (imprint_jsonld.go) does `strings.Index(text, id.Value)`
+			// to find where this identifier sits on the page, which
+			// requires an exact substring match against the ORIGINAL text.
+			// Any embedded whitespace/newline is cleaned up later, only at
+			// display time (formatRegister) — see its doc comment.
 			key := p.name + ":" + m
 			if seen[key] {
 				continue

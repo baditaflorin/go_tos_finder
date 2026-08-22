@@ -1,10 +1,41 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.12"
+version: "1.7.13"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.13) - EU-market-expansion real-evidence round 18:
+# Greece. TRL stays at 6 (bug fixes plus two new identifiers,
+# single-sample evidence). Fetched a real, live phone-accessories
+# retailer's Oroi Chrisis page (thikishop.gr, naming MASTER ACCESSORIES
+# in NATIVE Greek script - I.K.E.) and ran the shipped 1.7.12 extractor
+# against it - it extracted almost nothing (only "contact",
+# CompletenessScore 33). suffixTable already carried Latin-transliterated
+# Greek legal forms with an explicit "native Greek forms out of scope"
+# comment - this round's real evidence is exactly that gap (Greek
+# letters are different Unicode code points from visually similar Latin
+# ones). Found and fixed five compounding real bugs: (1) no
+# native-Greek-script suffix entries at all; added the native
+# counterparts of the existing Latin quartet. (2) Greece's AFM (tax
+# number) and G.E.MI. (Commercial Registry number) had no identifier
+# patterns at all; added both plus a new grVATValid weighted-mod-11
+# checksum confirmed against a real value. (3) a general Go regexp
+# gotcha: RE2's \b is ASCII-only and never recognises a Greek letter as
+# a word character, so a naive \b-anchored Greek pattern can never match
+# anywhere - fixed by dropping the leading \b (every earlier non-ASCII
+# pattern happened to start/end on a plain ASCII character, so this
+# never surfaced before this round). (4) label+value pairs split across
+# a tag-boundary newline (a colon immediately followed by a digit across
+# the break) - added a narrowly-scoped collapse regex, plus fixed a
+# related leak where the matched identifier's raw value carried an
+# embedded newline through to the Register field's output. (5) both new
+# identifier lines still leaked into Address even once reachable on one
+# line; added them as skip-past address markers, same shape as round
+# 17's Hungarian markers. Five new regression tests
+# (imprint_extract_eu_round18_test.go); full existing suite still green,
+# no regressions. No dedicated Greek ruleset added - consistent with
+# prior rounds' discipline.
 # 2026-08-22 (1.7.12) - EU-market-expansion real-evidence round 17:
 # Hungary. TRL stays at 6 (bug fixes plus two new identifiers,
 # single-sample evidence). Fetched a real, live specialty-foods e-shop's

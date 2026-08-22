@@ -268,6 +268,23 @@ var suffixTable = []suffixEntry{
 	{"E.P.E.", "GR", "high"},
 	{"O.E.", "GR", "medium"},
 	{"I.K.E.", "GR", "high"},
+	// Greece, round 18 — the ACTUAL native Greek Unicode forms real Greek
+	// pages use (Greek Iota/Kappa/Epsilon/Alpha/Phi/... are DIFFERENT
+	// Unicode code points from the visually-similar Latin letters above,
+	// e.g. Greek "Ι" U+0399 vs Latin "I" U+0049 — a plain-text match on the
+	// Latin entries above can never match this real page's own text). Real
+	// evidence: thikishop.gr's real Όροι Χρήσης page names "MASTER
+	// ACCESSORIES Ι.Κ.Ε." — confirmed via this ONE fetched page, so only
+	// "Ι.Κ.Ε." is real-evidence-confirmed this round. "Α.Ε."/"Ε.Π.Ε."/"Ο.Ε."
+	// are added alongside it on the same basis as the Latin quartet just
+	// above (the same four well-established Greek legal forms, just their
+	// native-script spelling) rather than left half-fixed — zero collision
+	// risk (Greek script appears nowhere else in this table) and a
+	// trivially-verifiable alphabet mapping, not speculative business data.
+	{"Ι.Κ.Ε.", "GR", "high"},
+	{"Α.Ε.", "GR", "high"},
+	{"Ε.Π.Ε.", "GR", "high"},
+	{"Ο.Ε.", "GR", "medium"},
 
 	// Estonia / Latvia / Lithuania
 	{"OÜ", "EE", "high"},

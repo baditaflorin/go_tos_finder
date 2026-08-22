@@ -767,11 +767,13 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// "Cégjegyzékszám" (Hungary's company-register number) is the
 			// same round-16 addition as IČO just above — same failure
 			// shape, same fix. Real evidence: szatmari-izek.shop.hu's real
-			// Impresszum page.
+			// Impresszum page. "Γ.Ε.ΜΗ." (Greece's General Commercial
+			// Registry number) is the same round-18 addition, same shape.
+			// Real evidence: thikishop.gr's real Όροι Χρήσης page.
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
 				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO",
-				"Cégjegyzékszám":
+				"Cégjegyzékszám", "Γ.Ε.ΜΗ.":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
@@ -794,7 +796,10 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// "HU"-prefixed EU VAT pattern matches, just written
 			// domestically with an appended VAT-status/county suffix. Real
 			// evidence: szatmari-izek.shop.hu's real Impresszum page.
-			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám":
+			// "ΑΦΜ" (Greece) joins for the same reason: the same 9-digit
+			// body the "EL"-prefixed EU VAT pattern matches. Real evidence:
+			// thikishop.gr's real Όροι Χρήσης page.
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {
