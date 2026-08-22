@@ -104,10 +104,14 @@ func TestDecodeKnownAccentEntities(t *testing.T) {
 	if got := decodeKnownAccentEntities("S.&agrave; r.l."); got != "S.à r.l." {
 		t.Errorf("decodeKnownAccentEntities(%q) = %q, want %q", "S.&agrave; r.l.", got, "S.à r.l.")
 	}
-	// Deliberately untouched: &nbsp;/&quot;/&copy;/&amp; must survive so the
+	// Deliberately untouched: &nbsp;/&quot;/&copy; must survive so the
 	// entity-corruption rejection filter in extractImprintText still sees
-	// them (see decodeKnownAccentEntities' own doc comment).
-	if got := decodeKnownAccentEntities("A&nbsp;B&amp;C"); got != "A&nbsp;B&amp;C" {
-		t.Errorf("decodeKnownAccentEntities(%q) = %q, want it unchanged", "A&nbsp;B&amp;C", got)
+	// and rejects them (see decodeKnownAccentEntities' own doc comment).
+	// "&amp;" is the one exception — round 11 (imprint_extract_eu_round11_
+	// test.go) added it to the decode map after real evidence
+	// (bqredovisning.se) showed an ordinary ampersand-in-name being
+	// wrongly treated as corruption.
+	if got := decodeKnownAccentEntities("A&nbsp;B&amp;C"); got != "A&nbsp;B&C" {
+		t.Errorf("decodeKnownAccentEntities(%q) = %q, want %q (only &amp; decodes)", "A&nbsp;B&amp;C", got, "A&nbsp;B&C")
 	}
 }
