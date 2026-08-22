@@ -1,10 +1,35 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.9"
+version: "1.7.10"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.7.10) - EU-market-expansion real-evidence round 15 (new
+# series continuing rounds 1-14, covering the 13 remaining EU countries):
+# Romania. TRL stays at 6 (bug fixes, single-sample evidence). Fetched a
+# real, live e-commerce company's Termeni si conditii page (emag.ro, naming
+# its operating entity DANTE INTERNATIONAL S.A.) and ran the shipped 1.7.9
+# extractor against it - Country resolved to "FR" instead of "RO", despite
+# the page's own real "CUI: 14399840" identifier being correctly matched.
+# Found and fixed two compounding real bugs: (1) the entity's bare "S.A."
+# suffix collides with France's own low-confidence suffixTable entry, and
+# singleCountryIdentifierKind (the mechanism that lets ground-truth
+# government-identifier evidence override a merely-probabilistic suffix
+# guess, already wired for IT/NL/PL/PT/IE/LU/SE/DK/FI/NO) had never had a
+# case for Kind="CUI" at all, despite CUI being wired into vatPatterns and
+# the checksum switch since round 1; added a "CUI" case returning "RO". (2)
+# once that surfaced the site's real footer content, extractAddressNearEntity's
+# stop-marker list had no entry for Romania's own "CUI"/"CIF" label, so the
+# unrelated footer copyright line got absorbed into Address; added a
+# word-boundary cuiWordRE check (a bare substring check would false-positive
+# on "cui" as an ordinary standalone Romanian word). One real gap honestly
+# left NOT fixed: the entity's own run-on sentence still over-captures
+# register text into Address on this specific page (a same-line
+# entity-boundary issue, different code path from both fixes above). Three
+# new regression tests (imprint_extract_eu_round15_test.go); full existing
+# suite still green, no regressions. No dedicated Romanian ruleset added -
+# consistent with rounds 7-14's discipline.
 # 2026-08-22 (1.7.2) — EU-market-expansion real-evidence round 8: Portugal.
 # TRL stays at 6 (bug fixes, single-sample evidence). Fetched one real,
 # live business registry page ("Ficha técnica", urbana.com.pt) and ran the

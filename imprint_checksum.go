@@ -244,6 +244,25 @@ func singleCountryIdentifierKind(kind string) string {
 		return "FI"
 	case "OrgNr":
 		return "NO"
+	case "CUI":
+		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
+		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
+		// always reports Kind="CUI" (Spain's own, separately-patterned CIF
+		// reports Kind="CIF" — see the collision note in validateIdentifier
+		// below), so Kind="CUI" is unambiguous evidence of Romania. Real
+		// evidence: emag.ro's real Termeni si conditii page names
+		// "DANTE INTERNATIONAL S.A." — a bare "S.A." suffix collides with
+		// France's low-confidence entry in suffixTable and won
+		// Country="FR" as best candidate, even though the SAME page's real
+		// "cod unic de inregistrare RO 14399840" / footer "CUI: 14399840"
+		// is unambiguously Romanian. Before this case existed, the
+		// singleCountryIdentifierKind correction loop in imprint.go never
+		// fired for Romania's own national identifier at all — CUI was
+		// wired into vatPatterns and validateIdentifier's checksum switch
+		// (roCUIValid) since this repo's first EU-expansion round, but,
+		// like OrgNr before round 14, was never connected to the
+		// country-correction path.
+		return "RO"
 	}
 	return ""
 }
