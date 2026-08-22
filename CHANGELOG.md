@@ -2,6 +2,70 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.5.3 — 2026-08-22
+
+### Fixed
+
+Found by stress-testing the shipped (1.5.0–1.5.2) imprint extractor against
+realistic content from this project's actual target population — real, live
+Austrian gambling-affiliate/comparison sites, the whole reason the imprint-
+extraction feature exists — rather than a hypothetical edge case. The
+fixture reconstructs the exact real pattern seen on atpkitz.at's live
+homepage: a "Top 5" operator comparison table naming several third-party
+licensed brands by name, with legal-sounding language nearby (license
+claims, a GmbH-suffixed entity name) — a structural pattern this whole
+affiliate/comparison-site cohort exhibits, since a review page must name the
+operators it compares.
+
+- **False-positive `legal_name` extraction from a third-party brand mention
+  in marketing prose.** The suffix-anchored plain-text scan
+  (`extractImprintText`/`extractEntityAround`) trusted ANY
+  capitalized-word-run-plus-legal-form-suffix match anywhere on the page as
+  a real entity-identity candidate, with no requirement that it sit near any
+  other imprint-shaped signal. On the reconstructed fixture, this extracted
+  `"Winrolla GmbH"` — a competitor brand named in "Winrolla GmbH ist ein
+  weiterer Top-Anbieter mit MGA-Lizenz" — as the page's own `legal_name`
+  (`completeness_score: 40`), even though nothing about that mention
+  identifies it as the entity that actually operates the page.
+
+  Fixed with a new `hasProximityCorroboration` gate in `bestImprintCandidate`
+  (`imprint.go`): a plain-text-sourced candidate (`imprint_text` or
+  `imprint_label`) is only eligible to WIN if it carries a real address,
+  register number, or VAT found near it on the page — all three are already
+  proximity-gated at the point they're populated (`extractAddressNearEntity`'s
+  forward-line scan; the existing 800-byte nearest-candidate VAT/register
+  attachment), so requiring one of them to be non-empty is sufficient.
+  Structured-data sources (`json_ld`, `hcard`) are unaffected — already
+  high-confidence, and not where this false positive originated.
+
+- **Address-line heuristic mistook a rating/percentage fragment for a postal
+  address.** Verifying the fix above against a realistic MULTI-brand
+  variant of the same comparison table (three distinct GmbH/Ltd-suffixed
+  brand mentions next to a numeric rating column) surfaced a second, related
+  bug: `looksAddressLine` treated ANY bare digit as address-shaped, so a
+  rating cell (`"9.6"`) or a bonus blurb (`"100% Bonus bis zu 500 Euro"`)
+  got collected as the candidate's "address" — which would have let the
+  false-positive brand slip through the new corroboration gate anyway.
+  Fixed at the root: `looksAddressLine` now requires a postal-code-shaped
+  run of 4+ consecutive digits (new `hasDigitRun` helper) rather than "any
+  digit at all". This codebase's real target jurisdictions (DE 5-digit,
+  AT/NL 4-digit postal codes) comfortably clear that bar; a
+  rating/percentage/price fragment in ordinary prose essentially never does.
+
+Confirmed no regression against the real hotelrose.at fixture (still
+`completeness_score: 100`, every field unchanged) and against two related
+non-bug control cases from the same stress-testing pass (a JSON-LD
+`WebPage.author` Person byline; a page merely listing brand names with no
+legal-form suffix at all) — both still correctly extract nothing.
+
+New regression tests (`imprint_extract_real_evidence_test.go`):
+`TestExtractImprintFieldsRejectsUncorroboratedThirdPartyBrandMention` (the
+exact adversarial fixture from this bug), and
+`TestExtractImprintFieldsRejectsMultiBrandComparisonTable` (confirms the
+single per-candidate fix generalizes to a multi-brand page without needing
+a separate "multiple distinct candidates" heuristic), plus direct unit
+tests `TestHasProximityCorroboration` and `TestHasDigitRun`.
+
 ## 1.5.2 — 2026-08-22
 
 ### Fixed

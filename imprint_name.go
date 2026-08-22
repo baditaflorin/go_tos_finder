@@ -104,16 +104,46 @@ func containsCI(haystack, needle string) bool {
 }
 
 // looksAddressLine is a loose heuristic for "this line is part of a postal
-// address": either it carries a digit (house number / postal code) or a
-// recognisable address-vocabulary marker.
+// address": either it carries a postal-code/house-number-shaped digit run
+// (hasDigitRun — see its doc comment for why "any digit at all" was too
+// loose) or a recognisable address-vocabulary marker.
 func looksAddressLine(s string) bool {
 	low := strings.ToLower(s)
-	if strings.ContainsAny(s, "0123456789") {
+	if hasDigitRun(s, 4) {
 		return true
 	}
 	for _, marker := range []string{"street", "strasse", "straße", "road", "avenue", "ave", "boulevard", "suite", "floor", "germany", "united states", "romania", "france", "netherlands", "poland"} {
 		if strings.Contains(low, marker) {
 			return true
+		}
+	}
+	return false
+}
+
+// hasDigitRun reports whether s contains a run of at least n consecutive
+// ASCII digits. Used in place of "contains any digit at all" (too loose —
+// found via real-evidence stress-testing extractAddressNearEntity against a
+// real Austrian gambling-comparison site's "Top 5" operator table: a rating
+// column ("9.6") and a bonus-percentage line ("100% Bonus bis zu 500 Euro")
+// both carry bare digits with no postal address anywhere near them, and got
+// collected as this candidate's "address" — see
+// hasProximityCorroboration's doc comment in imprint.go for how that then
+// fed a second, worse bug: a false address made an uncorroborated
+// third-party brand mention pass as corroborated). Real postal
+// codes/house-number blocks in this codebase's target jurisdictions (DE
+// 5-digit, AT/NL 4-digit postal codes) comfortably clear a 4-digit-run bar;
+// a rating/percentage/price fragment in ordinary prose essentially never
+// does.
+func hasDigitRun(s string, n int) bool {
+	run := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] >= '0' && s[i] <= '9' {
+			run++
+			if run >= n {
+				return true
+			}
+		} else {
+			run = 0
 		}
 	}
 	return false

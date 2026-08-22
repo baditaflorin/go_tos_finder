@@ -336,13 +336,70 @@ func mergeImprintCandidates(in []imprintCandidate) []imprintCandidate {
 	return out
 }
 
-// bestImprintCandidate picks the highest-priority named candidate.
+// hasProximityCorroboration gates the two weak, plain-text-sourced candidate
+// kinds (imprint_text — a bare legal-form-suffix match; imprint_label — a
+// bare "Firmenname:"-style label match) behind a minimal corroboration
+// requirement before either is trusted enough to WIN as bestImprintCandidate's
+// pick: the candidate must carry at least one other imprint-shaped signal
+// found near it on the page — a real postal address (Address, from
+// extractAddressNearEntity's forward-line, contact-line-gated scan) or a
+// VAT/register identifier (Register/VAT, from extractImprintText's
+// 800-byte nearest-candidate proximity attachment). All three fields are
+// already proximity-gated at the point they're populated, so simply
+// requiring one of them to be non-empty is enough — no separate distance
+// check needed here.
+//
+// Real evidence: stress-testing the shipped 1.5.2 extractor against
+// atpkitz.at (a real Austrian gambling-comparison site) found it happily
+// extracted "Winrolla GmbH" as legal_name from marketing prose reviewing
+// third-party operators ("Winrolla GmbH ist ein weiterer Top-Anbieter mit
+// MGA-Lizenz") — a real false positive: this kind of comparison/review page
+// structurally MUST name the brands it's comparing, and a bare suffix match
+// with nothing else nearby (no address, no register, no VAT) is exactly the
+// shape of "brand mentioned in passing," not "this is who runs this site."
+// See TestExtractImprintFieldsRejectsUncorroboratedThirdPartyBrandMention.
+//
+// A bare nearby contact email/phone was deliberately NOT added as a third
+// qualifying signal, even though it reads as a natural candidate: this
+// exact bug's own adversarial fixture has a real contact email only ~84
+// bytes after the false-positive "Winrolla GmbH" match (a separate
+// marketing paragraph's "Kontaktieren Sie uns: ..." call-to-action), which
+// would have defeated this fix outright had "any contact info nearby" been
+// accepted as sufficient corroboration. Contact info is near-ubiquitous on
+// any commercial page and sits close to arbitrary text by page-layout
+// coincidence, not entity ownership — it doesn't discriminate the way a
+// genuine address or register/VAT number does. The page-wide "contact"
+// checklist item (hasImprintContact, unrelated to this gate) is unaffected.
+//
+// Structured-data sources (json_ld, hcard) are never subject to this check
+// — those are already high-confidence; this gate exists specifically to
+// tighten the weakest source, plain-text suffix/label scanning, which is
+// exactly where this false positive originated. copyright_footer and
+// og_site_name are also left ungated: out of scope for this fix (see the
+// bug report), and structurally narrower extractors (a single copyright
+// line / a single og:site_name meta value, not a whole-page suffix scan).
+func hasProximityCorroboration(c *imprintCandidate) bool {
+	if c.Source != "imprint_text" && c.Source != "imprint_label" {
+		return true
+	}
+	return c.Address != "" || c.Register != "" || c.VAT != ""
+}
+
+// bestImprintCandidate picks the highest-priority named candidate that also
+// clears hasProximityCorroboration — a named-but-uncorroborated weak
+// plain-text candidate is skipped entirely rather than won, so a page with
+// nothing but such candidates correctly ends up with no legal_name at all
+// (Present still stays true; see extractImprintFields) instead of
+// hallucinating one from unrelated prose.
 func bestImprintCandidate(cands []imprintCandidate) *imprintCandidate {
 	var best *imprintCandidate
 	bestScore := 1 << 30
 	for i := range cands {
 		c := &cands[i]
 		if c.Name == "" {
+			continue
+		}
+		if !hasProximityCorroboration(c) {
 			continue
 		}
 		score := candidateSourceRank(c.Source)*10 + candidateConfRank(c.Confidence)

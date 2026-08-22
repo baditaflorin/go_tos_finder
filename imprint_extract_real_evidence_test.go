@@ -519,3 +519,168 @@ func TestHasImprintContactDetectsCFObfuscatedEmail(t *testing.T) {
 		t.Error("hasImprintContact returned false — the Cloudflare-obfuscated email should now count as a functional contact channel")
 	}
 }
+
+// --- Bug 6: uncorroborated third-party brand mention in comparison prose --
+
+// atpkitzThirdPartyBrandMentionFixture is a realistic (not contrived)
+// reconstruction of the exact false-positive pattern found stress-testing
+// the shipped 1.5.2 extractor against atpkitz.at, a real Austrian
+// sports-betting comparison site: its actual homepage runs a "Top 5"
+// operator table naming several third-party licensed brands with
+// legal-sounding language nearby (license claims, a GmbH-suffixed entity
+// name) — a structural pattern this whole affiliate/comparison-site cohort
+// exhibits, since a review page must name the operators it's comparing.
+// "Winrolla GmbH" here is a brand being reviewed in marketing prose, not
+// the entity that operates the page — the real subject of its own
+// Impressum — and has neither an address, nor a VAT/register number,
+// anywhere near it.
+const atpkitzThirdPartyBrandMentionFixture = `<html><body><h1>Impressum</h1>
+<p>DuoSpin Casino ist lizenziert durch die MGA (Malta Gaming Authority) und bietet
+100% Bonus bis zu 200 Euro. Winrolla GmbH ist ein weiterer Top-Anbieter mit MGA-Lizenz.</p>
+<p>Kontaktieren Sie uns: info@wettvergleich-beispiel.net</p>
+</body></html>`
+
+// TestExtractImprintFieldsRejectsUncorroboratedThirdPartyBrandMention is the
+// real-evidence regression test for the bug itself: before this fix,
+// extractImprintFields returned "Winrolla GmbH" as legal_name (suffix
+// "GmbH", completeness_score 40) purely because the suffix-anchored
+// plain-text scan trusted ANY capitalized-word-run-plus-legal-suffix match
+// anywhere on the page, with no requirement that it sit near any other
+// imprint-shaped signal. After the fix, bestImprintCandidate skips this
+// candidate entirely (no address, no register, no VAT anywhere near it),
+// so the page correctly ends up with no legal_name at all rather than a
+// hallucinated one — the genuinely-present contact email (unrelated to
+// entity-name attribution) still counts toward the "contact" checklist
+// item, which is why completeness_score is low-but-nonzero rather than 0.
+func TestExtractImprintFieldsRejectsUncorroboratedThirdPartyBrandMention(t *testing.T) {
+	im := extractImprintFields("https://wettvergleich-beispiel.net/impressum", atpkitzThirdPartyBrandMentionFixture, "wettvergleich-beispiel.net")
+
+	if im.LegalName == "Winrolla GmbH" {
+		t.Fatal("LegalName = \"Winrolla GmbH\" — a third-party brand named in comparison prose must never be attributed as the page's own legal_name")
+	}
+	if im.LegalName != "" {
+		t.Errorf("LegalName = %q, want empty (no candidate on this page has any nearby address/register/VAT corroboration)", im.LegalName)
+	}
+	if im.Address != "" {
+		t.Errorf("Address = %q, want empty", im.Address)
+	}
+	if im.Suffix != "" {
+		t.Errorf("Suffix = %q, want empty", im.Suffix)
+	}
+	if !containsStr(im.FieldsFound, "contact") {
+		t.Errorf("FieldsFound = %v, want it to still contain contact (the page-wide email check is independent of entity-name attribution)", im.FieldsFound)
+	}
+	if !containsStr(im.FieldsMissing, "legal_name") {
+		t.Errorf("FieldsMissing = %v, want it to contain legal_name", im.FieldsMissing)
+	}
+	if im.CompletenessScore >= 40 {
+		t.Errorf("CompletenessScore = %d, want well below the pre-fix 40 (no more legal_name credit)", im.CompletenessScore)
+	}
+}
+
+// atpkitzMultiBrandComparisonTableFixture extends the single-brand fixture
+// above to a realistic multi-operator "Top 5" table (the real atpkitz.at
+// shape this bug report describes), with three distinct suffix-anchored
+// brand names (GmbH/GmbH/Ltd) sitting next to a numeric rating column and
+// short bonus-percentage blurbs — deliberately included because a rating
+// cell like "9.4" or a blurb like "100% Bonus bis zu 500 Euro" carries bare
+// digits that could themselves be mistaken for a postal address by a loose
+// digit-only heuristic (see hasDigitRun's doc comment: this exact shape is
+// what exposed that gap during this fix's own verification pass). None of
+// the three brands has a real address/register/VAT anywhere near it.
+const atpkitzMultiBrandComparisonTableFixture = `<html><body><h1>Impressum</h1>
+<table>
+<tr><td>DuoSpin</td><td>9.8</td><td>MGA-Lizenz</td></tr>
+<tr><td>Winrolla GmbH</td><td>9.6</td><td>100% Bonus bis zu 500 Euro</td></tr>
+<tr><td>Kingmaker GmbH</td><td>9.4</td><td>MGA-Lizenz</td></tr>
+<tr><td>Ragnaro Ltd</td><td>9.1</td><td>UKGC-Lizenz</td></tr>
+<tr><td>Opabet</td><td>8.9</td><td></td></tr>
+</table>
+<p>Kontaktieren Sie uns: info@wettvergleich-beispiel.net</p>
+</body></html>`
+
+// TestExtractImprintFieldsRejectsMultiBrandComparisonTable confirms the
+// single per-candidate proximity-corroboration fix already generalizes to
+// a real multi-operator comparison table without needing a separate
+// "multiple distinct suffix-anchored candidates ⇒ reject all" heuristic:
+// each of the three GmbH/Ltd-suffixed brand candidates independently fails
+// proximity corroboration (none has a real address/register/VAT near it),
+// so none of them wins, exactly as the single-brand case above.
+func TestExtractImprintFieldsRejectsMultiBrandComparisonTable(t *testing.T) {
+	im := extractImprintFields("https://wettvergleich-beispiel.net/impressum", atpkitzMultiBrandComparisonTableFixture, "wettvergleich-beispiel.net")
+
+	if im.LegalName != "" {
+		t.Errorf("LegalName = %q, want empty — none of the three comparison-table brand mentions (Winrolla GmbH, Kingmaker GmbH, Ragnaro Ltd) has any nearby address/register/VAT corroboration", im.LegalName)
+	}
+	if im.Address != "" {
+		t.Errorf("Address = %q, want empty (a rating column and bonus-percentage blurb must not be mistaken for a postal address)", im.Address)
+	}
+
+	cands := mergeImprintCandidates(extractImprintCandidates(atpkitzMultiBrandComparisonTableFixture, "https://wettvergleich-beispiel.net/impressum"))
+	names := map[string]bool{}
+	for _, c := range cands {
+		names[c.Name] = true
+	}
+	for _, want := range []string{"Winrolla GmbH", "Kingmaker GmbH", "Ragnaro Ltd"} {
+		if !names[want] {
+			t.Fatalf("test setup invalid: extraction never even produced a %q candidate to test corroboration against; got %+v", want, cands)
+		}
+	}
+	best := bestImprintCandidate(cands)
+	if best != nil {
+		t.Errorf("bestImprintCandidate = %+v, want nil (every named candidate on this page is an uncorroborated plain-text brand mention)", best)
+	}
+}
+
+// TestHasProximityCorroboration is a direct unit test of the gate itself:
+// structured sources (json_ld/hcard) are always trusted regardless of
+// Address/Register/VAT; imprint_text/imprint_label sources need at least
+// one of the three.
+func TestHasProximityCorroboration(t *testing.T) {
+	cases := []struct {
+		name string
+		c    imprintCandidate
+		want bool
+	}{
+		{"json_ld, no corroboration needed", imprintCandidate{Source: "json_ld"}, true},
+		{"hcard, no corroboration needed", imprintCandidate{Source: "hcard"}, true},
+		{"imprint_text, no corroboration", imprintCandidate{Source: "imprint_text"}, false},
+		{"imprint_text, address corroborates", imprintCandidate{Source: "imprint_text", Address: "Musterstraße 1, 10115 Berlin"}, true},
+		{"imprint_text, register corroborates", imprintCandidate{Source: "imprint_text", Register: "HRB 12345"}, true},
+		{"imprint_text, VAT corroborates", imprintCandidate{Source: "imprint_text", VAT: "DE123456788"}, true},
+		{"imprint_label, no corroboration", imprintCandidate{Source: "imprint_label"}, false},
+		{"imprint_label, address corroborates", imprintCandidate{Source: "imprint_label", Address: "Brennerstraße 30, 6150 Steinach"}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := hasProximityCorroboration(&c.c); got != c.want {
+				t.Errorf("hasProximityCorroboration(%+v) = %v, want %v", c.c, got, c.want)
+			}
+		})
+	}
+}
+
+// TestHasDigitRun is a direct unit test of the tightened digit heuristic:
+// short numeric fragments common in ratings/percentages/prices must not
+// qualify, while postal-code-shaped runs (this codebase's real target
+// jurisdictions: DE 5-digit, AT/NL 4-digit) must.
+func TestHasDigitRun(t *testing.T) {
+	cases := []struct {
+		s    string
+		n    int
+		want bool
+	}{
+		{"9.6", 4, false},
+		{"100% Bonus bis zu 500 Euro", 4, false},
+		{"9.4", 4, false},
+		{"10115 Berlin", 4, true},
+		{"1010 Wien", 4, true},
+		{"6150 Steinach in Tirol, Österreich", 4, true},
+		{"", 4, false},
+	}
+	for _, c := range cases {
+		if got := hasDigitRun(c.s, c.n); got != c.want {
+			t.Errorf("hasDigitRun(%q, %d) = %v, want %v", c.s, c.n, got, c.want)
+		}
+	}
+}

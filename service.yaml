@@ -1,10 +1,52 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.5.2"
+version: "1.5.3"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.5.3) — fourth real-evidence bug-fix pass. TRL stays at 6
+# (bug fix within the existing band, not new capability/coverage). This pass
+# stress-tested the shipped (1.5.0-1.5.2) extraction logic against realistic
+# content from THIS PROJECT'S OWN ACTUAL TARGET POPULATION — real, live
+# Austrian gambling-affiliate/comparison sites, the whole reason this
+# imprint-extraction feature exists — rather than a hypothetical edge case.
+# A realistic fixture built from atpkitz.at's real homepage content (a "Top
+# 5" operator comparison table naming third-party licensed brands by name,
+# a structural pattern this entire affiliate/comparison-site cohort
+# exhibits, since a review page must name the operators it compares) found
+# extractImprintFields() extracting "Winrolla GmbH" — a competitor brand
+# named in marketing prose ("Winrolla GmbH ist ein weiterer Top-Anbieter mit
+# MGA-Lizenz") — as the page's own legal_name. Root cause: the
+# suffix-anchored plain-text scan (extractImprintText/extractEntityAround)
+# trusted ANY capitalized-word-run-plus-legal-form-suffix match anywhere on
+# the page as a real entity-identity candidate, with no requirement that it
+# sit near any other imprint-shaped signal (address/register/VAT). Fixed
+# with a new hasProximityCorroboration gate in bestImprintCandidate
+# (imprint.go): a plain-text-sourced candidate (imprint_text/imprint_label)
+# only wins if it carries a real address, register number, or VAT found
+# near it — structured-data sources (json_ld/hcard) are unaffected, already
+# high-confidence. Verifying this against a realistic MULTI-brand
+# comparison-table variant (3 distinct GmbH/Ltd-suffixed brand mentions
+# next to a numeric rating column) surfaced a second, related real bug: the
+# address-line heuristic (looksAddressLine) treated ANY bare digit as
+# address-shaped, so a rating cell ("9.6") or bonus blurb ("100% Bonus bis
+# zu 500 Euro") was mistaken for a postal address, which would have let the
+# false-positive brand slip through the new corroboration gate. Fixed at
+# the root: looksAddressLine now requires a postal-code-shaped run of 4+
+# consecutive digits (hasDigitRun) rather than "any digit at all" — this
+# codebase's real target jurisdictions (DE 5-digit, AT/NL 4-digit postal
+# codes) comfortably clear that bar; a rating/percentage/price fragment in
+# ordinary prose essentially never does. Confirmed no regression against the
+# real hotelrose.at fixture (still 100/100, full extraction unchanged) and
+# against the two non-bug control cases from the same stress-testing pass (a
+# JSON-LD WebPage.author Person byline, and a page merely listing brand
+# names with no legal-form suffix at all) — both still correctly extract
+# nothing. Six new regression tests (imprint_extract_real_evidence_test.go):
+# the exact adversarial single-brand fixture, a multi-brand comparison-table
+# variant (confirms the single per-candidate fix generalizes without a
+# separate "multiple candidates" heuristic), plus direct unit tests of
+# hasProximityCorroboration and hasDigitRun.
 # 2026-08-22 (1.5.2) — third real-evidence bug-fix pass, continued live-site
 # verification of the same hotelrose.at fixture the 1.5.1 pass used. TRL
 # stays at 6 (bug fix within the existing band, not new capability/coverage;
