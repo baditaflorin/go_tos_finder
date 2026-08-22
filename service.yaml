@@ -1,10 +1,34 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.19"
+version: "1.7.20"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.20) - EU-market-expansion real-evidence round 25:
+# Latvia. TRL stays at 6 (bug fixes plus one new identifier,
+# single-sample evidence). Fetched a real, live household-goods
+# e-shop's Juridiska informacija page (gatavosana.lv, naming SIA
+# SOLLER.LV) and ran the shipped 1.7.19 extractor against it - it
+# extracted NOTHING at all (CompletenessScore 0), despite SIA being an
+# existing high-confidence suffix entry. Found and fixed three
+# compounding real bugs: (1) Latvia's Registracijas numurs
+# (registration number) had no identifier pattern at all; added it as
+# VAT-equivalent (same 11-digit body as the LV-prefixed EU VAT pattern,
+# same architecture as Bulgaria's EIK/Greece's AFM/Croatia's OIB) - no
+# checksum implemented (several plausible weight sequences tried by
+# hand against the one real value, none matched, so nothing was
+# guessed). (2) a general bug in extractEntityAfterSuffix (the
+# prefix-form name extractor round 24 introduced): the real entity name
+# "SIA SOLLER.LV" is a domain-style brand name containing its own
+# period, and the "stop at the first period" rule truncated it to just
+# "SOLLER"; added a narrow structural check (a period followed by 2-4
+# uppercase letters then a non-letter reads as a domain suffix, not a
+# sentence boundary). (3) the identifier values leaked into Address;
+# added skip-past markers. Three new regression tests
+# (imprint_extract_eu_round25_test.go); full existing suite still
+# green, no regressions. No dedicated Latvian ruleset added -
+# consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.19) - EU-market-expansion real-evidence round 24:
 # Lithuania. TRL stays at 6 (bug fixes plus one new identifier,
 # single-sample evidence). Fetched a real, live group-buying e-shop's

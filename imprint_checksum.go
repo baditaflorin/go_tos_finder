@@ -128,6 +128,12 @@ func validateIdentifier(kind, value, country string) validity {
 		// checksum, unlike OIB/ЕИК/ΑΦΜ above which route through
 		// validateVAT since they share their country's VAT body.
 		return mod11Verdict(ltCompanyCodeValid(extractDigits(value)))
+	case "Reģistrācijas numurs":
+		// Latvia's domestic Reģistrācijas numurs is exactly the same
+		// 11-digit body as validateVAT's "LV" case above — it's the same
+		// number, just written without the "LV" prefix on a domestic
+		// imprint, same architecture as OIB/ЕИК/ΑΦΜ.
+		return validateVAT("LV", extractDigits(value))
 	case "NIPC":
 		// Portugal's NIPC (legal-entity ID) shares the same 9-digit body
 		// and weighted-mod-11 checksum as validateVAT's "PT" case
@@ -260,6 +266,12 @@ func cleanIdentifierValue(kind, value string) string {
 			a = a[len(a)-9:]
 		}
 		return a
+	case "Reģistrācijas numurs":
+		d := extractDigits(value)
+		if len(d) > 11 {
+			d = d[len(d)-11:]
+		}
+		return d
 	case "VAT":
 		// Now that BE/FR (and potentially others) tolerate optional
 		// internal spaces to match real-world formatting, the raw match
@@ -279,7 +291,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК" || kind == "OIB" || kind == "VAT Number"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК" || kind == "OIB" || kind == "VAT Number" || kind == "Reģistrācijas numurs"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -390,6 +402,10 @@ func singleCountryIdentifierKind(kind string) string {
 		// Lithuanian-language term, no other country's registry uses it.
 		// Real evidence: grupinispirkimas.lt's real Taisyklės page.
 		return "LT"
+	case "Reģistrācijas numurs":
+		// Latvian-language term, no other country's registry uses it.
+		// Real evidence: gatavosana.lv's real Juridiskā informācija page.
+		return "LV"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
@@ -538,6 +554,12 @@ func validateVAT(country, raw string) validity {
 		// hrOIBValid's doc comment for the algorithm and real-evidence
 		// confirmation.
 		return mod11Verdict(hrOIBValid(raw))
+	case "LV":
+		// Latvia's Reģistrācijas numurs/VAT: recognised 11-digit format,
+		// but no checksum implemented this round (see this Kind's
+		// vatPatterns doc comment) — format_valid, same discipline as
+		// LU/GB below.
+		return formatValid
 	case "LU", "GB":
 		// Recognised format; algorithms are documented but we only claim
 		// format_valid here to keep the false-"invalid" rate at zero.

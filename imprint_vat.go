@@ -446,6 +446,23 @@ func init() {
 		// comment) sits between the colon and that newline and is not
 		// whitespace, so `\s*` alone couldn't bridge it.
 		{"Įmonės kodas", "LT", regexp.MustCompile(`(?i)Įmonės\s+kodas\s*[:#]?\s*(?:&nbsp;)?\s*\d{9}\b`)},
+		// Latvia — Reģistrācijas numurs (the registration number), 11
+		// digits. Treated as VAT-equivalent (see isVATLikeIdentifierKind
+		// and validateIdentifier below), UNLIKE Lithuania's Įmonės kodas
+		// just above: real evidence, gatavosana.lv's real Juridiskā
+		// informācija page has "Reģistrācijas numurs: 40103719642" right
+		// alongside "PVN maksātāja numurs: LV40103719642" — the SAME
+		// 11-digit body, just with the "LV" VAT-country prefix added, same
+		// architecture as Bulgaria's ЕИК/Greece's ΑΦΜ/Croatia's OIB. No
+		// checksum implemented (stays format_valid — this round lacked
+		// confidence in the published Latvian algorithm to verify safely
+		// against the single real value available; several plausible
+		// weight sequences from general knowledge were tried by hand
+		// against 40103719642 and none matched, so nothing was guessed).
+		// Both boundary characters here are plain ASCII ("R"/digit), so
+		// (unlike Lithuania's "Į"-leading pattern) the leading `\b` is
+		// safe — verified directly, not assumed.
+		{"Reģistrācijas numurs", "LV", regexp.MustCompile(`(?i)\bReģistrācijas\s+numurs\s*[:#]?\s*\d{11}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.
