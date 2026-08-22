@@ -157,6 +157,13 @@ func init() {
 		// though not independently required by law the way NIP/KRS are.
 		// Real evidence: neptun.orlen.pl ("REGON: 388432405").
 		{"REGON", "PL", regexp.MustCompile(`\bREGON\s*[:#]?\s*\d{9}(?:\d{5})?\b`)},
+		// Portugal — NIPC (Número de Identificação de Pessoa Coletiva, 9
+		// digits), the domestic label-anchored form written WITHOUT the
+		// "PT" country prefix the existing VAT/PT pattern above requires
+		// — same architecture as NIP (Poland) / PartitaIVA (Italy) / CIF
+		// (Spain). Real evidence: urbana.com.pt's real "Ficha técnica"
+		// page ("NIPC -508980186").
+		{"NIPC", "PT", regexp.MustCompile(`\bNIPC\s*[:#-]?\s*\d{9}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

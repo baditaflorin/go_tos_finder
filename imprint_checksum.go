@@ -92,6 +92,12 @@ func validateIdentifier(kind, value, country string) validity {
 		// a domestic imprint. Real evidence: neptun.orlen.pl's real NIP
 		// (5252855028) validates correctly.
 		return mod11Verdict(plVATValid(extractDigits(value)))
+	case "NIPC":
+		// Portugal's NIPC (legal-entity ID) shares the same 9-digit body
+		// and weighted-mod-11 checksum as validateVAT's "PT" case
+		// (ptVATValid) — same architecture as NIP/PL above. Real evidence:
+		// urbana.com.pt's real NIPC (508980186).
+		return mod11Verdict(ptVATValid(extractDigits(value)))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -147,6 +153,12 @@ func cleanIdentifierValue(kind, value string) string {
 			d = d[len(d)-10:]
 		}
 		return d
+	case "NIPC":
+		d := extractDigits(value)
+		if len(d) > 9 {
+			d = d[len(d)-9:]
+		}
+		return d
 	case "VAT":
 		// Now that BE/FR (and potentially others) tolerate optional
 		// internal spaces to match real-world formatting, the raw match
@@ -166,7 +178,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -192,6 +204,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "NL"
 	case "NIP", "KRS", "REGON":
 		return "PL"
+	case "NIPC":
+		return "PT"
 	}
 	return ""
 }

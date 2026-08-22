@@ -2,6 +2,44 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.2 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 8: Portugal. Fetched a real, live
+business's registry page ("Ficha técnica", urbana.com.pt) and ran the
+shipped 1.7.1 extractor against it — legal_name extraction failed
+entirely despite the real page being a clean, textbook-shaped imprint.
+
+- **NIPC (Portugal's domestic tax/register ID) had no pattern at all**,
+  same class of gap as round 5's Polish NIP/KRS/REGON — with zero
+  identifiers found, extractImprintText's isLegalPage fallback bailed out
+  before the suffix-anchored scan ever ran. Added, reusing the existing
+  Portuguese weighted-mod-11 checksum (ptVATValid).
+- **A line starting with a literal, un-decoded "&nbsp;" spacer entity was
+  discarded entirely.** The extremely common real-world pattern
+  "&lt;strong&gt;Label:&lt;/strong&gt;&amp;nbsp;Value" leaves the value on
+  its own line beginning with "&nbsp;" once the bold tag is stripped —
+  the entity-corruption rejection filter (meant to catch genuinely
+  mis-encoded text) discarded the whole line, valid content included.
+  Added `trimLeadingTrailingNBSP`, stripping only a LEADING/TRAILING
+  "&nbsp;" so a genuinely embedded (more likely corrupted) one is still
+  caught.
+- **The sentence-boundary heuristic in `extractEntityAround` misread
+  "Soc." (Portuguese for "Sociedade") as ending a sentence**, truncating
+  the candidate name down to nothing usable and silently dropping
+  legal_name entirely — even after the two fixes above got the line
+  itself reached. Added a small, explicit exception list
+  (`knownNonSentenceAbbreviations`) for legal-form-adjacent abbreviations
+  that end in a period but aren't sentence boundaries.
+
+Two new permanent regression tests (imprint_extract_eu_round8_test.go);
+full existing suite still green, no regressions. No dedicated Portuguese
+ruleset added: NIPC plays a dual VAT/register role in Portugal's unified
+numbering system and this fixture didn't surface a cleanly-separate
+register citation, so requiring "register" here would risk overclaiming
+— same call as round 7's Belgium.
+
 ## 1.7.1 — 2026-08-22
 
 ### Fixed

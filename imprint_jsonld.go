@@ -458,6 +458,30 @@ func extractCopyrightFooter(body, pageURL string) []imprintCandidate {
 
 // --- Imprint / Impressum text ---------------------------------------------
 
+// trimLeadingTrailingNBSP strips a leading and/or trailing literal "&nbsp;"
+// token (repeated, if more than one) from s. stripTagsLines does not decode
+// HTML entities, so a very common real-world styling pattern —
+// "<strong>Label:</strong>&nbsp;Value" — leaves the VALUE line starting
+// with a literal "&nbsp;" once <strong> is stripped and the text splits
+// onto its own line. The entity-residue rejection filter just below (which
+// exists to reject genuinely corrupted/mis-encoded lines) would otherwise
+// discard this whole line, including the real, valid content after the
+// spacer. Real evidence: urbana.com.pt's real "Ficha técnica" page writes
+// "Propriedade:</strong>&nbsp;MoonMedia Comunicação, Soc. Unipessoal Lda" —
+// stripped to its own line, "&nbsp;MoonMedia..." was silently discarded in
+// full. Only strips at the very start/end, deliberately: an "&nbsp;"
+// embedded mid-line is left alone and still trips the corruption filter,
+// which is the case that filter is actually meant to catch.
+func trimLeadingTrailingNBSP(s string) string {
+	for strings.HasPrefix(s, "&nbsp;") {
+		s = strings.TrimSpace(s[len("&nbsp;"):])
+	}
+	for strings.HasSuffix(s, "&nbsp;") {
+		s = strings.TrimSpace(s[:len(s)-len("&nbsp;")])
+	}
+	return s
+}
+
 // extractImprintText line-scans for a legal-form suffix, extracts the entity
 // name around it, the address on the following lines, and attaches nearby
 // VAT/register identifiers within an ~800-byte proximity window (gated by
@@ -509,7 +533,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 	for idx, raw := range lines {
 		lineStart := cursor
 		cursor += len(raw) + 1 // +1 for the '\n' separator
-		line := strings.TrimSpace(raw)
+		line := trimLeadingTrailingNBSP(strings.TrimSpace(raw))
 		// Real evidence: eurostarshotels.com's real aviso legal states its
 		// identity as one unbroken sentence — name, register entry, CIF,
 		// and phone all in a single 172-character paragraph with no <br>
@@ -661,7 +685,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// all — simanova.it's real Partita IVA, eurostarshotels.com's
 			// real CIF, and neptun.orlen.pl's real NIP were all found and
 			// then discarded before ever reaching the winning candidate.
-			case "VAT", "PartitaIVA", "CIF", "NIP":
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {

@@ -1,10 +1,33 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.1"
+version: "1.7.2"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.7.2) — EU-market-expansion real-evidence round 8: Portugal.
+# TRL stays at 6 (bug fixes, single-sample evidence). Fetched one real,
+# live business registry page ("Ficha técnica", urbana.com.pt) and ran the
+# shipped 1.7.1 extractor against it — legal_name extraction failed
+# entirely on a clean, textbook-shaped real imprint. Found and fixed three
+# compounding real bugs: (1) NIPC (Portugal's domestic tax/register ID)
+# had no pattern at all, same class of gap as round 5's Polish NIP/KRS/
+# REGON, causing the whole extractor to bail out before the suffix-
+# anchored scan ever ran; (2) once identifiers were found and that gate
+# passed, a line starting with a literal un-decoded "&nbsp;" spacer entity
+# (the extremely common "<strong>Label:</strong>&nbsp;Value" pattern) was
+# still discarded whole by the entity-corruption rejection filter; (3)
+# even after both of those, the sentence-boundary heuristic in
+# extractEntityAround misread "Soc." (Portuguese for "Sociedade") as
+# ending a sentence, truncating the candidate name to nothing and
+# dropping legal_name a THIRD time over. All three had to be fixed
+# together for this one real page to extract correctly — a good
+# illustration of how compounding gaps can fully mask each other. Two new
+# regression tests (imprint_extract_eu_round8_test.go); full existing
+# suite still green, no regressions. No dedicated Portuguese ruleset
+# added: NIPC plays a dual VAT/register role in Portugal's unified
+# numbering system and this fixture didn't surface a cleanly-separate
+# register citation, so requiring "register" would risk overclaiming.
 # 2026-08-22 (1.7.1) — EU-market-expansion real-evidence round 7: Belgium.
 # TRL stays at 6 (bug fixes within the existing band, single-sample
 # evidence). Fetched one real, live business's mentions légales page

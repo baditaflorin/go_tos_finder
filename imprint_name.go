@@ -281,6 +281,29 @@ func extractAddressNearEntity(text, name string) string {
 	return ""
 }
 
+// knownNonSentenceAbbreviations lists short legal-form-adjacent
+// abbreviations that end in a period but do NOT end a sentence — see the
+// real-evidence comment at extractEntityAround's sentence-boundary check
+// for why this matters.
+var knownNonSentenceAbbreviations = map[string]bool{
+	"soc": true,
+}
+
+// precededByKnownAbbreviation reports whether the word ending immediately
+// before text[periodIdx] (expected to be a '.') is one of
+// knownNonSentenceAbbreviations.
+func precededByKnownAbbreviation(text string, periodIdx int) bool {
+	j := periodIdx
+	for j > 0 {
+		c := text[j-1]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+			break
+		}
+		j--
+	}
+	return knownNonSentenceAbbreviations[strings.ToLower(text[j:periodIdx])]
+}
+
 // extractEntityAround finds the company name preceding a suffix inside
 // `text` around its first occurrence. Returns the cleaned candidate, or ""
 // if nothing reasonable was found. The candidate is post-filtered through
@@ -317,7 +340,17 @@ func extractEntityAround(text, suffix string) string {
 		}
 		// A full-stop followed by a space is a sentence boundary — stop
 		// climbing so we don't pull the previous sentence into the name.
-		if c == '.' && i+1 < len(text) && text[i+1] == ' ' && i+2 < len(text) {
+		// Except a KNOWN abbreviation ("Soc." — see
+		// knownNonSentenceAbbreviations): real evidence, urbana.com.pt's
+		// real "Ficha técnica" page reads "MoonMedia Comunicação, Soc.
+		// Unipessoal Lda" — "Soc." (Portuguese for "Sociedade") directly
+		// precedes the legal-form suffix as part of the SAME entity
+		// description, not a new sentence; without this exception the
+		// heuristic truncated the candidate down to just "Unipessoal Lda"
+		// (identical in length to the suffix itself, with nothing real
+		// before it), which cleanCandidateName then correctly rejected as
+		// too short — silently dropping the whole legal_name.
+		if c == '.' && i+1 < len(text) && text[i+1] == ' ' && i+2 < len(text) && !precededByKnownAbbreviation(text, i) {
 			next := text[i+2]
 			if next >= 'A' && next <= 'Z' {
 				leftCut = i + 2
