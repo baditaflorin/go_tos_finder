@@ -38,6 +38,12 @@ import (
 // evidence in this expansion actually exercised that extraction path
 // against a live French page, and requiring a field this pass never
 // verified works would overclaim validation that wasn't done.
+//
+// RulesetPLUsude (round 5) follows the same shape: Poland's Ustawa o
+// świadczeniu usług drogą elektroniczną (Act on Providing Services by
+// Electronic Means — Poland's transposition of the e-Commerce Directive)
+// requires firm name, address, register entry (KRS), tax ID (NIP), and
+// contact — entity identification only, no named individual.
 const (
 	RulesetEUBaseline   = "eu_baseline"
 	RulesetDETMG        = "de_tmg"
@@ -46,6 +52,7 @@ const (
 	RulesetITDLgs70     = "it_dlgs70"
 	RulesetESLSSICE     = "es_lssice"
 	RulesetNLHandelsreg = "nl_handelsregisterwet"
+	RulesetPLUsude      = "pl_usude"
 )
 
 // Imprint is the structured, field-level result of analysing a verified
@@ -524,7 +531,7 @@ func imprintFieldChecklist(ruleset string) []string {
 		// split them if AT-specific completeness ever needs to distinguish
 		// "ECG-compliant" from "MedienG-compliant" independently.
 		return append(append([]string{}, base...), "register", "responsible_person")
-	case RulesetFRLCEN, RulesetITDLgs70, RulesetESLSSICE, RulesetNLHandelsreg:
+	case RulesetFRLCEN, RulesetITDLgs70, RulesetESLSSICE, RulesetNLHandelsreg, RulesetPLUsude:
 		// Entity-identification-only obligations (see the Ruleset consts'
 		// doc comment above for the legal citations and why
 		// responsible_person is deliberately excluded here).
@@ -553,6 +560,8 @@ func rulesetFor(country string) string {
 		return RulesetESLSSICE
 	case "NL":
 		return RulesetNLHandelsreg
+	case "PL":
+		return RulesetPLUsude
 	default:
 		return RulesetEUBaseline
 	}

@@ -124,6 +124,30 @@ func init() {
 		// all — a Spanish imprint's register disclosure was silently
 		// unmodeled (only CIF/NIF, the tax ID, was covered).
 		{"Hoja", "ES", regexp.MustCompile(`(?i)\bHoja\s*:?\s*[A-Z]{0,3}\s*[-.]?\s*\d[\d.]{2,9}\b`)},
+		// Poland — NIP (tax ID, 10 digits), the domestic label-anchored
+		// form written WITHOUT the "PL" country prefix the existing
+		// VAT/PL pattern above requires (that form is for cross-border EU
+		// VAT use; NIP on a domestic imprint never carries the prefix).
+		// Same architecture as PartitaIVA (Italy) / CIF (Spain): a
+		// label-anchored identifier the generic country-prefixed VAT
+		// pattern cannot see at all. Accepts the optional dash-grouped
+		// "###-###-##-##" form real evidence also showed alongside the
+		// solid 10-digit form. Real evidence: neptun.orlen.pl's real "Dane
+		// kontaktowe i rejestrowe" page ("NIP: 5252855028"); the dashed
+		// form ("NIP: 583-001-89-31") was independently observed on
+		// another real Polish company's registry-data page during the
+		// same search.
+		{"NIP", "PL", regexp.MustCompile(`\bNIP\s*[:#]?\s*\d{3}-?\d{3}-?\d{2}-?\d{2}\b`)},
+		// Poland — KRS (Krajowy Rejestr Sądowy), the National Court
+		// Register entry number — Poland's equivalent of Germany's HRB or
+		// Italy's REA. Not in the original table at all. Real evidence:
+		// neptun.orlen.pl ("KRS: 0000888254").
+		{"KRS", "PL", regexp.MustCompile(`\bKRS\s*[:#]?\s*\d{10}\b`)},
+		// Poland — REGON (statistical/business ID, 9 or 14 digits) —
+		// commonly disclosed alongside NIP/KRS on a real Polish imprint,
+		// though not independently required by law the way NIP/KRS are.
+		// Real evidence: neptun.orlen.pl ("REGON: 388432405").
+		{"REGON", "PL", regexp.MustCompile(`\bREGON\s*[:#]?\s*\d{9}(?:\d{5})?\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

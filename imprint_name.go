@@ -127,6 +127,13 @@ func looksAddressLine(s string) bool {
 		// extractAddressNearEntity's doc comment for the false-positive this
 		// same page surfaced on the OTHER side of that gap).
 		"rue",
+		// Real evidence: neptun.orlen.pl's real "Dane kontaktowe i
+		// rejestrowe" page lists its address as "Aleja Grunwaldzka 472,
+		// 80-309 Gdańsk" — the house number (472) and the postal code
+		// (80-309, split by a dash) both clear no consecutive-digit-run
+		// threshold at all, so without an explicit marker the line was
+		// silently dropped (same failure shape as the "rue" case above).
+		"aleja",
 	} {
 		if strings.Contains(low, marker) {
 			return true
@@ -195,6 +202,16 @@ func extractAddressNearEntity(text, name string) string {
 			// the break-markers below, this page's real address comes AFTER
 			// these lines, not before.
 			if strings.Contains(low, "kvk") || strings.Contains(low, "btw-id") {
+				continue
+			}
+			// NIP/KRS/REGON: real Polish tax-ID/register/statistical
+			// labels. Real evidence: neptun.orlen.pl's real registry-data
+			// page lists these three right after the real street address —
+			// all three (10, 10, and 9 digits respectively) cleared the
+			// digit-run heuristic and got wrongly absorbed into the
+			// address alongside (and beyond) the real "Aleja Grunwaldzka
+			// 472, 80-309 Gdańsk" line.
+			if strings.Contains(low, "nip") || strings.Contains(low, "krs") || strings.Contains(low, "regon") {
 				continue
 			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on

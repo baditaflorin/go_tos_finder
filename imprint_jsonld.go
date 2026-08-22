@@ -642,23 +642,26 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// the candidate's suffix-inferred country when they disagree.
 			switch id.Kind {
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
-				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja":
+				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
+				"KRS", "REGON":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
 				out[best].Identifiers = append(out[best].Identifiers, id)
-			// "PartitaIVA" (Italy) and "CIF" (Spain) are VAT-equivalent —
-			// literally what their labels mean ("Partita IVA" = VAT number;
-			// Spain's CIF/NIF doubles as the domestic VAT identifier under
-			// LSSICE) — not a separate company register number the way
-			// KvK/SIRET/HRB are. Real evidence: both were previously
-			// matched by findIdentifiers (imprint_vat.go already had
-			// patterns for them) but silently dropped here since neither
-			// Kind appeared in EITHER switch case at all — simanova.it's
-			// real Partita IVA and eurostarshotels.com's real CIF were both
-			// found and then discarded before ever reaching the winning
-			// candidate.
-			case "VAT", "PartitaIVA", "CIF":
+			// "PartitaIVA" (Italy), "CIF" (Spain), and "NIP" (Poland) are
+			// VAT-equivalent — literally what their labels mean ("Partita
+			// IVA" = VAT number; Spain's CIF/NIF doubles as the domestic
+			// VAT identifier under LSSICE; Poland's NIP IS the VAT number,
+			// just written without the "PL" country prefix on a domestic
+			// page) — not a separate company register number the way
+			// KvK/SIRET/HRB/KRS are. Real evidence: all three were
+			// previously matched by findIdentifiers (imprint_vat.go already
+			// had patterns for the first two) but silently dropped here
+			// since none of these Kinds appeared in EITHER switch case at
+			// all — simanova.it's real Partita IVA, eurostarshotels.com's
+			// real CIF, and neptun.orlen.pl's real NIP were all found and
+			// then discarded before ever reaching the winning candidate.
+			case "VAT", "PartitaIVA", "CIF", "NIP":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {

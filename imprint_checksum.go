@@ -85,6 +85,13 @@ func validateIdentifier(kind, value, country string) validity {
 		// and silently fell through to formatValid without even checking
 		// the checksum.
 		return mod11Verdict(luhnValid(extractDigits(value)))
+	case "NIP":
+		// Poland's domestic NIP is exactly the same 10-digit body and
+		// weighted-mod-11 checksum as validateVAT's "PL" case (plVATValid)
+		// — it's the same number, just written without the "PL" prefix on
+		// a domestic imprint. Real evidence: neptun.orlen.pl's real NIP
+		// (5252855028) validates correctly.
+		return mod11Verdict(plVATValid(extractDigits(value)))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -134,6 +141,12 @@ func cleanIdentifierValue(kind, value string) string {
 			a = a[len(a)-9:]
 		}
 		return a
+	case "NIP":
+		d := extractDigits(value)
+		if len(d) > 10 {
+			d = d[len(d)-10:]
+		}
+		return d
 	}
 	return value
 }
@@ -144,7 +157,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -168,6 +181,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "FR"
 	case "KvK":
 		return "NL"
+	case "NIP", "KRS", "REGON":
+		return "PL"
 	}
 	return ""
 }

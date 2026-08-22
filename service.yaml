@@ -1,10 +1,34 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.6.0"
+version: "1.7.0"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.7.0) — EU-market-expansion real-evidence round 5: Poland.
+# TRL stays at 6 (new capability, real-evidence-grounded, but a single
+# sample page — not broad population validation). Fetched one real, live
+# registry-data page (neptun.orlen.pl's real "Dane kontaktowe i
+# rejestrowe") and ran the shipped 1.6.0 extractor against it: it
+# extracted NOTHING at all — no legal_name, no address, no identifiers —
+# despite "ORLEN Neptun sp. z o.o." being trivially suffix-matchable in
+# isolation. Root cause: NIP/KRS/REGON (Poland's core registry
+# identifiers) had no patterns modeled at all, so extractImprintText's
+# isLegalPage fallback ("useful only if VAT/register IDs are present")
+# bailed out before the suffix-anchored scan ever ran. Added NIP (domestic
+# label-anchored form, same checksum algorithm as the existing PL-prefixed
+# VAT pattern), KRS (National Court Register, wired as register — Poland's
+# HRB/REA/SIREN equivalent), REGON (statistical ID), and a new pl_usude
+# ruleset (Poland's e-Commerce Directive transposition) following the same
+# base+register shape as round 4's four rulesets. Also fixed a real
+# address false positive: the real street line ("Aleja Grunwaldzka 472,
+# 80-309 Gdańsk") cleared no digit-run threshold and had no Polish
+# street-word marker, so the newly-added NIP/KRS/REGON lines would
+# otherwise have been wrongly absorbed into the address in its place —
+# added "aleja" as a street marker and NIP/KRS/REGON as address-scan skip
+# markers, same pattern as the Dutch KvK/BTW-id fix in round 1. One new
+# regression test (imprint_extract_eu_round5_test.go); full existing suite
+# still green, no regressions.
 # 2026-08-22 (1.6.0) — dedicated national imprint rulesets: fr_lcen (LCEN
 # Art. 6-III), it_dlgs70 (D.Lgs. 70/2003 Art. 7), es_lssice (LSSICE
 # Art. 10), nl_handelsregisterwet — each requires base fields + register,

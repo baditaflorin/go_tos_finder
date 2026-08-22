@@ -2,6 +2,45 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.0 — 2026-08-22
+
+### Added
+
+EU-market-expansion real-evidence round 5: Poland. Added
+`pl_usude` (Poland's Ustawa o świadczeniu usług drogą elektroniczną — the
+Polish e-Commerce Directive transposition), same shape as round 4's four
+rulesets: base fields + register, no responsible_person.
+
+### Fixed
+
+Fetched one real, live business registry-data page (neptun.orlen.pl's real
+"Dane kontaktowe i rejestrowe") and ran the shipped 1.6.0 extractor
+against it — it extracted **nothing at all**: no legal_name, no address,
+no identifiers, despite "ORLEN Neptun sp. z o.o." being trivially
+suffix-matchable in isolation.
+
+- **NIP/KRS/REGON — Poland's core registry identifiers — had no patterns
+  modeled at all.** With zero identifiers found, `extractImprintText`'s
+  `isLegalPage` fallback ("useful only if VAT/register IDs are present")
+  bailed out before the suffix-anchored scan ever ran, so the page's
+  legal_name/address were never even attempted. Added: NIP (domestic
+  label-anchored form, same weighted-mod-11 checksum as the existing
+  PL-prefixed VAT pattern — same architecture as PartitaIVA/CIF), KRS
+  (National Court Register — Poland's HRB/REA/SIREN equivalent, wired as
+  `register`), REGON (statistical ID).
+- **Real Polish street address dropped, replaced by the newly-added
+  NIP/KRS/REGON lines.** "Aleja Grunwaldzka 472" (house number) and
+  "80-309" (postal code, dash-split) both cleared no digit-run threshold
+  and had no Polish street-word marker ("Aleja"), while the 9-10-digit
+  NIP/KRS/REGON lines cleared it easily and would have been wrongly
+  absorbed into the address in its place. Added "aleja" as a street marker
+  and NIP/KRS/REGON as address-scan skip markers.
+
+One new permanent regression test (imprint_extract_eu_round5_test.go);
+full existing suite still green, no regressions. Sample size: 1 real page
+(a subsidiary of a large company, but the registry-disclosure page itself
+is genuine and unmodified).
+
 ## 1.6.0 — 2026-08-22
 
 ### Added
