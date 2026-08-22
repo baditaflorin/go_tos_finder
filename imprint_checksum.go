@@ -147,6 +147,15 @@ func cleanIdentifierValue(kind, value string) string {
 			d = d[len(d)-10:]
 		}
 		return d
+	case "VAT":
+		// Now that BE/FR (and potentially others) tolerate optional
+		// internal spaces to match real-world formatting, the raw match
+		// can carry them through into the emitted field ("BE 0704742612")
+		// unless stripped here. onlyAlnum is a no-op on the many VAT
+		// patterns that never allowed spaces in the first place (already
+		// clean), so this is a safe superset fix, not a behavior change
+		// for those.
+		return onlyAlnum(value)
 	}
 	return value
 }

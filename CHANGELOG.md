@@ -2,6 +2,39 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.1 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 7: Belgium. Fetched a real, live
+business's mentions légales page (factuo.be, naming both the Belgian site
+owner and its French hosting provider — a real multi-entity page) and ran
+the shipped 1.7.0 extractor against it.
+
+- **Belgian and French VAT numbers with the extremely common spaced
+  formatting went unmatched entirely.** Real evidence: "TVA BE 0704742612"
+  and "Num. de TVA : FR 29 421 527 797" — the original BE/FR patterns
+  required the digits to butt directly against the country prefix with
+  zero space. Widened both patterns to tolerate the real-world spacing;
+  added a generic `cleanIdentifierValue` case for the plain "VAT" kind so
+  the emitted field is the clean code, not the spaced raw match (a no-op
+  for the many other VAT patterns that never had this problem).
+- **A cross-entity address-absorption bug dragged an entirely different
+  company's address, in a different country, into the Belgian company's
+  address field.** "Nomenclature APE 6312Z" (an alternate real phrasing
+  of the French business-activity code, distinct from "Code APE" fixed in
+  round 1) and "TVA" (the French/Belgian abbreviation) weren't in the
+  address-scan stop-marker list, so both the activity code and the
+  unrelated French hosting company's full address bled into the result.
+
+One new permanent regression test plus a direct VAT-spacing unit test
+(imprint_extract_eu_round7_test.go); full existing suite still green, no
+regressions. No dedicated Belgian ruleset added this round: this real
+fixture never surfaced a BCE/KBO register-number citation distinct from
+the VAT number, so there isn't yet real evidence register extraction
+works reliably for Belgium — staying on eu_baseline rather than
+overclaiming, consistent with this expansion's standing discipline.
+
 ## 1.7.0 — 2026-08-22
 
 ### Added

@@ -1,10 +1,37 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.0"
+version: "1.7.1"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.7.1) — EU-market-expansion real-evidence round 7: Belgium.
+# TRL stays at 6 (bug fixes within the existing band, single-sample
+# evidence). Fetched one real, live business's mentions légales page
+# (factuo.be — a real multi-entity page, naming both the Belgian site
+# owner and its French hosting provider) and ran the shipped 1.7.0
+# extractor against it. Found and fixed two real bugs: (1) Belgian and
+# French VAT numbers with the extremely common spaced formatting ("TVA BE
+# 0704742612", "Num. de TVA : FR 29 421 527 797") went unmatched entirely
+# — both patterns required the digits to butt directly against the
+# country prefix with zero space; (2) a cross-entity address-absorption
+# bug ("Nomenclature APE" — an alternate real phrasing of the French
+# business-activity code distinct from "Code APE" fixed in round 1 — and
+# "TVA" weren't stop-markers) dragged the unrelated French hosting
+# company's entire address, in a different country, into the Belgian
+# company's own address field. Proximity-based candidate disambiguation
+# correctly preferred the site owner's own VAT over the hosting company's
+# once both were matchable. One honestly-documented gap NOT fixed: the
+# Belgian street line ("Rafhay 198") has no recognisable street-type word
+# at all, a harder class of gap than the marker-based fixes so far — the
+# "address" checklist item is still satisfied by the postal-code/city
+# line found, so this doesn't affect completeness_score. No dedicated
+# Belgian ruleset added: this fixture never surfaced a BCE/KBO
+# register-number citation distinct from the VAT number, so there isn't
+# yet real evidence register extraction works reliably for Belgium —
+# staying on eu_baseline rather than overclaiming. Two new regression
+# tests (imprint_extract_eu_round7_test.go); full existing suite still
+# green, no regressions.
 # 2026-08-22 (1.7.0) — EU-market-expansion real-evidence round 5: Poland.
 # TRL stays at 6 (new capability, real-evidence-grounded, but a single
 # sample page — not broad population validation). Fetched one real, live

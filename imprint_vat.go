@@ -33,7 +33,11 @@ func init() {
 	vatPatterns = []vatPattern{
 		// EU VAT numbers — common formats.
 		{"VAT", "AT", regexp.MustCompile(`\bATU\d{8}\b`)},
-		{"VAT", "BE", regexp.MustCompile(`\bBE0\d{9}\b`)},
+		// Optional space after "BE": real evidence, factuo.be's real
+		// mentions légales writes "TVA BE 0704742612" (space, no space
+		// within the 10-digit body) — the original pattern required the
+		// digits to butt directly against "BE" with no space at all.
+		{"VAT", "BE", regexp.MustCompile(`\bBE\s?0\d{9}\b`)},
 		{"VAT", "BG", regexp.MustCompile(`\bBG\d{9,10}\b`)},
 		{"VAT", "CY", regexp.MustCompile(`\bCY\d{8}[A-Z]\b`)},
 		{"VAT", "CZ", regexp.MustCompile(`\bCZ\d{8,10}\b`)},
@@ -43,7 +47,12 @@ func init() {
 		{"VAT", "EL", regexp.MustCompile(`\bEL\d{9}\b`)},
 		{"VAT", "ES", regexp.MustCompile(`\bES[A-Z0-9]\d{7}[A-Z0-9]\b`)},
 		{"VAT", "FI", regexp.MustCompile(`\bFI\d{8}\b`)},
-		{"VAT", "FR", regexp.MustCompile(`\bFR[A-Z0-9]{2}\d{9}\b`)},
+		// Optional spaces throughout: real evidence, factuo.be's real
+		// mentions légales (naming its French hosting provider) writes
+		// "FR 29 421 527 797" — check-chars and every digit group
+		// space-separated, none of which the original contiguous pattern
+		// allowed for.
+		{"VAT", "FR", regexp.MustCompile(`\bFR\s?[A-Z0-9]{2}\s?\d{3}\s?\d{3}\s?\d{3}\b`)},
 		{"VAT", "GB", regexp.MustCompile(`\bGB\d{9}\b`)},
 		{"VAT", "HR", regexp.MustCompile(`\bHR\d{11}\b`)},
 		{"VAT", "HU", regexp.MustCompile(`\bHU\d{8}\b`)},

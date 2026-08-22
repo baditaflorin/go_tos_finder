@@ -249,7 +249,19 @@ func extractAddressNearEntity(text, name string) string {
 				// a false positive. Not an address field at all, so this
 				// must stop collection before looksAddressLine ever sees it,
 				// same as the VAT/register markers above.
-				strings.Contains(low, "code ape") || strings.Contains(low, "code naf") {
+				strings.Contains(low, "code ape") || strings.Contains(low, "code naf") ||
+				// "TVA" (French/Belgian for VAT) and "Nomenclature APE"
+				// (an alternate real-world phrasing of the French
+				// business-activity code, distinct from "Code APE" above).
+				// Real evidence: factuo.be's real mentions légales lists
+				// "TVA BE 0704742612" right after the real Belgian street
+				// address, and separately "Nomenclature APE 6312Z" for a
+				// different (French hosting) entity further down the same
+				// page — both cleared looksAddressLine's digit-run
+				// heuristic and got absorbed into the address, the second
+				// one dragging in an entirely different company's address
+				// from a different country in the process.
+				strings.Contains(low, "tva") || strings.Contains(low, "nomenclature ape") {
 				break
 			}
 			if looksAddressLine(clean) {
