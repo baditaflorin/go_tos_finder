@@ -2,6 +2,45 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.4 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 9: Ireland. Fetched a real, live
+business's website footer (proxima.ie/company-registered-address/, a real
+Irish company-formation/registered-office agent) and ran the shipped 1.7.3
+extractor against it.
+
+- **Ireland's CRO (Companies Registration Office) company number had no
+  pattern at all.** Real evidence: "Company Registration No: 613314" is 6
+  digits, which the existing UK-only `CompaniesHouse` pattern's `\d{7,8}`
+  requirement cannot match. Added a dedicated `CRO` vatPattern
+  (imprint_vat.go).
+- **Country still came out "GB" instead of "IE" even after the pattern was
+  added.** Two compounding causes: suffixTable maps bare "Ltd" only to GB
+  (Irish "Ltd" companies aren't modelled there — a real, live ambiguity),
+  and the real footer's own register line ("Company Registration No:
+  613314") false-matches suffixTable's low-confidence generic
+  `"Company"->US` entry (a bare English word, not a real US legal-form
+  suffix), becoming its own throwaway candidate that sits at proximity
+  distance ~0 from the identifier — winning the proximity-attachment race
+  over the real winning candidate ("Proxima Tax Services Ltd") a few
+  hundred bytes away. `backfillWinnerIdentifiers` already backfilled the
+  Register *string* onto the winner, but never carried over the underlying
+  `identifierHit`, so `singleCountryIdentifierKind`'s ground-truth country
+  correction never ran. Fixed by having the Register backfill also copy the
+  matching identifierHit, mirroring the pre-existing VAT backfill right
+  below it — this closes the same latent gap for every other register-kind
+  identifier (FN, REA, Hoja, KvK, NIP, KRS, REGON, NIPC), not just CRO.
+
+One new permanent regression test (imprint_extract_eu_round9_test.go);
+full existing suite still green, no regressions. No dedicated Irish
+ruleset added: S.I. No. 68/2003 reg. 6's register-number requirement is
+conditional ("where applicable"), the same conditionality as the EU
+baseline itself, so staying on eu_baseline avoids overclaiming a hard
+requirement this one fixture didn't establish — consistent with round
+7/8's Belgium/Portugal discipline.
+
 ## 1.7.3 — 2026-08-22
 
 ### Fixed
