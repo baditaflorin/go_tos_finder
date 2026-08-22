@@ -2,6 +2,53 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.5.2 — 2026-08-22
+
+### Fixed
+
+Found by running the shipped 1.5.1 imprint extractor against a real, live
+Austrian imprint page again (hotelrose.at/impressum_de.html — the same
+fixture the 1.5.1 pass used) and noticing a real, present VAT number was
+silently dropped.
+
+- **VAT dropped when the winning JSON-LD candidate lacks it but a same-page
+  plain-text candidate found it.** The real page's JSON-LD block
+  (`@type: "Hotel"`) has no `vatID` field at all; its visible text literally
+  reads "UID-Nr.: ATU43951103" — a well-formed, valid Austrian VAT number
+  that the plain-text `imprint_label` candidate (added in 1.5.1) DOES
+  capture via proximity attachment. But `mergeImprintCandidates`
+  (`imprint.go`) only merges same-page candidates on exact case-insensitive
+  name equality, and the JSON-LD candidate's name
+  (`"Aktivhotel zur Rose - Franz Holzmann"`) never matched the plain-text
+  candidate's name (`"Aktivhotel Zur Rose"`) — different casing, different
+  trailing content. Since JSON-LD outranks plain text in
+  `bestImprintCandidate`, the JSON-LD candidate won with no VAT, and the
+  VAT-bearing candidate was discarded outright. Worse: because
+  `scoreImprint` only adds VAT to the completeness denominator when a VAT is
+  actually present, the missing VAT didn't lower the score either — the page
+  reported a deceptively perfect `completeness_score: 100` despite genuinely
+  failing to surface a real, present VAT number.
+
+  Fixed with a new `backfillWinnerIdentifiers` step (`imprint.go`): after
+  `bestImprintCandidate` picks the winning candidate, a still-missing
+  `Register`/`VAT` is backfilled from any OTHER candidate in the SAME
+  single-page candidate list that has it — not gated on name match.
+  `extractImprintFields` only ever runs on a single already-fetched,
+  already-verified imprint page, so unlike go_legal_entity's original
+  multi-page `mergeCandidates` (which needs strict name-matching to avoid
+  conflating two different companies found on two different pages), a
+  same-page identifier find is already itself the evidence of entity
+  association. `mergeImprintCandidates`'s existing exact-name merge behaviour
+  for genuinely-duplicate same-named candidates (e.g. JSON-LD + hCard both
+  naming the identical company) is unchanged — this is an additional
+  backfill step, not a loosening of that function.
+
+New regression tests (`imprint_extract_real_evidence_test.go`): VAT/
+`vat_validation`/`vat_valid` assertions added to the existing hotelrose.at
+real-evidence test, plus two new tests isolating the backfill mechanism
+directly (`TestBackfillWinnerIdentifiersHotelRoseRealEvidencePattern`,
+`TestBackfillWinnerIdentifiersDoesNotBackfillFromUnrelatedName`).
+
 ## 1.5.1 — 2026-08-22
 
 ### Fixed

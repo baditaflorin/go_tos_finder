@@ -256,6 +256,23 @@ func TestExtractImprintFieldsHotelRoseSoleTraderRealEvidence(t *testing.T) {
 	if im.Register != "Landesgericht Innsbruck" {
 		t.Errorf("Register = %q, want %q (register judgment call: a court-only mention with no FN number still counts)", im.Register, "Landesgericht Innsbruck")
 	}
+	// Bug 5 (1.5.2): the real page's visible text carries "UID-Nr.:
+	// ATU43951103", found by the imprint_label plain-text candidate via
+	// proximity attachment — but the winning candidate is JSON-LD ("Hotel"),
+	// which carries no vatID field at all. Before the backfill fix, the two
+	// candidates' names ("Aktivhotel zur Rose - Franz Holzmann" vs
+	// "Aktivhotel Zur Rose") never matched exactly, so mergeImprintCandidates
+	// never combined them and this real, present, valid VAT number was
+	// silently dropped even though the extractor genuinely found it.
+	if im.VAT != "ATU43951103" {
+		t.Errorf("VAT = %q, want ATU43951103 (must be backfilled from the losing imprint_label candidate into the winning JSON-LD candidate)", im.VAT)
+	}
+	if im.VATValidation != string(checksumValid) {
+		t.Errorf("VATValidation = %q, want checksum_valid", im.VATValidation)
+	}
+	if !containsStr(im.FieldsFound, "vat_valid") {
+		t.Errorf("FieldsFound = %v, want it to contain vat_valid", im.FieldsFound)
+	}
 	if !containsStr(im.FieldsFound, "responsible_person") {
 		t.Errorf("FieldsFound = %v, want it to contain responsible_person", im.FieldsFound)
 	}
@@ -395,6 +412,93 @@ func TestDecodeCFEmailMalformedInput(t *testing.T) {
 		if got := decodeCFEmail(h); got != "" {
 			t.Errorf("decodeCFEmail(%q) = %q, want empty", h, got)
 		}
+	}
+}
+
+// --- Bug 5: VAT dropped when the winning JSON-LD candidate lacks it but a --
+// --- same-page plain-text candidate found it (differently-cased name) -----
+
+// TestBackfillWinnerIdentifiersHotelRoseRealEvidencePattern is a minimal,
+// isolated reproduction of the exact real-world pattern found on
+// hotelrose.at: a JSON-LD candidate (ranked highest, so it wins as "best")
+// whose name is a superset/differently-worded string of a lower-ranked
+// plain-text candidate's name, so mergeImprintCandidates' exact
+// case-insensitive match never combines them — yet the plain-text
+// candidate's VAT is genuinely for the same entity, since this whole
+// function only ever runs on a single already-fetched, already-verified
+// imprint page (see extractImprintFields's doc comment). Constructed
+// directly against extractImprintCandidates + backfillWinnerIdentifiers
+// (rather than the full hotelRoseImpressumFixture, already covered by
+// TestExtractImprintFieldsHotelRoseSoleTraderRealEvidence above) to pin down
+// the mechanism itself, independent of the country/register/responsible-
+// person logic layered on top in extractImprintFields.
+func TestBackfillWinnerIdentifiersHotelRoseRealEvidencePattern(t *testing.T) {
+	body := `<!DOCTYPE html>
+<html lang="de">
+<head>
+<script type="application/ld+json">
+{"@context":"http://schema.org","@type":"Hotel","name":"Aktivhotel zur Rose - Franz Holzmann","address":{"@type":"PostalAddress","streetAddress":"Brenner Straße 30","postalCode":"6150","addressLocality":"Steinach am Brenner","addressCountry":"A"}}
+</script>
+</head>
+<body>
+<p>Firmenname: Aktivhotel Zur Rose<br>UID-Nr.: ATU43951103</p>
+</body>
+</html>`
+
+	cands := mergeImprintCandidates(extractImprintCandidates(body, "https://www.hotelrose.at/impressum_de.html"))
+	best := bestImprintCandidate(cands)
+	if best == nil {
+		t.Fatal("bestImprintCandidate returned nil")
+	}
+	if best.Source != "json_ld" {
+		t.Fatalf("test setup invalid: best.Source = %q, want json_ld (this test exists to prove JSON-LD wins while lacking the VAT another candidate found)", best.Source)
+	}
+	if best.VAT != "" {
+		t.Fatalf("test setup invalid: best.VAT = %q, want empty before backfill (this real JSON-LD block has no vatID field)", best.VAT)
+	}
+
+	backfillWinnerIdentifiers(best, cands)
+
+	if best.VAT != "ATU43951103" {
+		t.Errorf("after backfillWinnerIdentifiers, best.VAT = %q, want ATU43951103", best.VAT)
+	}
+	if best.Name != "Aktivhotel zur Rose - Franz Holzmann" {
+		t.Errorf("backfill must not overwrite the winning candidate's own name; Name = %q", best.Name)
+	}
+
+	// End-to-end: the same pattern through the full extraction pipeline must
+	// surface the VAT in the final Imprint.
+	im := extractImprintFields("https://www.hotelrose.at/impressum_de.html", body, "hotelrose.at")
+	if im.VAT != "ATU43951103" {
+		t.Errorf("extractImprintFields: VAT = %q, want ATU43951103", im.VAT)
+	}
+	if im.VATValidation != string(checksumValid) {
+		t.Errorf("extractImprintFields: VATValidation = %q, want checksum_valid", im.VATValidation)
+	}
+}
+
+// TestBackfillWinnerIdentifiersDoesNotBackfillFromUnrelatedName is a
+// deliberately-scoped-back guard: backfillWinnerIdentifiers is intentionally
+// loose about NAME matching (that's the whole point of this fix), but it
+// still only ever draws from the actual same-page candidate list that
+// extractImprintCandidates produced for THIS page — it is not a blind
+// page-wide regex sweep. This test just pins down that the mechanism has no
+// hidden extra source: with a single candidate (no second candidate to
+// backfill from at all), best.VAT/Register are left exactly as extracted.
+func TestBackfillWinnerIdentifiersDoesNotBackfillFromUnrelatedName(t *testing.T) {
+	cands := []imprintCandidate{
+		{Name: "Solo Trader GmbH", Source: "json_ld"},
+	}
+	best := bestImprintCandidate(cands)
+	if best == nil {
+		t.Fatal("bestImprintCandidate returned nil")
+	}
+	backfillWinnerIdentifiers(best, cands)
+	if best.VAT != "" {
+		t.Errorf("VAT = %q, want empty (no other candidate exists to backfill from)", best.VAT)
+	}
+	if best.Register != "" {
+		t.Errorf("Register = %q, want empty (no other candidate exists to backfill from)", best.Register)
 	}
 }
 

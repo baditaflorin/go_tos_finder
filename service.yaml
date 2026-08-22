@@ -1,10 +1,36 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.5.1"
+version: "1.5.2"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.5.2) — third real-evidence bug-fix pass, continued live-site
+# verification of the same hotelrose.at fixture the 1.5.1 pass used. TRL
+# stays at 6 (bug fix within the existing band, not new capability/coverage;
+# one concrete real-data fix, not a broad new validation pass). Ran the
+# ACTUAL post-1.5.1 extractImprintFields() against hotelrose.at's real
+# Impressum page again and found one more real, present field silently
+# dropped: the page's visible text reads "UID-Nr.: ATU43951103" (a valid
+# Austrian VAT, confirmed by the vendored checksum validator), captured by
+# the imprint_label plain-text candidate — but the winning candidate is
+# JSON-LD (@type "Hotel", ranked highest), which has no vatID field at all.
+# mergeImprintCandidates only combines same-page candidates on exact
+# case-insensitive name equality; the JSON-LD name ("Aktivhotel zur Rose -
+# Franz Holzmann") and the plain-text label's name ("Aktivhotel Zur Rose")
+# never matched, so the VAT-bearing candidate was discarded outright and the
+# winning candidate's VAT stayed empty — and because scoreImprint only adds
+# VAT to the completeness denominator when present, this page reported a
+# deceptively perfect completeness_score: 100 despite genuinely failing to
+# surface a real, present VAT number. Fixed with a new
+# backfillWinnerIdentifiers step (imprint.go): after bestImprintCandidate()
+# picks the winner, a missing Register/VAT is backfilled from any OTHER
+# candidate in the SAME single-page candidate list that has it — not gated
+# on name match, since extractImprintFields only ever runs on one
+# already-fetched, already-verified page (no cross-entity conflation risk
+# the way go_legal_entity's original multi-page mergeCandidates had to guard
+# against). mergeImprintCandidates' existing exact-name merge behaviour for
+# genuinely-duplicate same-named candidates is unchanged.
 # 2026-08-22 (1.5.1) — real-evidence bug-fix pass on the imprint field
 # extraction shipped earlier the same day (1.5.0). This is exactly the kind
 # of live-domain validation the 1.5.0 note below flagged as NOT having

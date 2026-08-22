@@ -354,6 +354,75 @@ func bestImprintCandidate(cands []imprintCandidate) *imprintCandidate {
 	return best
 }
 
+// backfillWinnerIdentifiers fills Register/VAT gaps on the winning candidate
+// (as picked by bestImprintCandidate) from any OTHER candidate in the same
+// single-page candidate list that has them — regardless of whether the
+// names match. This is deliberately looser than mergeImprintCandidates'
+// exact-name-match merge: that function exists to combine genuinely-
+// duplicate same-named candidates (e.g. JSON-LD + hCard both naming the
+// identical company) and its strict matching is right-sized for
+// go_legal_entity's original multi-page/multi-entity crawl context, where a
+// name mismatch plausibly means two different real companies on two
+// different pages. extractImprintFields only ever runs on a single
+// already-fetched, already-verified imprint page (see its doc comment), so
+// that risk doesn't apply here: an identifier (VAT/register) found ANYWHERE
+// in this one page's own candidate list is attributable to the one entity
+// the page is about — a same-page proximity/format-based identifier find
+// (see extractImprintText) is already itself the evidence of entity
+// association, independent of whether the extractor that found the name
+// happened to capture it in exactly the same casing/wording as the winning
+// candidate's name.
+//
+// Real evidence: hotelrose.at's real Impressum has JSON-LD naming "Aktivhotel
+// zur Rose - Franz Holzmann" (no vatID field at all) winning as best over a
+// plain-text "Firmenname: Aktivhotel Zur Rose" candidate that DID capture
+// the page's visible "UID-Nr.: ATU43951103" via proximity attachment — two
+// different strings under strings.ToLower, so mergeImprintCandidates never
+// combines them and the JSON-LD winner's VAT silently stayed empty even
+// though the VAT was genuinely present and found. Register is not usually
+// affected by this same gap in practice, because courtMention (below, in
+// extractImprintFields) already independently scans the whole page's text
+// for a named register court outside of any candidate at all — but a
+// candidate-attached register NUMBER (HRB/FN/etc., as opposed to a bare
+// court name) can still hit this exact gap, so Register is backfilled here
+// too for the same reason as VAT.
+func backfillWinnerIdentifiers(best *imprintCandidate, cands []imprintCandidate) {
+	if best == nil {
+		return
+	}
+	find := func(has func(*imprintCandidate) bool) *imprintCandidate {
+		var found *imprintCandidate
+		foundScore := 1 << 30
+		for i := range cands {
+			c := &cands[i]
+			if c == best || c.Name == "" || !has(c) {
+				continue
+			}
+			score := candidateSourceRank(c.Source)*10 + candidateConfRank(c.Confidence)
+			if score < foundScore {
+				foundScore = score
+				found = c
+			}
+		}
+		return found
+	}
+	if best.Register == "" {
+		if c := find(func(c *imprintCandidate) bool { return c.Register != "" }); c != nil {
+			best.Register = c.Register
+		}
+	}
+	if best.VAT == "" {
+		if c := find(func(c *imprintCandidate) bool { return c.VAT != "" }); c != nil {
+			best.VAT = c.VAT
+			for _, id := range c.Identifiers {
+				if id.Kind == "VAT" && id.Value == c.VAT {
+					best.Identifiers = append(best.Identifiers, id)
+				}
+			}
+		}
+	}
+}
+
 // imprintFieldChecklist returns the ordered field keys the given ruleset
 // requires unconditionally. VAT is handled separately by scoreImprint: it is
 // never unconditionally mandatory under any of these rulesets (a sole
@@ -454,6 +523,7 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	text := stripTagsLines(body)
 	candidates := mergeImprintCandidates(extractImprintCandidates(body, pageURL))
 	best := bestImprintCandidate(candidates)
+	backfillWinnerIdentifiers(best, candidates)
 
 	var vatValidation string
 	if best != nil {
