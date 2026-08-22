@@ -483,28 +483,50 @@ func trimLeadingTrailingNBSP(s string) string {
 }
 
 // namedEntityAccents maps a small, evidence-driven set of named HTML
-// entities for accented Latin letters to the real character. stripTagsLines
-// never decodes entities (see its doc comment / the trimLeadingTrailingNBSP
-// precedent just above), so a suffixTable entry (imprint_suffix.go) that
-// itself contains an accented letter — e.g. Luxembourg's "S.à r.l." or
-// Switzerland's "Sàrl" — can NEVER match a real page that renders that
-// letter as its named HTML entity rather than a raw UTF-8 byte. Real
-// evidence: menu.lu's real, live "Mentions légales" page writes its own
-// legal name as "WeServices S.&agrave; r.l." — the entity form, not "à" —
-// which silently defeated detectSuffix entirely: nothing on the page
-// suffix-matched at all, so no candidate (and therefore no legal_name) was
-// ever extracted despite this being a clean, textbook imprint. Deliberately
-// narrow — extend this map only when a new real page evidences another
-// entity actually breaking suffix detection, same discipline as this file's
-// knownNonSentenceAbbreviations (imprint_name.go).
+// entities to the real character they represent. stripTagsLines never
+// decodes entities (see its doc comment / the trimLeadingTrailingNBSP
+// precedent just above), so text that depends on the DECODED character
+// either to suffix-match (a suffixTable entry containing an accented
+// letter — e.g. Luxembourg's "S.à r.l." or Switzerland's "Sàrl" — imprint_
+// suffix.go) or to survive the entity-corruption rejection filter just
+// below (a literal "&" in the entity's own real name) can silently fail.
+// Despite the name (round 9/10's original, accent-only scope), this map
+// has grown to cover any narrowly-evidenced entity that is safe to decode
+// — i.e. its un-decoded form actively breaks extraction and decoding it
+// carries no genuine-corruption risk (see decodeKnownAccentEntities' doc
+// comment for why "&amp;" specifically qualifies but &nbsp;/&quot;/&copy;
+// do not).
+//
+//   - "&agrave;" -> "à": menu.lu's real, live "Mentions légales" page
+//     writes its own legal name as "WeServices S.&agrave; r.l." — the
+//     entity form, not "à" — which silently defeated detectSuffix
+//     entirely: nothing on the page suffix-matched at all, so no
+//     candidate (and therefore no legal_name) was ever extracted despite
+//     this being a clean, textbook imprint.
+//   - "&amp;" -> "&": bqredovisning.se's real, live privacy-policy page
+//     (a Swedish accounting firm's GDPR data-controller disclosure, the
+//     Swedish analogue of an imprint) names itself "BQ Redovisning &amp;
+//     Rådgivning AB" — an entirely ordinary ampersand-in-name (like
+//     "H&M" or "Procter & Gamble"), not corruption at all. Left
+//     un-decoded, it tripped the entity-corruption rejection filter
+//     below, discarding the WHOLE line (name + suffix + the org.nr right
+//     next to it) outright.
+//
+// Deliberately narrow — extend this map only when a new real page
+// evidences another entity actually breaking extraction, same discipline
+// as this file's knownNonSentenceAbbreviations (imprint_name.go).
 var namedEntityAccents = map[string]string{
 	"&agrave;": "à",
+	"&amp;":    "&",
 }
 
 // decodeKnownAccentEntities replaces every namedEntityAccents occurrence in
-// s. Deliberately does NOT touch &nbsp;/&quot;/&copy;/&amp; — those stay
-// literal so the entity-corruption rejection filter just below (in
-// extractImprintText) still sees them.
+// s. Deliberately does NOT touch &nbsp;/&quot;/&copy; — those are page-
+// layout/formatting artifacts that never form part of a real name, unlike
+// "&" (a real, common name character) or an accented letter (a real,
+// common name character rendered as its entity) — so they stay literal,
+// and the entity-corruption rejection filter just below (in
+// extractImprintText) still sees and rejects them.
 func decodeKnownAccentEntities(s string) string {
 	for entity, ch := range namedEntityAccents {
 		if strings.Contains(s, entity) {
@@ -708,7 +730,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			switch id.Kind {
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
-				"KRS", "REGON", "CRO", "RCS":
+				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}

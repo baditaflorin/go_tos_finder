@@ -197,6 +197,22 @@ func init() {
 		// the literal, un-decoded "n&deg;" ordinal-sign entity, which
 		// stripTagsLines never decodes).
 		{"RCS", "LU", regexp.MustCompile(`(?i)\bRCS\s*(?:Luxembourg)?\s*(?:n(?:&deg;|°|º|o)?\.?)?\s*:?\s*[A-Z]\s?\d{4,7}\b`)},
+		// Sweden — Organisationsnummer, the domestic company-register number
+		// (10 digits, hyphenated 6-4) that doubles as the base of the
+		// SE-prefixed VAT number above ("SE" + org.nr digits + "01") — the
+		// register disclosure Lag (2002:562) om elektronisk handel och andra
+		// informationssamhällets tjänster 8 § (Sweden's e-Commerce Directive
+		// transposition — "namn... organisationsnummer... i förekommande
+		// fall") requires alongside name/address/contact. Distinct
+		// Kind name from the existing Norwegian "OrgNr" entry above (same
+		// underlying word, "organisationsnummer" vs "organisasjonsnummer",
+		// but a different digit shape — Norway's is 9 digits in 3-3-3
+		// groups with no hyphen, Sweden's is 10 digits split 6-4 by a
+		// hyphen) so singleCountryIdentifierKind (imprint_checksum.go) can
+		// attribute it unambiguously to SE. Real evidence:
+		// bqredovisning.se's real, live privacy-policy page ("BQ
+		// Redovisning &amp; Rådgivning AB (org.nr 559086-2809)").
+		{"Organisationsnummer", "SE", regexp.MustCompile(`(?i)\borg(?:anisationsnummer|\.?\s?nr)\.?\s*:?\s*\d{6}-\d{4}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

@@ -210,6 +210,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "IE"
 	case "RCS":
 		return "LU"
+	case "Organisationsnummer":
+		return "SE"
 	}
 	return ""
 }

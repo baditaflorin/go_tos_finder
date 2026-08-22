@@ -749,12 +749,25 @@ var hostingProsePrefixes = []string{
 
 // trimAtConjunction handles "YOOX and Meta Platforms Ireland Limited" by
 // keeping only the trailing entity (the one ending in the suffix).
+//
+// " & " (a literal ampersand) is deliberately NOT in this conjunction list.
+// It was originally included, unevidenced, alongside the real "and"/"y"/
+// "et"/"und"/"e" word-for-word translations this function's own doc
+// comment cites real evidence for (YOOX/Meta) — but an ampersand is far
+// more often part of a SINGLE company's own legal name (H&M, Procter &
+// Gamble, ...) than a joiner between two DIFFERENT entities. Real
+// evidence: bqredovisning.se's real, live privacy-policy page names
+// itself "BQ Redovisning & Rådgivning AB" — trimming at " & " truncated
+// the extracted candidate down to just "Rådgivning AB", silently dropping
+// "BQ Redovisning" from the legal_name. Removed rather than special-cased,
+// since no real page has ever evidenced "&" actually joining two distinct
+// entities the way "and" does in the YOOX/Meta fixture.
 func trimAtConjunction(s, suffix string) string {
 	suffIdx := strings.LastIndex(s, suffix)
 	if suffIdx < 0 {
 		return s
 	}
-	for _, conj := range []string{" and ", " & ", " y ", " et ", " und ", " e "} {
+	for _, conj := range []string{" and ", " y ", " et ", " und ", " e "} {
 		i := strings.LastIndex(s[:suffIdx], conj)
 		if i > 0 {
 			s = strings.TrimSpace(s[i+len(conj):])

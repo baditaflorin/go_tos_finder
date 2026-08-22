@@ -2,6 +2,48 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.6 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 11: Sweden. Fetched a real, live
+business's GDPR privacy-policy page (bqredovisning.se, an SRF-authorised
+Swedish accounting firm — Sweden's closest analogue to an imprint page,
+since Sweden has no dedicated "imprint" legal tradition) and ran the
+shipped 1.7.5 extractor against it — it extracted **nothing at all**
+(CompletenessScore 0), despite "BQ Redovisning & Rådgivning AB" being
+trivially suffix-matchable ("AB") in isolation. Found and fixed two
+compounding real bugs, plus one adjacent regression the second fix
+exposed:
+
+- **The entity-corruption rejection filter discarded the whole line for
+  containing a literal "&amp;"** — but an ampersand is an entirely
+  ordinary company-name character (H&M, Procter & Gamble, ...), not
+  corruption. Extended `decodeKnownAccentEntities` (added in round 10) to
+  also decode `"&amp;"` -> `"&"`.
+- **Sweden's domestic Organisationsnummer (10 digits, hyphenated 6-4 —
+  "org.nr 559086-2809") had no register pattern at all**; the existing SE
+  VAT pattern only covers the "SE...01"-wrapped form. Added a dedicated
+  `Organisationsnummer` vatPattern, distinct from Norway's existing
+  `OrgNr` Kind (different digit shape).
+- **Fixing the first bug exposed a third, pre-existing bug:**
+  `trimAtConjunction`'s conjunction list included `" & "` (never itself
+  real-evidenced — only "and"/"y"/"et"/"und"/"e" have a cited real
+  fixture, YOOX/Meta), which then wrongly truncated the now-surviving
+  candidate name from "BQ Redovisning & Rådgivning AB" down to just
+  "Rådgivning AB". Removed `" & "` from the conjunction list entirely — no
+  real page has ever evidenced an ampersand joining two DISTINCT entities
+  the way "and" does in the YOOX/Meta fixture.
+
+Two new permanent regression tests plus a direct `trimAtConjunction` unit
+test (imprint_extract_eu_round11_test.go); the existing round-10 decoder
+unit test was updated to match the new, intentional `"&amp;"` decode
+behavior. Full existing suite still green, no other regressions. No
+dedicated Swedish ruleset added: Lag (2002:562) 8 §'s register-number
+requirement is conditional ("i förekommande fall" / "where applicable"),
+the same conditionality as the EU baseline itself — consistent with round
+7/8/9/10's Belgium/Portugal/Ireland/Luxembourg discipline.
+
 ## 1.7.5 — 2026-08-22
 
 ### Fixed
