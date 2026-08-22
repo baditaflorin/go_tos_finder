@@ -2,6 +2,55 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.13 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 18: Greece. Fetched a real, live
+phone-accessories retailer's Όροι Χρήσης page (thikishop.gr, naming MASTER
+ACCESSORIES Ι.Κ.Ε. in NATIVE Greek script) and ran the shipped 1.7.12
+extractor against it — it extracted almost nothing (only "contact",
+CompletenessScore 33). suffixTable already carried Latin-transliterated
+Greek legal forms ("A.E.", "E.P.E.", "O.E.", "I.K.E.") with an explicit
+comment flagging native Greek script as out of scope — this round's real
+evidence is exactly that gap (Greek Ι/Κ/Ε are different Unicode code points
+from Latin I/K/E). Found and fixed five compounding real bugs:
+
+- **No native-Greek-script suffix entries at all.** Added "Ι.Κ.Ε."
+  (real-evidence-confirmed) plus "Α.Ε."/"Ε.Π.Ε."/"Ο.Ε." (the native-script
+  counterparts of the already-existing Latin quartet).
+- **Greece's ΑΦΜ (tax number) and Γ.Ε.ΜΗ. (Commercial Registry number) had
+  no identifier patterns at all.** Added both — "ΑΦΜ" as VAT-equivalent
+  (same 9-digit body as the "EL"-prefixed EU VAT pattern, same architecture
+  as Hungary's Adószám), "Γ.Ε.ΜΗ." as Register-only — plus a new
+  `grVATValid` weighted-mod-11 checksum confirmed against the real value
+  (800617296).
+- **A general Go regexp gotcha**: RE2's `\b` is ASCII-only and never
+  recognises a Greek (or any non-ASCII) letter as a "word" character, so a
+  naive `\bΑΦΜ\b`-style pattern can never match anywhere. Every earlier
+  non-ASCII pattern (IČO, Adószám, Cégjegyzékszám) happened to start/end on
+  a plain ASCII character, so this never surfaced before. Fixed by dropping
+  the leading `\b` on both new Greek patterns.
+- **Label+value pairs split across a tag-boundary newline** (the
+  `<strong>ΑΦΜ:</strong> 800617296` shape) — a new variant of round 8's
+  Portuguese finding and round 16's Czech suffix-split, this time a colon
+  immediately followed by a digit across the break. Added
+  `labelColonDigitBoundaryRE`, narrowly scoped so a genuine section-heading
+  break stays untouched. Also fixed a related leak: the matched
+  identifier's raw Value (needed byte-exact for the proximity-lookup) was
+  carrying the embedded newline through to `formatRegister`'s output —
+  fixed by collapsing whitespace at display time instead of at match time.
+- **Both identifier lines still leaked into Address** even once reachable
+  on one line — added "αφμ"/"γ.ε.μη." as skip-past address markers, same
+  shape as round 17's Hungarian markers.
+
+Deliberately NOT added to `singleCountryIdentifierKind`: "ΑΦΜ" — Greek is
+also official in Cyprus, so (unlike "Γ.Ε.ΜΗ.", a named Greek-only
+institution) it's treated with the same Czech/Slovak "IČO" caution from
+round 16. Five new regression tests (imprint_extract_eu_round18_test.go);
+full existing suite still green, no regressions. No dedicated Greek
+ruleset added — consistent with prior rounds' discipline.
+
 ## 1.7.12 — 2026-08-22
 
 ### Fixed
