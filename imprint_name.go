@@ -108,6 +108,11 @@ func containsCI(haystack, needle string) bool {
 // extractAddressNearEntity's doc comment for the real evidence.
 var bareIntlPhoneRE = regexp.MustCompile(`^\(?\+\d{1,3}\)?[\d\s()\-./]{5,20}$`)
 
+// aveWordRE matches the "Ave"/"Ave." US-street abbreviation as a whole
+// word — see looksAddressLine's doc comment for why this can't be a plain
+// substring check like its sibling markers.
+var aveWordRE = regexp.MustCompile(`\bave\.?\b`)
+
 // looksAddressLine is a loose heuristic for "this line is part of a postal
 // address": either it carries a postal-code/house-number-shaped digit run
 // (hasDigitRun — see its doc comment for why "any digit at all" was too
@@ -117,8 +122,22 @@ func looksAddressLine(s string) bool {
 	if hasDigitRun(s, 4) {
 		return true
 	}
+	// "ave" (the "Ave."/"Ave" abbreviation for Avenue) is checked as its
+	// own word-boundary-anchored regexp, NOT folded into the plain
+	// substring markers loop below like the others — a bare
+	// strings.Contains(low, "ave") false-positives on the ordinary English
+	// verb "have" (and "gave"/"save"/"wave"/...). Real evidence: kims.dk's
+	// real handelsbetingelser page has an unrelated age-disclaimer
+	// sentence ("...eller have en forældre/værge tilladelse...") sitting
+	// between the winning candidate's name line and its real address —
+	// the substring match on "have" wrongly absorbed that whole sentence
+	// into the address before this fix. "avenue" itself is unaffected: it
+	// is matched separately, in full, by the marker loop below.
+	if aveWordRE.MatchString(low) {
+		return true
+	}
 	for _, marker := range []string{
-		"street", "strasse", "straße", "road", "avenue", "ave", "boulevard", "suite", "floor",
+		"street", "strasse", "straße", "road", "avenue", "boulevard", "suite", "floor",
 		"germany", "united states", "romania", "france", "netherlands", "poland",
 		// Real evidence: humresto.fr's real mentions-légales lists its
 		// address as "20 rue Marcel Pagnol" — a two-digit house number plus
@@ -134,6 +153,16 @@ func looksAddressLine(s string) bool {
 		// threshold at all, so without an explicit marker the line was
 		// silently dropped (same failure shape as the "rue" case above).
 		"aleja",
+		// Real evidence: kims.dk's real handelsbetingelser page lists its
+		// street line as "Sømarksvej 31" — a two-digit house number glued
+		// onto a "vej"-suffixed street name (Danish for "road"/"way", the
+		// single most common Danish street-name ending) clears no
+		// consecutive-digit-run threshold at all, so without this marker
+		// only the following postal-code/city line ("5471 Søndersø")
+		// survived extractAddressNearEntity's scan and the street itself
+		// was silently dropped — same failure shape as the "rue"/"aleja"
+		// cases above.
+		"vej",
 	} {
 		if strings.Contains(low, marker) {
 			return true
@@ -202,6 +231,17 @@ func extractAddressNearEntity(text, name string) string {
 			// the break-markers below, this page's real address comes AFTER
 			// these lines, not before.
 			if strings.Contains(low, "kvk") || strings.Contains(low, "btw-id") {
+				continue
+			}
+			// CVR: Denmark's register/VAT label (see imprint_vat.go's "CVR"
+			// vatPattern doc comment). Same shape as KvK/BTW-id above: real
+			// evidence, kims.dk's real handelsbetingelser page puts its own
+			// "CVR.nr. 15233877" line BEFORE the real street address
+			// ("Sømarksvej 31, 5471 Søndersø") — its 8-digit run cleared
+			// looksAddressLine's digit-run heuristic and got absorbed into
+			// the address ahead of (and instead of losing) the real street
+			// line without this skip.
+			if strings.Contains(low, "cvr") {
 				continue
 			}
 			// NIP/KRS/REGON: real Polish tax-ID/register/statistical

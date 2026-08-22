@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.6"
+version: "1.7.7"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
@@ -497,6 +497,34 @@ trl_assessor: "claude-trl-reaudit-2026-07-31"
 # register-number requirement is conditional ("i forekommande fall" /
 # "where applicable"), same as the EU baseline itself - consistent with
 # round 7/8/9/10's Belgium/Portugal/Ireland/Luxembourg discipline.
+# 2026-08-22 (1.7.7) - EU-market-expansion real-evidence round 12: Denmark.
+# TRL stays at 6 (bug fixes plus one new identifier, single-sample
+# evidence). Fetched a real, live webshop's handelsbetingelser page
+# (kims.dk, naming Orkla Snacks Danmark A/S) and ran the shipped 1.7.6
+# extractor against it - it extracted NOTHING at all (CompletenessScore
+# 0), despite "Orkla Snacks Danmark A/S" being trivially suffix-matchable
+# ("A/S") right next to its CVR number. Found and fixed three compounding
+# real bugs: (1) Denmark's CVR-nr (Det Centrale Virksomhedsregister) had
+# no identifier pattern at all - same class of gap as round 5's Polish
+# NIP/KRS/REGON; added a dedicated "CVR" vatPattern, wired into the
+# Register field and validated via the existing "DK" weighted-mod-11
+# checksum (a DK-prefixed VAT number IS "DK" + the CVR body, no extra
+# check digit) - confirmed against both kims.dk's real CVR (15233877) and
+# webshop.dn.dk's independently found real CVR (60804214). (2) the real
+# street line ("Somarksvej 31") had no address-vocabulary marker - "vej"
+# (Danish for "road"/"way") glued onto a 2-digit house number clears no
+# digit-run threshold at all; added "vej" as a marker, same shape as round
+# 1's French "rue" and round 5's Polish "aleja". (3) fixing bug 1 exposed
+# a third, pre-existing bug: the bare "ave" marker (meant for the US
+# "Ave." abbreviation) substring-matched INSIDE the ordinary Danish verb
+# "have", wrongly absorbing an unrelated age-disclaimer sentence into the
+# address; re-anchored "ave" to its own word-boundary regexp, and added
+# "cvr" to the address scan's identifier skip-list (same precedent as the
+# existing Dutch KvK/BTW-id skip). Four new regression tests
+# (imprint_extract_eu_round12_test.go); full existing suite still green,
+# no regressions. No dedicated Danish ruleset added: section 7's CVR-nr
+# requirement is conditional ("hvor det er relevant"/where applicable),
+# same conditionality as round 11's Swedish precedent.
 port: 8316
 
 api:
