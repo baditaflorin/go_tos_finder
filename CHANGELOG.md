@@ -2,6 +2,50 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.17 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 22: Slovenia. Fetched a real, live
+retailer's Splošni pogoji page (sgermobil.si, naming SGERM trgovina,
+storitve, posredništvo in proizvodnja d.o.o.) and ran the shipped 1.7.16
+extractor against it — it extracted NOTHING at all (CompletenessScore 0).
+This is the ACTUAL Croatia/Slovenia "d.o.o." collision round 20's
+suffixTable comment anticipated. Found and fixed four compounding real
+bugs:
+
+- **Slovenia's "Davčna številka" (tax number) had no domestic pattern, and
+  the existing "SI"-prefixed EU VAT pattern required zero space** — but
+  this real page writes it as "Davčna številka: SI 11597267"
+  (space-separated), same class of gap round 7's BE/FR fixes already
+  covered. Fixed by adding the same optional-space tolerance, which alone
+  was enough to unblock the whole identifier-gated extraction.
+- **Slovenia's "Matična številka" (company registration number) had no
+  identifier pattern at all.** Added it, wired as Register-only (same
+  shape as Croatia's MBS).
+- **"Matična številka"/"Davčna številka" values leaked into Address**
+  (both sit right after the real "2000 Maribor" line) — added both as
+  skip-past markers.
+- **A separate court-registration citation sentence also leaked into
+  Address** (its own insert-number digit run cleared `looksAddressLine`,
+  same shape as round 10's Luxembourg RCS citation) — added "vložno
+  številko" as a third skip-past marker.
+
+"Matična številka" was also added to `singleCountryIdentifierKind`
+(-> "SI") — the concrete confirmation that round 20's self-healing design
+works end to end: this page's suffix-guessed country would otherwise have
+been "HR" (suffixTable's only "d.o.o." entry), but the ground-truth
+"Matična številka" evidence correctly overrides it to "SI", the exact
+mechanism round 20 predicted before any Slovenian evidence existed to
+confirm it. One real gap honestly left NOT fixed: Address only captures
+"2000 Maribor" — the real street line never clears `looksAddressLine` (no
+Slovenian street-word marker), same class of gap already left undocumented
+for Czech/Slovak/Croatian street lines. No checksum implemented for
+Slovenian VAT/Matična številka either (stays `format_valid`). Four new
+regression tests (imprint_extract_eu_round22_test.go); full existing suite
+still green, no regressions. No dedicated Slovenian ruleset added —
+consistent with prior rounds' discipline.
+
 ## 1.7.16 — 2026-08-23
 
 ### Fixed

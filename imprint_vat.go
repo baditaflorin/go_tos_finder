@@ -67,7 +67,12 @@ func init() {
 		{"VAT", "PT", regexp.MustCompile(`\bPT\d{9}\b`)},
 		{"VAT", "RO", regexp.MustCompile(`\bRO\d{2,10}\b`)},
 		{"VAT", "SE", regexp.MustCompile(`\bSE\d{12}\b`)},
-		{"VAT", "SI", regexp.MustCompile(`\bSI\d{8}\b`)},
+		// Optional space: real evidence, sgermobil.si's real Splošni pogoji
+		// page writes its own domestic "Davčna številka" (tax number) as
+		// "SI 11597267" — space-separated, unlike the bare-adjacent form
+		// this pattern originally required. Same class of fix as the
+		// BE/FR space-tolerance fixes above (round 7).
+		{"VAT", "SI", regexp.MustCompile(`\bSI\s?\d{8}\b`)},
 		{"VAT", "SK", regexp.MustCompile(`\bSK\d{10}\b`)},
 
 		// National identifiers.
@@ -366,6 +371,18 @@ func init() {
 		// format-matching + Register wiring, no invented checksum). Real
 		// evidence: mako.hr's real page writes "MBS: 030013817".
 		{"MBS", "HR", regexp.MustCompile(`\bMBS\s*[:#]?\s*\d{5,15}\b`)},
+		// Slovenia — Matična številka (the company registration number),
+		// typically 10 digits. Register-only — no dedicated checksum
+		// algorithm confirmed this round (same discipline as Ireland's
+		// CRO/Croatia's MBS: format-matching + Register wiring, no
+		// invented checksum). Real evidence: sgermobil.si's real Splošni
+		// pogoji page writes "Matična številka: 2153254000". Slovenia's
+		// own tax number ("Davčna številka") needs no separate pattern
+		// here — its real form ("SI 11597267") is already the same shape
+		// the "SI"-prefixed EU VAT pattern above matches (with the space
+		// tolerance also fixed this round), so it's picked up as a plain
+		// "VAT" Kind hit without a dedicated domestic pattern.
+		{"Matična številka", "SI", regexp.MustCompile(`\bMatična\s+številka\s*[:#]?\s*\d{7,12}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

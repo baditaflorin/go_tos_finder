@@ -348,6 +348,17 @@ func singleCountryIdentifierKind(kind string) string {
 		// exact labels for its own registry. Real evidence: mako.hr's
 		// real Opći uvjeti page.
 		return "HR"
+	case "Matična številka":
+		// Slovenia's own company-register-number term — this is the
+		// ACTUAL Croatia/Slovenia "d.o.o." collision round 20 anticipated
+		// (see suffixTable's doc comment for that entry): a real Slovenian
+		// page names its entity with the same "d.o.o." suffix Croatia
+		// already claims in suffixTable, but this ground-truth register
+		// identifier is unambiguously Slovenian, correcting the country
+		// the same way OIB/MBS/CUI/etc. already do for their own
+		// collisions. Real evidence: sgermobil.si's real Splošni pogoji
+		// page.
+		return "SI"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but

@@ -772,11 +772,14 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// Real evidence: thikishop.gr's real Όροι Χρήσης page. "MBS"
 			// (Croatia's court-register entry number) is the same round-20
 			// addition, same shape. Real evidence: mako.hr's real Opći
-			// uvjeti page.
+			// uvjeti page. "Matična številka" (Slovenia's company
+			// registration number) is the same round-22 addition, same
+			// shape. Real evidence: sgermobil.si's real Splošni pogoji
+			// page.
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
 				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO",
-				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS":
+				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS", "Matična številka":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
