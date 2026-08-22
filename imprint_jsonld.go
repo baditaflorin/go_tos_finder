@@ -627,7 +627,16 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 		// threshold means what it says (a visible-character budget)
 		// regardless of script, and raised to 300 to comfortably fit this
 		// page's 280-rune sentence.
-		if line == "" || utf8.RuneCountInString(line) > 300 {
+		//
+		// Round 23 (Cyprus): epic.com.cy's real eStore Terms & Conditions
+		// page states its entity's name, registration number, address,
+		// and VAT number all in ONE 526-rune sentence with no <br> breaks
+		// at all — English-language Cypriot legal boilerplate runs even
+		// longer than the Czech/Spanish civil-law style this cap was
+		// previously sized for. Raised to 600 — still well short of
+		// unrelated marketing prose, same hasProximityCorroboration
+		// safety net as every previous increase.
+		if line == "" || utf8.RuneCountInString(line) > 600 {
 			continue
 		}
 		if strings.Contains(line, "&quot;") || strings.Contains(line, "&nbsp;") ||
@@ -779,7 +788,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
 				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO",
-				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS", "Matična številka":
+				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS", "Matična številka", "HE":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
@@ -810,7 +819,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// условия page. "OIB" (Croatia) joins for the same reason: the
 			// same 11-digit body the "HR"-prefixed EU VAT pattern matches.
 			// Real evidence: mako.hr's real Opći uvjeti page.
-			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК", "OIB":
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК", "OIB", "VAT Number":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {

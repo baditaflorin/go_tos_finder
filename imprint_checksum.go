@@ -244,6 +244,16 @@ func cleanIdentifierValue(kind, value string) string {
 			d = d[len(d)-11:]
 		}
 		return d
+	case "VAT Number":
+		// Cyprus's domestic form necessarily swallows its own anchoring
+		// label text ("VAT registration number 10141156Y" — see this
+		// Kind's vatPatterns doc comment in imprint_vat.go) — same
+		// trailing-slice cleanup CIF already uses for the same reason.
+		a := onlyAlnum(value)
+		if len(a) > 9 {
+			a = a[len(a)-9:]
+		}
+		return a
 	case "VAT":
 		// Now that BE/FR (and potentially others) tolerate optional
 		// internal spaces to match real-world formatting, the raw match
@@ -263,7 +273,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК" || kind == "OIB"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК" || kind == "OIB" || kind == "VAT Number"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -359,6 +369,17 @@ func singleCountryIdentifierKind(kind string) string {
 		// collisions. Real evidence: sgermobil.si's real Splošni pogoji
 		// page.
 		return "SI"
+	case "HE", "VAT Number":
+		// Both Cyprus-only: "HE" is the Registrar of Companies' own
+		// file-number prefix (not used by any other country's registry),
+		// and "VAT Number"'s match REQUIRES the 8-digit+letter shape that
+		// is itself distinctively Cypriot among this table's VAT formats
+		// (see that Kind's vatPatterns doc comment) — the English "VAT
+		// ... number" wording alone is generic, but combined with that
+		// shape requirement it only ever matches a real Cypriot value.
+		// Real evidence: epic.com.cy's real eStore Terms & Conditions
+		// page.
+		return "CY"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but

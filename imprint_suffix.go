@@ -60,6 +60,17 @@ var suffixTable = []suffixEntry{
 	{"Limited", "GB", "medium"},
 	{"PLC", "GB", "high"},
 	{"plc", "GB", "high"},
+	// All-lowercase "ltd" — same shape as the "PLC"/"plc" pair just above
+	// (this table already accepts both cases for that one). Real
+	// evidence, round 23: epic.com.cy's real eStore Terms & Conditions
+	// page stylises its own name as all-lowercase "epic ltd" throughout
+	// (a brand-identity choice, not a jurisdiction signal — Cyprus is
+	// itself a common-law "Ltd" jurisdiction like the existing GB tag
+	// already covers, disambiguated from GB by ground-truth identifier
+	// evidence — HE/VAT Number, imprint_vat.go — the same way the "Ltd"
+	// entry's own GB-or-elsewhere ambiguity is already resolved
+	// elsewhere in this table).
+	{"ltd", "GB", "medium"},
 
 	// Germany
 	{"GmbH & Co. KG", "DE", "high"},

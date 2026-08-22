@@ -2,6 +2,56 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.18 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 23: Cyprus. Fetched a real, live
+electronics retailer's eStore Terms & Conditions page (epic.com.cy, naming
+epic ltd — English-language text, a legacy of Cyprus's common-law
+tradition) and ran the shipped 1.7.17 extractor against it — it extracted
+NOTHING at all (CompletenessScore 0). Found and fixed six compounding real
+bugs, an unusually dense round:
+
+- **Cyprus's "HE" (Registrar of Companies file-number) and domestic VAT
+  number had no identifier patterns at all.** Added "HE" (Register-only)
+  and a new "VAT Number" Kind (VAT-equivalent, gated on the English "VAT
+  ... number" phrase plus a digit+letter shape that is itself
+  distinctively Cypriot) with its own dedicated cleaner — reusing the bare
+  "VAT" Kind would have corrupted its generic cleanup for every other
+  country's already-clean hits, since this match necessarily swallows its
+  own anchoring label text.
+- **The real entity ("epic ltd") uses an all-lowercase brand stylization**
+  that suffixTable's existing capitalised "Ltd"/"Ltd." entries never
+  matched. Added lowercase "ltd" — same shape as the pre-existing
+  "PLC"/"plc" pair already in this table.
+- **The real T&C paragraph states everything in ONE 526-rune sentence**
+  with no `<br>` breaks — over the existing 300-rune per-line cap. Raised
+  to 600.
+- **`cleanCandidateName` unconditionally rejected any lowercase-initial
+  candidate**, discarding this page's genuine, deliberately-lowercase
+  brand name outright. Narrowed to only reject when the candidate's stem
+  has 3+ words — a genuine sentence fragment needs several words to be
+  grammatical; a brand-name stem is virtually always 1-2 words.
+- **`extractAddressNearEntity`'s forward scan had no stop condition for a
+  later line repeating the entity's own name**, so a scan triggered from
+  an earlier (unsuccessful) mention kept going and absorbed the page's
+  separate, cleaner footer signature whole (including the entity name
+  itself) as "address" content. Added a stop check for exactly that case.
+
+Country correctly resolves to "CY" (not the suffix-guessed "GB") because
+the HE/VAT Number ground-truth identifiers override it, confirming the
+same self-healing mechanism rounds 20-22 already established for other
+suffix collisions. One real, honestly-documented gap NOT fixed: the T&C
+paragraph's own mid-sentence mention still produces no usable candidate (an
+80-char backward-scan-window limitation, the same shape as round 14's
+Norway gap) — the regression test uses the page's separate, clean footer
+signature instead, exactly as round 14 did. No checksum implemented for
+Cypriot VAT either (stays `format_valid`). Four new regression tests
+(imprint_extract_eu_round23_test.go); full existing suite still green, no
+regressions. No dedicated Cypriot ruleset added — consistent with prior
+rounds' discipline.
+
 ## 1.7.17 — 2026-08-23
 
 ### Fixed

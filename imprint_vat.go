@@ -383,6 +383,41 @@ func init() {
 		// tolerance also fixed this round), so it's picked up as a plain
 		// "VAT" Kind hit without a dedicated domestic pattern.
 		{"Matična številka", "SI", regexp.MustCompile(`\bMatična\s+številka\s*[:#]?\s*\d{7,12}\b`)},
+		// Cyprus — "HE" (the Registrar of Companies' own file-number
+		// prefix, e.g. "HE 141156"). Register-only — no dedicated checksum
+		// algorithm confirmed this round (same discipline as Ireland's
+		// CRO/Croatia's MBS: format-matching + Register wiring, no
+		// invented checksum). Case-SENSITIVE deliberately (no `(?i)`):
+		// lowercase "he" is an ordinary, extremely common English word/
+		// pronoun, so folding case here would risk matching unrelated
+		// prose; the real label is always capitalised. Real evidence:
+		// epic.com.cy's real eStore Terms & Conditions page writes
+		// "registration number HE 141156".
+		{"HE", "CY", regexp.MustCompile(`\bHE\s?\d{4,7}\b`)},
+		// Cyprus — the domestic VAT number, written in real Cypriot
+		// English-language legal text WITHOUT the "CY" country prefix the
+		// EU VAT pattern above requires (unlike most other domestic forms
+		// in this table, which are anchored by a native-language label,
+		// this one is anchored by the English phrase "VAT ... number"
+		// since Cyprus's business-facing legal text is very commonly
+		// English, a legacy of its common-law tradition). Kind is
+		// deliberately "VAT Number", NOT the bare "VAT" Kind other
+		// entries use: this match necessarily swallows the anchoring
+		// label text too (RE2 has no lookbehind to strip it before
+		// matching), and reusing "VAT" here would corrupt
+		// cleanIdentifierValue's generic onlyAlnum() cleanup for every
+		// OTHER country's already-clean "VAT" hits — so this Kind gets
+		// its own dedicated cleaner (imprint_checksum.go) that trims to
+		// just the trailing 9-character code, the same trailing-slice
+		// pattern CIF/PartitaIVA already use for their own labelled
+		// matches. The 8-digit+letter shape (with no leading country
+		// code) is itself distinctively Cypriot among this table's VAT
+		// formats — no other member state's VAT is this exact shape — so
+		// requiring "VAT ... number" nearby is enough of a gate without
+		// needing a Cyprus-specific word in the label itself. Real
+		// evidence: epic.com.cy's real page writes "VAT registration
+		// number 10141156Y".
+		{"VAT Number", "CY", regexp.MustCompile(`(?i)\bVAT\s+(?:registration\s+)?number\s*[:#]?\s*\d{8}[A-Z]\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.
