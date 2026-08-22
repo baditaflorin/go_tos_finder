@@ -365,6 +365,18 @@ func extractAddressNearEntity(text, name string) string {
 			if strings.Contains(low, "αφμ") || strings.Contains(low, "γ.ε.μη.") {
 				continue
 			}
+			// "еик": Bulgaria's own register/tax-number label (see the
+			// "ЕИК" vatPatterns entry in imprint_vat.go). Same shape as
+			// the Hungarian/Greek markers above: real evidence, cressi.bg's
+			// real Общи условия page lists "Наименование Кеме ЕООД, ЕИК
+			// 201845795;" BEFORE the real "Седалище и адрес на управление"
+			// address line — skip (not break) so scanning continues past
+			// it. Same residual-risk acceptance as Greek "αφμ" above (a
+			// short, specific Cyrillic abbreviation, plain substring check
+			// since RE2's \b can't help here either).
+			if strings.Contains(low, "еик") {
+				continue
+			}
 			// A bare "(+NN)NNNNNNNNN"-shaped international phone number on
 			// its own line, with no "tel"/"phone" label attached to THIS
 			// line (hasImprintContact/imprintPhoneRE find it independently

@@ -798,8 +798,11 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// evidence: szatmari-izek.shop.hu's real Impresszum page.
 			// "ΑΦΜ" (Greece) joins for the same reason: the same 9-digit
 			// body the "EL"-prefixed EU VAT pattern matches. Real evidence:
-			// thikishop.gr's real Όροι Χρήσης page.
-			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ":
+			// thikishop.gr's real Όροι Χρήσης page. "ЕИК" (Bulgaria) joins
+			// for the same reason: the same 9-digit body the "BG"-prefixed
+			// EU VAT pattern matches. Real evidence: cressi.bg's real Общи
+			// условия page.
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {

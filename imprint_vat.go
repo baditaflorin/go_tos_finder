@@ -334,6 +334,21 @@ func init() {
 		// codebase have used at the same spot — checked byte-for-byte
 		// against the actual fetched page here, not assumed).
 		{"Γ.Ε.ΜΗ.", "GR", regexp.MustCompile(`(?i)(?:Αρ\.\s*)?Γ\.?\s?Ε\.?\s?ΜΗ\.?\s*[:#]?\s*\d{6,15}\b`)},
+		// Bulgaria — ЕИК (Единен идентификационен код, the Unified
+		// Identification Code / BULSTAT), 9 digits with no separators.
+		// Treated as VAT-equivalent (see isVATLikeIdentifierKind and
+		// validateIdentifier below) since it IS the same 9-digit body the
+		// "BG"-prefixed EU VAT pattern above matches (BG201845795 = "BG" +
+		// this page's own ЕИК 201845795), same architecture as Hungary's
+		// Adószám/Greece's ΑΦΜ. Real evidence: cressi.bg's real Общи
+		// условия page writes "ЕИК 201845795"; bgEIKValid
+		// (imprint_checksum.go) confirmed against this real value.
+		//
+		// Same RE2 fix as round 18's Greek patterns: no leading `\b` — RE2
+		// never recognises a Cyrillic letter as a "word" character either,
+		// so `\bЕИК` would silently never match anything, for the exact
+		// same reason `\bΑΦΜ` never matched Greek text.
+		{"ЕИК", "BG", regexp.MustCompile(`(?i)ЕИК\s*[:#]?\s*\d{9}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

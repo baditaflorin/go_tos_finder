@@ -110,6 +110,12 @@ func validateIdentifier(kind, value, country string) validity {
 		// number, just written without the "EL" country prefix on a
 		// domestic imprint, same architecture as NIP/Adószám above.
 		return validateVAT("EL", extractDigits(value))
+	case "ЕИК":
+		// Bulgaria's domestic ЕИК is exactly the same 9-digit body as
+		// validateVAT's "BG" case (bgEIKValid) below — it's the same
+		// number, just written without the "BG" prefix on a domestic
+		// imprint, same architecture as ΑΦΜ/Adószám above.
+		return validateVAT("BG", extractDigits(value))
 	case "NIPC":
 		// Portugal's NIPC (legal-entity ID) shares the same 9-digit body
 		// and weighted-mod-11 checksum as validateVAT's "PT" case
@@ -220,6 +226,12 @@ func cleanIdentifierValue(kind, value string) string {
 			d = d[len(d)-9:]
 		}
 		return d
+	case "ЕИК":
+		d := extractDigits(value)
+		if len(d) > 9 {
+			d = d[len(d)-9:]
+		}
+		return d
 	case "VAT":
 		// Now that BE/FR (and potentially others) tolerate optional
 		// internal spaces to match real-world formatting, the raw match
@@ -239,7 +251,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -306,6 +318,15 @@ func singleCountryIdentifierKind(kind string) string {
 		// this round's fixture anyway: the native Greek suffix forms
 		// (Ι.Κ.Ε./Α.Ε./Ε.Π.Ε./Ο.Ε., imprint_suffix.go) are GR-unambiguous
 		// on their own.
+	case "ЕИК":
+		// Bulgaria's ЕИК, unlike Greece's ΑΦΜ, has no EU-member sharing
+		// risk to guard against: Bulgaria is the only EU member state
+		// using Cyrillic script as an official alphabet, so there is no
+		// sibling jurisdiction (the way Cyprus shares Greek, or Slovakia
+		// shared Czechoslovakia's IČO) that could also use this exact
+		// Cyrillic term for its own, different registry. Real evidence:
+		// cressi.bg's real Общи условия page.
+		return "BG"
 	case "CUI":
 		// Romania's Cod Unic de Înregistrare — imprint_vat.go's "CUI"
 		// vatPatterns entry matches BOTH the "CUI" and "CIF" labels but
@@ -436,6 +457,19 @@ func validateVAT(country, raw string) validity {
 		// "GR" (the ordinary country code, in case a caller passes that
 		// instead) are accepted here.
 		return mod11Verdict(grVATValid(raw))
+	case "BG":
+		// Bulgaria's VAT number is 9 OR 10 digits — 9 for a legal entity
+		// (its ЕИК/BULSTAT, this round's real evidence — see bgEIKValid's
+		// doc comment for the algorithm), 10 for an individual (a
+		// different number, the personal EGN, with a different published
+		// algorithm this round has no real value to confirm). Only the
+		// 9-digit legal-entity form is checksum-verified here; a 10-digit
+		// match falls through to format_valid rather than risk a false
+		// checksum_invalid on an algorithm we don't actually implement.
+		if len(raw) != 9 {
+			return formatValid
+		}
+		return mod11Verdict(bgEIKValid(raw))
 	case "LU", "GB":
 		// Recognised format; algorithms are documented but we only claim
 		// format_valid here to keep the false-"invalid" rate at zero.
@@ -675,6 +709,37 @@ func grVATValid(s string) bool {
 	check := sum % 11
 	if check == 10 {
 		check = 0
+	}
+	return check == int(s[8]-'0')
+}
+
+// bgEIKValid verifies a Bulgarian ЕИК/BULSTAT (9 digits) using the
+// published two-pass weighted modulo-11 algorithm over the first 8 digits:
+// pass 1 uses weights 1,2,3,4,5,6,7,8, remainder mod 11 is the check digit
+// directly; if that remainder is 10 (not itself a valid single check
+// digit), pass 2 re-weights with 3,4,5,6,7,8,9,10, ITS remainder mod 11 is
+// the check digit instead (11 mapped to 0, same "exceptional remainder"
+// shape as grVATValid). Confirmed against cressi.bg's real ЕИК
+// (201845795): pass-1 weighted sum 208, 208 mod 11 = 10 (triggers pass 2),
+// pass-2 weighted sum 280, 280 mod 11 = 5 — matches the real value's own
+// 9th digit.
+func bgEIKValid(s string) bool {
+	if len(s) != 9 || !allDigits(s) {
+		return false
+	}
+	weighted := func(weights []int) int {
+		sum := 0
+		for i := 0; i < 8; i++ {
+			sum += int(s[i]-'0') * weights[i]
+		}
+		return sum
+	}
+	check := weighted([]int{1, 2, 3, 4, 5, 6, 7, 8}) % 11
+	if check == 10 {
+		check = weighted([]int{3, 4, 5, 6, 7, 8, 9, 10}) % 11
+		if check == 10 {
+			check = 0
+		}
 	}
 	return check == int(s[8]-'0')
 }

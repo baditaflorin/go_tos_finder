@@ -1,10 +1,33 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.13"
+version: "1.7.14"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-23 (1.7.14) - EU-market-expansion real-evidence round 19:
+# Bulgaria. TRL stays at 6 (bug fixes plus one new identifier,
+# single-sample evidence). Fetched a real, live diving/sports-equipment
+# retailer's Obshti uslovia page (cressi.bg, naming Keme EOOD in native
+# Cyrillic script) and ran the shipped 1.7.13 extractor against it - it
+# extracted almost nothing (only "contact", CompletenessScore 33).
+# suffixTable had zero Bulgarian entries of any kind. Found and fixed
+# three compounding real bugs, applying round 18's Greek lessons
+# proactively: (1) no Bulgarian suffix entries at all; added EOOD
+# (real-evidence-confirmed) plus OOD/AD/EAD (sibling forms). (2)
+# Bulgaria's EIK (Unified Identification Code / BULSTAT) had no
+# identifier pattern at all; added it as VAT-equivalent (same 9-digit
+# body as the BG-prefixed EU VAT pattern) plus a new bgEIKValid two-pass
+# weighted-mod-11 checksum (the published BULSTAT algorithm) confirmed
+# against the real value - applied round 18's RE2 ASCII-\b lesson
+# proactively (no leading \b on the Cyrillic-anchored pattern). (3) the
+# identifier's own line still leaked into Address; added it as a
+# skip-past marker. EIK also added to singleCountryIdentifierKind (->
+# BG) - unlike round 18's Greek AFM, Bulgaria is the only EU member using
+# Cyrillic script officially, so there's no sibling-country sharing risk.
+# Four new regression tests (imprint_extract_eu_round19_test.go); full
+# existing suite still green, no regressions. No dedicated Bulgarian
+# ruleset added - consistent with prior rounds' discipline.
 # 2026-08-23 (1.7.13) - EU-market-expansion real-evidence round 18:
 # Greece. TRL stays at 6 (bug fixes plus two new identifiers,
 # single-sample evidence). Fetched a real, live phone-accessories
