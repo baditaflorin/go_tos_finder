@@ -2,6 +2,43 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.5 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 10: Luxembourg. Fetched a real,
+live business's "Mentions légales" page (menu.lu, a real Luxembourg
+restaurant-directory/booking company) and ran the shipped 1.7.4 extractor
+against it — it extracted **nothing at all**: no legal_name, no
+candidates, despite "WeServices S.à r.l." being trivially suffix-matchable
+in isolation. Found and fixed three compounding real bugs:
+
+- **suffixTable's Luxembourg entry ("S.à r.l.") contains a raw "à"
+  character, but this real page renders that letter as its named HTML
+  entity** ("WeServices S.&agrave; r.l.") — stripTagsLines never decodes
+  entities, so `detectSuffix` could never match it at all. Added a small,
+  targeted `decodeKnownAccentEntities` step, applied page-wide so the
+  extracted candidate name and the address lookup that keys off it both
+  see the same (decoded) text.
+- **Luxembourg's RCS (Registre de Commerce et des Sociétés) company
+  number had no pattern at all.** Real evidence: "RCS Luxembourg n&deg;
+  B258641". Added a dedicated `RCS` vatPattern requiring a letter
+  immediately before the digits (Luxembourg's shape), which keeps it from
+  colliding with France's differently-shaped, all-digit RCS citation.
+- **Once found, the RCS register line sat immediately after the real
+  street address with no intervening tag boundary**, so it cleared
+  `looksAddressLine`'s digit-run heuristic and got absorbed into the
+  Address field as a false continuation line. Added `"rcs"` to
+  `extractAddressNearEntity`'s stop-marker list.
+
+One new permanent regression test plus a direct decoder unit test
+(imprint_extract_eu_round10_test.go); full existing suite still green, no
+regressions. No dedicated Luxembourg ruleset added: the Loi du 14 août
+2000, Art. 4's register-number requirement is conditional ("where
+applicable"), the same conditionality as the EU baseline itself — staying
+on eu_baseline avoids overclaiming, consistent with round 7/8/9's
+Belgium/Portugal/Ireland discipline.
+
 ## 1.7.4 — 2026-08-22
 
 ### Fixed

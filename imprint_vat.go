@@ -182,6 +182,21 @@ func init() {
 		// already uses to override a suffix guess (see the REA/Hoja/KvK/NIPC
 		// precedent cited in imprint.go's extractImprintFields).
 		{"CRO", "IE", regexp.MustCompile(`(?i)\b(?:CRO\s*(?:No\.?|Number|Reg(?:istration)?\.?(?:\s*(?:No\.?|Number))?)|Compan(?:y|ies)\s+Registration(?:\s+Office)?(?:\s+No\.?|\s+Number)?)\s*[:#]?\s*\d{5,7}\b`)},
+		// Luxembourg — RCS (Registre de Commerce et des Sociétés) company
+		// number, the register disclosure the Loi du 14 août 2000 relative
+		// au commerce électronique (Luxembourg's Directive 2000/31/EC
+		// transposition), Art. 4 requires alongside name/address/contact.
+		// Requiring a LETTER immediately before the digits (Luxembourg's
+		// shape: a single section letter — "B" for the commercial/companies
+		// section — then 4-7 digits, e.g. "B258641") is what keeps this
+		// pattern from colliding with France's differently-shaped RCS
+		// citation (a pure 9-digit SIREN with no letter prefix, e.g. "RCS
+		// Paris 123 456 789") — the two countries share the same register
+		// name but not the same number shape. Real evidence: menu.lu's real
+		// "Mentions légales" page ("RCS Luxembourg n&deg; B258641" — note
+		// the literal, un-decoded "n&deg;" ordinal-sign entity, which
+		// stripTagsLines never decodes).
+		{"RCS", "LU", regexp.MustCompile(`(?i)\bRCS\s*(?:Luxembourg)?\s*(?:n(?:&deg;|°|º|o)?\.?)?\s*:?\s*[A-Z]\s?\d{4,7}\b`)},
 		// Brazil — CNPJ (##.###.###/####-##).
 		{"CNPJ", "BR", regexp.MustCompile(`\b(?:CNPJ)?\s*[:#]?\s*\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b`)},
 		// New Zealand — Company / NZBN (13 digits) with label.

@@ -482,6 +482,38 @@ func trimLeadingTrailingNBSP(s string) string {
 	return s
 }
 
+// namedEntityAccents maps a small, evidence-driven set of named HTML
+// entities for accented Latin letters to the real character. stripTagsLines
+// never decodes entities (see its doc comment / the trimLeadingTrailingNBSP
+// precedent just above), so a suffixTable entry (imprint_suffix.go) that
+// itself contains an accented letter — e.g. Luxembourg's "S.à r.l." or
+// Switzerland's "Sàrl" — can NEVER match a real page that renders that
+// letter as its named HTML entity rather than a raw UTF-8 byte. Real
+// evidence: menu.lu's real, live "Mentions légales" page writes its own
+// legal name as "WeServices S.&agrave; r.l." — the entity form, not "à" —
+// which silently defeated detectSuffix entirely: nothing on the page
+// suffix-matched at all, so no candidate (and therefore no legal_name) was
+// ever extracted despite this being a clean, textbook imprint. Deliberately
+// narrow — extend this map only when a new real page evidences another
+// entity actually breaking suffix detection, same discipline as this file's
+// knownNonSentenceAbbreviations (imprint_name.go).
+var namedEntityAccents = map[string]string{
+	"&agrave;": "à",
+}
+
+// decodeKnownAccentEntities replaces every namedEntityAccents occurrence in
+// s. Deliberately does NOT touch &nbsp;/&quot;/&copy;/&amp; — those stay
+// literal so the entity-corruption rejection filter just below (in
+// extractImprintText) still sees them.
+func decodeKnownAccentEntities(s string) string {
+	for entity, ch := range namedEntityAccents {
+		if strings.Contains(s, entity) {
+			s = strings.ReplaceAll(s, entity, ch)
+		}
+	}
+	return s
+}
+
 // extractImprintText line-scans for a legal-form suffix, extracts the entity
 // name around it, the address on the following lines, and attaches nearby
 // VAT/register identifiers within an ~800-byte proximity window (gated by
@@ -509,7 +541,16 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 		strings.Contains(low, "colofon") ||
 		strings.Contains(low, "terms") || strings.Contains(low, "company") ||
 		strings.Contains(low, "about")
-	text := stripTagsLines(body)
+	// decodeKnownAccentEntities is applied to the WHOLE page text here, not
+	// just per-line, so extractAddressNearEntity (below, keyed by
+	// strings.Contains(line, name)) still finds the winning candidate's own
+	// name inside `text` — the name it receives has already been through
+	// the same decoding (see the per-line `line` variable just below), so
+	// leaving `text` un-decoded would make that Contains check fail outright
+	// on any page needing this fix (confirmed against the real menu.lu
+	// fixture: Address came back empty until this was made page-wide rather
+	// than per-line-only).
+	text := decodeKnownAccentEntities(stripTagsLines(body))
 	if !isLegalPage {
 		// Still useful only if VAT/register IDs are present.
 		ids := findIdentifiers(text, 3)
@@ -667,7 +708,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			switch id.Kind {
 			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
-				"KRS", "REGON", "CRO":
+				"KRS", "REGON", "CRO", "RCS":
 				if out[best].Register == "" {
 					out[best].Register = formatRegister(id.Kind, id.Value)
 				}
