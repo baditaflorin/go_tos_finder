@@ -108,6 +108,14 @@ func validateIdentifier(kind, value, country string) validity {
 		// CVR (60804214), both independently found during the same search
 		// and both verified to pass this checksum.
 		return mod11Verdict(dkVATValid(extractDigits(value)))
+	case "Y-tunnus":
+		// Finland's Y-tunnus (Business ID) shares the same 8-digit body
+		// and weighted-mod-11 checksum as validateVAT's "FI" case
+		// (fiVATValid) — the FI-prefixed VAT number IS literally "FI" +
+		// this Y-tunnus body with its hyphen removed. Same architecture as
+		// CVR/DK above. Real evidence: finnprotec.fi's real Y-tunnus
+		// (1938183-5), verified to pass this checksum.
+		return mod11Verdict(fiVATValid(extractDigits(value)))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -224,6 +232,8 @@ func singleCountryIdentifierKind(kind string) string {
 		return "SE"
 	case "CVR":
 		return "DK"
+	case "Y-tunnus":
+		return "FI"
 	}
 	return ""
 }

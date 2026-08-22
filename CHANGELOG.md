@@ -2,6 +2,36 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.8 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 13: Finland. Fetched a real, live
+webshop's toimitus-ja-sopimusehdot (delivery-and-contract-terms) page
+(finnprotec.fi, naming Finnprotec Oy) and ran the shipped 1.7.7 extractor
+against it — it failed to extract legal_name or register at all
+(CompletenessScore 33, contact-only), despite "Finnprotec Oy" being
+trivially suffix-matchable ("Oy") right next to its Y-tunnus.
+
+- **Finland's Y-tunnus (Yritys- ja yhteisötunnus, the Finnish Business
+  ID) had no domestic label-anchored identifier pattern at all** — the
+  existing VAT/FI pattern only matches the "FI"-prefixed, hyphen-free
+  cross-border form (FI12345678), a different shape from the domestic
+  hyphenated form ("1938183-5") this real page actually uses. Same class
+  of gap as round 12's Danish CVR-nr. Added a dedicated "Y-tunnus"
+  vatPattern, wired into the Register field and validated via the
+  existing "FI" weighted-mod-11 checksum (`fiVATValid`) since an
+  FI-prefixed VAT number IS literally "FI" + the Y-tunnus body with its
+  hyphen removed. Confirmed against this page's real Y-tunnus
+  (1938183-5), which passes.
+
+Two new permanent regression tests (imprint_extract_eu_round13_test.go);
+full existing suite still green, no regressions. No dedicated Finnish
+ruleset added: this real page has no physical street address on it at
+all (a delivery/contract-terms page, not a full imprint page) —
+CompletenessScore reflects that honestly, same discipline as round 11's
+Swedish fixture.
+
 ## 1.7.7 — 2026-08-22
 
 ### Fixed

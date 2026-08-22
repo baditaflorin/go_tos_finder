@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.7.7"
+version: "1.7.8"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
@@ -525,6 +525,27 @@ trl_assessor: "claude-trl-reaudit-2026-07-31"
 # no regressions. No dedicated Danish ruleset added: section 7's CVR-nr
 # requirement is conditional ("hvor det er relevant"/where applicable),
 # same conditionality as round 11's Swedish precedent.
+# 2026-08-22 (1.7.8) - EU-market-expansion real-evidence round 13: Finland.
+# TRL stays at 6 (bug fix plus one new identifier, single-sample
+# evidence). Fetched a real, live webshop's toimitus-ja-sopimusehdot page
+# (finnprotec.fi, naming Finnprotec Oy) and ran the shipped 1.7.7
+# extractor against it - it failed to extract legal_name or register at
+# all (CompletenessScore 33, contact-only), despite "Finnprotec Oy" being
+# trivially suffix-matchable ("Oy") right next to its Y-tunnus. Root
+# cause: Finland's Y-tunnus (Business ID) had no domestic label-anchored
+# identifier pattern at all - the existing VAT/FI pattern only matches
+# the "FI"-prefixed, hyphen-free cross-border form, a different shape
+# from the domestic hyphenated form ("1938183-5") this real page
+# actually uses; same class of gap as round 12's Danish CVR-nr. Added a
+# dedicated "Y-tunnus" vatPattern, wired into the Register field and
+# validated via the existing "FI" weighted-mod-11 checksum (an
+# FI-prefixed VAT number IS "FI" + the Y-tunnus body with its hyphen
+# removed) - confirmed against this page's real Y-tunnus (1938183-5).
+# Two new regression tests (imprint_extract_eu_round13_test.go); full
+# existing suite still green, no regressions. No dedicated Finnish
+# ruleset added: this real page has no physical street address on it at
+# all - CompletenessScore reflects that honestly, same discipline as
+# round 11's Swedish fixture.
 port: 8316
 
 api:
