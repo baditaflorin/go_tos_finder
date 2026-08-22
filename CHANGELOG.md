@@ -2,6 +2,73 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.5.1 — 2026-08-22
+
+### Fixed
+
+Real-world gaps found by manually comparing this service's imprint field
+extraction (shipped in 1.5.0, same day) against actual live websites'
+Impressum content, specifically hunting for false negatives/positives — not
+a hypothetical review.
+
+- **JSON-LD Organization-subtype matching missed schema.org `Hotel`**
+  (`isOrgType`, `imprint_jsonld.go`). The accepted-type set was an
+  exact-match list (`organization`/`corporation`/`localbusiness`/`ngo`/
+  `educationalorganization`/`governmentorganization`/`performinggroup`) with
+  no awareness of schema.org's real type hierarchy (`Hotel` ->
+  `LodgingBusiness` -> `LocalBusiness` -> `Organization`). Found via a real
+  Austrian hotel's Impressum page whose JSON-LD (`@type: "Hotel"`, carrying
+  `name`/`address`/`telephone`/`email`) this service silently produced zero
+  fields from. Broadened to ~60 common schema.org `LocalBusiness` subtypes
+  and second-level leaves (`Restaurant`/`Store`/`ProfessionalService`/
+  `MedicalBusiness`/`AutomotiveBusiness`/`FinancialService`/`Attorney`/
+  `Dentist`/`RealEstateAgent`/... — a curated common-case list, not
+  exhaustive).
+- **Sole-trader imprints have no legal-form suffix to anchor on at all.**
+  The suffix-anchored plain-text name scan (`extractImprintText`) required a
+  GmbH/AG/Ltd-style suffix before it would identify a candidate name —
+  systematically missing every sole-trader (Einzelunternehmen) imprint,
+  which legitimately has none. Found on the same real Austrian hotel page,
+  whose visible text reads "Firmenname: Aktivhotel Zur Rose" with no legal
+  form anywhere on the page. Added a new fallback extraction path (source
+  `imprint_label`, ranked below an actual suffix match) that recognises an
+  explicit label (`Firmenname:`/`Company name:`/`Unternehmen:`/`Inhaber:`)
+  anchored to the start of a line — so it does not fire on running prose
+  that merely mentions the word.
+- **The `responsible_person` checklist item couldn't be satisfied by a sole
+  trader.** `responsiblePersonLabelRE` requires a distinct label
+  (Geschäftsführer/vertretungsberechtigt/verantwortlich für den
+  Inhalt/managing director/...), but a sole trader's imprint never has one —
+  the proprietor's name IS the trading name. Confirmed against the same real
+  page ("Aktivhotel zur Rose - Franz Holzmann", no separate label anywhere);
+  Austria's ECG §5 / Mediengesetz §§24-25 don't require a separately
+  labelled line when the proprietor's identity is already disclosed this
+  way. Added an additional satisfaction path (the label-based match is
+  unchanged for GmbH/AG-style entities): when no legal-form suffix was found
+  at all, the extracted legal name is checked for an embedded two-plus-word
+  Title-Case run that looks like a natural person's name.
+- **Cloudflare's email-obfuscation markup defeated contact detection
+  entirely.** Cloudflare's "Email Address Obfuscation" anti-scraping feature
+  (`data-cfemail="<hex>"` / `/cdn-cgi/l/email-protection#<hex>`, a public,
+  well-documented reversible single-byte-XOR encoding) was invisible to
+  `hasImprintContact`'s plain-text email regex — a real, extremely common
+  pattern across the web, verified live on a gambling-affiliate homepage
+  using it to hide a real contact address. Added a decoder (the same
+  algorithm Cloudflare's own injected browser JS uses to reconstruct the
+  address) so a successfully-decoded email now counts toward the `contact`
+  checklist item.
+- **Register field now credits a court-only mention.** A named register
+  court (`courtMention`) was previously only appended when a register NUMBER
+  was already present; the real hotel page names "Firmengericht:
+  Landesgericht Innsbruck" but cites no FN number at all. A court-only
+  mention now satisfies the `register` checklist item on its own.
+
+New regression tests (`imprint_extract_real_evidence_test.go`) use real
+excerpts from the live pages that exposed each gap, plus a false-positive
+stress test confirming a JSON-LD `WebPage.author` `Person` node (an SEO
+byline seen on a real gambling-affiliate page) was already correctly
+ignored.
+
 ## 1.5.0 — 2026-08-22
 
 ### Added

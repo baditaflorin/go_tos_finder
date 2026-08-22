@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"regexp"
 	"strings"
 	"unicode"
@@ -55,11 +56,62 @@ var imprintEmailRE = regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-
 // postal codes, register numbers, and VAT IDs elsewhere on the same page.
 var imprintPhoneRE = regexp.MustCompile(`(?i)\b(?:tel(?:efon)?|phone|fax|mobile)\.?\s*:?\s*(\+?\d[\d\s()\-./]{5,20}\d)`)
 
+// cfEmailProtectionRE matches Cloudflare's "Email Address Obfuscation"
+// anti-scraping markup — a real, extremely common pattern (verified live
+// on brucebetcasino-at.com, and widespread well beyond that one site):
+// Cloudflare rewrites a real <a href="mailto:...">  into
+// <a href="/cdn-cgi/l/email-protection#<hex>"> and/or adds a
+// data-cfemail="<hex>" attribute on a <span>. <hex> is Cloudflare's public,
+// well-documented, reversible single-byte-XOR encoding (decodeCFEmail
+// below) — this is exactly what the small inline JS snippet Cloudflare
+// itself injects into the page does to reconstruct the address for a real
+// browser, not a protection being bypassed.
+var cfEmailProtectionRE = regexp.MustCompile(`(?:data-cfemail="([0-9a-fA-F]+)"|/cdn-cgi/l/email-protection#([0-9a-fA-F]+))`)
+
+// decodeCFEmail reverses Cloudflare's single-byte-XOR email-obfuscation
+// encoding: the first hex byte-pair is the XOR key, and every subsequent
+// byte-pair XORed against that key recovers the original ASCII email one
+// byte at a time. Returns "" for a malformed/odd-length hex string.
+func decodeCFEmail(hexStr string) string {
+	if len(hexStr) < 4 || len(hexStr)%2 != 0 {
+		return ""
+	}
+	raw, err := hex.DecodeString(hexStr)
+	if err != nil || len(raw) < 2 {
+		return ""
+	}
+	key := raw[0]
+	out := make([]byte, 0, len(raw)-1)
+	for _, b := range raw[1:] {
+		out = append(out, b^key)
+	}
+	return string(out)
+}
+
+// hasCFObfuscatedEmail reports whether the page carries a Cloudflare
+// email-obfuscation blob that decodes to a plausible email address — a
+// functional contact channel Cloudflare has hidden from plain-text
+// scraping (imprintEmailRE alone cannot see it) but that every real
+// visitor's browser reconstructs via Cloudflare's own injected JS.
+func hasCFObfuscatedEmail(body string) bool {
+	for _, m := range cfEmailProtectionRE.FindAllStringSubmatch(body, -1) {
+		hexStr := m[1]
+		if hexStr == "" {
+			hexStr = m[2]
+		}
+		if imprintEmailRE.MatchString(decodeCFEmail(hexStr)) {
+			return true
+		}
+	}
+	return false
+}
+
 // hasImprintContact reports whether the page exposes a functional contact
-// channel (email or a clearly-labelled phone number) — the eu_baseline
-// "contact" checklist item.
+// channel (email, a clearly-labelled phone number, or a Cloudflare
+// email-obfuscation blob that decodes to one) — the eu_baseline "contact"
+// checklist item.
 func hasImprintContact(body string) bool {
-	return imprintEmailRE.MatchString(body) || imprintPhoneRE.MatchString(body)
+	return imprintEmailRE.MatchString(body) || imprintPhoneRE.MatchString(body) || hasCFObfuscatedEmail(body)
 }
 
 // responsiblePersonLabelRE matches the German (TMG §5 / RStV) and Austrian
@@ -127,6 +179,59 @@ func extractResponsiblePerson(text string) string {
 	return strings.Join(nameParts, " ")
 }
 
+// titleCaseNameRun scans s for the longest run of two-or-more consecutive
+// Title-Case tokens (first rune upper, every other rune lower — rejecting
+// ALL-CAPS acronyms) and returns it joined by spaces, or "" if no such run
+// exists. Used as the Bug 3 fallback below: a sole trader's legal_name
+// often already contains the responsible natural person's full name inline
+// (e.g. real JSON-LD from hotelrose.at: "Aktivhotel zur Rose - Franz
+// Holzmann" — "zur" breaks the run, leaving "Franz Holzmann"). This is a
+// coarse heuristic, not a real name-entity recognizer — it is only invoked
+// when no legal-form suffix was found at all (see extractImprintFields),
+// which keeps it away from GmbH/AG-style names where a distinct
+// managing-director line is the norm. Known limitation: when the legal_name
+// itself is nothing BUT title-cased words with no lowercase connector to
+// break the run (e.g. a bare plain-text label match with no JSON-LD's
+// grammatically-correct lowercase preposition to disambiguate), this can
+// mistake the whole trading name for a person's name rather than finding
+// none. Accepted here since the real evidence this fix targets (a JSON-LD
+// name field, which reliably carries natural lowercase connectors like
+// "zur"/"von"/"and") does not hit that case.
+func titleCaseNameRun(s string) string {
+	isTitleCaseWord := func(w string) bool {
+		r := []rune(w)
+		if len(r) < 2 || !unicode.IsUpper(r[0]) {
+			return false
+		}
+		for _, c := range r[1:] {
+			if unicode.IsUpper(c) {
+				return false
+			}
+		}
+		return true
+	}
+	var run []string
+	best := ""
+	flush := func() {
+		if len(run) >= 2 {
+			if joined := strings.Join(run, " "); len(joined) > len(best) {
+				best = joined
+			}
+		}
+		run = nil
+	}
+	for _, w := range strings.Fields(s) {
+		clean := strings.Trim(w, ".,;:-")
+		if isTitleCaseWord(clean) {
+			run = append(run, clean)
+		} else {
+			flush()
+		}
+	}
+	flush()
+	return best
+}
+
 // courtRE matches the register court named alongside a German Handelsregister
 // or Austrian Firmenbuch entry — Amtsgericht (DE), Handelsgericht/
 // Landesgericht (AT, acting as Firmenbuchgericht), or an explicit
@@ -152,12 +257,19 @@ func candidateSourceRank(source string) int {
 		return 0
 	case "imprint_text":
 		return 1
-	case "hcard":
+	case "imprint_label":
+		// The sole-trader label fallback (Bug 2 — see extractImprintText's
+		// doc comment): a bare "Firmenname:"-style label is a real but
+		// weaker signal than an actual legal-form suffix match
+		// ("imprint_text"), so it ranks just below it, still ahead of
+		// hCard/copyright-footer/og:site_name.
 		return 2
-	case "copyright_footer":
+	case "hcard":
 		return 3
-	case "og_site_name":
+	case "copyright_footer":
 		return 4
+	case "og_site_name":
+		return 5
 	}
 	return 9
 }
@@ -383,10 +495,36 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	im.Ruleset = rulesetFor(country)
 
 	im.ResponsiblePerson = extractResponsiblePerson(text)
+	if im.ResponsiblePerson == "" && im.Suffix == "" && im.LegalName != "" {
+		// Bug 3 fallback: a sole-trader-shaped legal name (no legal-form
+		// suffix found at all — see imprint_suffix.go's detectSuffix) has
+		// no SEPARATELY-labelled "Geschäftsführer"/"verantwortlich für den
+		// Inhalt" line to find, because the trading name itself already IS
+		// the natural person's disclosed identity — this is legitimate
+		// under Austria's ECG §5 / Mediengesetz §§24-25, confirmed against
+		// the real hotelrose.at Impressum, whose JSON-LD name
+		// ("... - Franz Holzmann") already names the responsible person.
+		// Additional satisfaction path alongside the label-based match
+		// above, not a replacement: GmbH/AG-style entities (im.Suffix !=
+		// "") still require the distinct managing-director line.
+		if p := titleCaseNameRun(im.LegalName); p != "" {
+			im.ResponsiblePerson = p
+		}
+	}
 
-	if im.Register != "" {
-		if court := courtMention(text); court != "" {
+	if court := courtMention(text); court != "" {
+		if im.Register != "" {
 			im.Register = im.Register + ", " + court
+		} else {
+			// A named register court with no register NUMBER at all is
+			// still a genuine (if partial) register-authority disclosure —
+			// the real hotelrose.at Impressum names "Firmengericht:
+			// Landesgericht Innsbruck" but cites no FN number at all (not
+			// unusual for a sole trader, who may not be a Firmenbuch entry
+			// at all). Treat a court-only mention as satisfying the
+			// "register" checklist item rather than silently requiring a
+			// number too.
+			im.Register = court
 		}
 	}
 

@@ -1,10 +1,82 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.5.0"
+version: "1.5.1"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-08-22 (1.5.1) — real-evidence bug-fix pass on the imprint field
+# extraction shipped earlier the same day (1.5.0). This is exactly the kind
+# of live-domain validation the 1.5.0 note below flagged as NOT having
+# happened yet — and it is now honest to say a SMALL amount of it has: this
+# service's imprint-extraction output was manually compared against 3 real,
+# live websites (4 pages: an Austrian hotel's Impressum, a gambling-
+# affiliate homepage with no imprint, that same site's privacy page, and a
+# second gambling-affiliate homepage with no imprint), fetched and read by
+# hand, specifically hunting for false negatives/positives. That is a real,
+# live-data-driven check, not a hypothetical one — but 3 sites is a small
+# sample, not a statistical validation pass, so trl stays at 6 rather than
+# moving toward 7 on this basis alone. Four concrete, real bugs found and fixed,
+# each with a real-fixture regression test
+# (imprint_extract_real_evidence_test.go):
+#   1. JSON-LD Organization-subtype matching (isOrgType, imprint_jsonld.go)
+#      only accepted an exact-match list (organization/corporation/
+#      localbusiness/ngo/educationalorganization/governmentorganization/
+#      performinggroup) — missed schema.org's real type hierarchy (Hotel ->
+#      LodgingBusiness -> LocalBusiness -> Organization). Found via a real
+#      Austrian hotel's Impressum page (@type: "Hotel"), whose JSON-LD block
+#      (name/address/telephone/email) this service silently produced zero
+#      fields from. Fixed by broadening the accepted-type set to ~60 common
+#      schema.org LocalBusiness subtypes and second-level leaves
+#      (Restaurant/Store/ProfessionalService/MedicalBusiness/
+#      AutomotiveBusiness/FinancialService/Attorney/Dentist/
+#      RealEstateAgent/... — not exhaustive, a curated common-case list).
+#   2. The suffix-anchored legal-name text-scan (extractImprintText)
+#      required a GmbH/AG/Ltd-style legal-form suffix to identify a
+#      candidate name — systematically missing every sole-trader
+#      (Einzelunternehmen) imprint, since sole traders legitimately have no
+#      such suffix at all. Found on the same real Austrian hotel page, whose
+#      visible text reads "Firmenname: Aktivhotel Zur Rose" with no legal
+#      form anywhere. Fixed with a new fallback extraction path (source
+#      "imprint_label", ranked below a real suffix match) recognising an
+#      explicit label (Firmenname:/Company name:/Unternehmen:/Inhaber:)
+#      anchored to the start of a line, so it does not fire on prose that
+#      merely mentions the word.
+#   3. The responsible-person checklist item (imprintFieldChecklist /
+#      scoreImprint) required a separately-labelled line
+#      (Geschäftsführer/verantwortlich für den Inhalt/managing director/...)
+#      — which a sole trader's imprint never has, because the proprietor's
+#      name IS the trading name (confirmed against the same real page:
+#      "Aktivhotel zur Rose - Franz Holzmann", no separate label anywhere).
+#      Austria's ECG §5 / Mediengesetz §§24-25 do not require a separately
+#      labelled line when the proprietor's identity is already disclosed
+#      this way. Fixed with an additional satisfaction path (not a
+#      replacement for the label-based match): when no legal-form suffix was
+#      found at all, the legal_name itself is checked for an embedded
+#      two-plus-word Title-Case run that looks like a natural person's name.
+#   4. Cloudflare's "Email Address Obfuscation" anti-scraping feature
+#      (data-cfemail="<hex>" / /cdn-cgi/l/email-protection#<hex>", a public,
+#      well-documented reversible single-byte-XOR encoding) defeated
+#      hasImprintContact's plain-text email regex entirely — a real,
+#      extremely common pattern, verified live on a real gambling-affiliate
+#      homepage (brucebetcasino-at.com) using it to hide a real contact
+#      address. Fixed by decoding the hex blob (same algorithm the
+#      Cloudflare-injected browser JS itself uses) and counting a
+#      successful decode toward the "contact" checklist item.
+# Also checked and confirmed NOT bugs during this pass: the AT VAT label
+# "UID-Nr.:" already matches regardless of preceding label text (the
+# \bATU\d{8}\b format regex doesn't care about the label); a JSON-LD
+# WebPage.author Person node (an SEO byline, seen on a real gambling-
+# affiliate privacy page) was already correctly ignored by construction
+# (Person was never an accepted type, and the @graph walk never recurses
+# into an "author" field) — locked down with a regression test anyway.
+# One judgment call: the register-court logic previously required an
+# ALREADY-non-empty register NUMBER before it would append a named court
+# (courtMention); the real hotel page names "Firmengericht: Landesgericht
+# Innsbruck" but cites no FN number at all. Changed so a court-only mention
+# now satisfies the "register" checklist item on its own — a defensible
+# reading either way, taken here because the court IS a real, genuine
+# register-authority disclosure even without an accompanying number.
 # 2026-08-22 — new capability, not a re-audit (trl left at 6; this is
 # additive functionality within the existing band, not new evidence toward
 # TRL 7). Closes a real gap: DocImprint detection previously emitted only a

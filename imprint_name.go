@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -215,6 +216,71 @@ func extractEntityAround(text, suffix string) string {
 		return ""
 	}
 	return candidate
+}
+
+// labeledNameRE matches an explicit trading-name label with no
+// legal-form-suffix requirement — the fallback extractImprintText
+// (imprint_jsonld.go) takes when the suffix-anchored scan (detectSuffix)
+// finds nothing anywhere on the page, most commonly for a sole trader
+// (Einzelunternehmen), who legitimately has no GmbH/AG/Ltd-style suffix to
+// anchor on at all. Found via live verification against a real Austrian
+// sole-trader Impressum (hotelrose.at), whose visible text reads
+// "Firmenname: Aktivhotel Zur Rose" with no legal form anywhere on the
+// page. Anchored to the START of the line (extractImprintText already
+// works off stripTagsLines' one-block-per-line text) so a page that merely
+// discusses "Firmenname" in running prose, with the label not immediately
+// followed by ": <value>", does not false-positive — see
+// TestExtractImprintTextLabeledNameFalsePositiveGuard.
+var labeledNameRE = regexp.MustCompile(`(?i)^(?:Firmenname|Company\s*Name|Unternehmen|Inhaber(?:in)?)\s*:\s*(.*)$`)
+
+// validLabeledName is the label-path's false-positive gate, parallel to
+// cleanCandidateName's role for the suffix-anchored path but lighter:
+// there is no glued suffix to strip here (labeledNameRE's capture group
+// already isolated the value), so this only needs to reject junk values —
+// empty, too long, HTML-entity residue, a bare domain, or sentence-shaped
+// prose (e.g. a "Firmenname:" heading followed by an explanatory sentence
+// rather than an actual name).
+func validLabeledName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) < 2 || len(name) > 90 {
+		return false
+	}
+	if containsNonPrintable(name) {
+		return false
+	}
+	if looksLikeSentencePhrase(name) {
+		return false
+	}
+	if looksLikeDomainString(name) {
+		return false
+	}
+	for _, ent := range []string{"&quot;", "&amp;", "&nbsp;", "&copy;", "&#"} {
+		if strings.Contains(name, ent) {
+			return false
+		}
+	}
+	firstAlpha := byte(0)
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+			firstAlpha = c
+			break
+		}
+	}
+	if firstAlpha == 0 || (firstAlpha >= 'a' && firstAlpha <= 'z') {
+		return false
+	}
+	low := " " + strings.ToLower(name) + " "
+	hits := 0
+	for _, w := range sentenceStopWords {
+		if strings.Contains(low, " "+w+" ") {
+			hits++
+			if hits >= 2 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // cleanCandidateName rejects strings that look like sentence text,

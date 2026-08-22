@@ -12,8 +12,10 @@ import (
 // candidate chain (Schema.org JSON-LD Organization, hCard/vCard
 // microformats, og:site_name, footer copyright lines) plus the
 // suffix-anchored plain-text line-scan, in source-priority order:
-// json_ld > imprint_text > hcard > copyright_footer > og_site_name (see
-// candidateSourceRank in imprint.go). go_tos_finder extracts from a single
+// json_ld > imprint_text > imprint_label > hcard > copyright_footer >
+// og_site_name (see candidateSourceRank in imprint.go). imprint_label is a
+// go_tos_finder-native addition, not ported from upstream — see
+// extractImprintText's doc comment for why. go_tos_finder extracts from a single
 // already-fetched, already-verified imprint page body, so the upstream
 // multi-page orchestration (analyzeWith, mergeCandidates across many pages)
 // is not ported — only the per-page extractors.
@@ -28,7 +30,7 @@ type imprintCandidate struct {
 	Suffix      string
 	Country     string // ISO-3166-1 alpha-2, best-effort
 	Confidence  string // country-inference confidence: high|medium|low
-	Source      string // json_ld | hcard | og_site_name | copyright_footer | imprint_text
+	Source      string // json_ld | hcard | og_site_name | copyright_footer | imprint_text | imprint_label
 	Register    string
 	VAT         string
 	Address     string
@@ -127,6 +129,69 @@ func stringifyType(v interface{}) string {
 	return ""
 }
 
+// localBusinessSubtypes are Schema.org LocalBusiness subtypes — plus a
+// curated set of common second-level leaf types nested one level deeper
+// (e.g. Hotel under LodgingBusiness, Attorney under LegalService,
+// Restaurant under FoodEstablishment) — that a real controller entity
+// commonly declares in JSON-LD instead of the generic
+// "Organization"/"LocalBusiness" type. Schema.org's actual type hierarchy
+// is e.g. Hotel -> LodgingBusiness -> LocalBusiness -> Organization, but
+// isOrgType does flat string equality, not hierarchy-aware matching, so
+// every concrete subtype actually seen in the wild has to be listed here
+// explicitly.
+//
+// Found via live verification against a real Austrian hotel's Impressum
+// page (schema.org @type: "Hotel") — not a hypothetical gap: this service
+// silently produced zero JSON-LD fields for that real, live page before
+// this fix (see imprint_extract_real_evidence_test.go). Deliberately not
+// exhaustive (schema.org's LocalBusiness tree keeps growing, and native
+// non-Latin business types are out of scope the same way imprint_suffix.go
+// is Latin-only) — this is a pragmatic, broad-but-curated list of the
+// common cases, not a full hierarchy engine.
+var localBusinessSubtypes = map[string]bool{
+	// Direct schema.org LocalBusiness subtypes (~30, per schema.org's own
+	// LocalBusiness page).
+	"animalshelter": true, "automotivebusiness": true, "childcare": true,
+	"dentist": true, "drycleaningorlaundry": true, "emergencyservice": true,
+	"employmentagency": true, "entertainmentbusiness": true,
+	"financialservice": true, "foodestablishment": true,
+	"governmentoffice": true, "healthandbeautybusiness": true,
+	"homeandconstructionbusiness": true, "internetcafe": true,
+	"legalservice": true, "library": true, "lodgingbusiness": true,
+	"medicalbusiness": true, "professionalservice": true,
+	"radiostation": true, "realestateagent": true, "recyclingcenter": true,
+	"selfstorage": true, "shoppingcenter": true,
+	"sportsactivitylocation": true, "store": true, "televisionstation": true,
+	"touristinformationcenter": true, "travelagency": true,
+
+	// Common second-level leaves seen in real-world JSON-LD — sites
+	// overwhelmingly declare the specific leaf type directly rather than
+	// the intermediate subtype above it.
+	"hotel": true, "motel": true, "resort": true, "bedandbreakfast": true,
+	"hostel": true, "campground": true, // LodgingBusiness
+	"restaurant": true, "bakery": true, "barorpub": true,
+	"cafeorcoffeeshop": true, "fastfoodrestaurant": true,
+	"icecreamshop": true, "winery": true, // FoodEstablishment
+	"attorney": true, "notary": true, // LegalService
+	"autodealer": true, "autorepair": true, "autorental": true,
+	"autobodyshop": true, "autopartsstore": true, "autowash": true,
+	"gasstation": true, "motorcycledealer": true,
+	"motorcyclerepair":  true, // AutomotiveBusiness
+	"accountingservice": true, "automatedteller": true, "bank": true,
+	"insuranceagency": true, // FinancialService
+	"physician":       true, "hospital": true, "medicalclinic": true,
+	"optician": true, "dermatology": true, // MedicalBusiness-adjacent
+	"bookstore": true, "clothingstore": true, "computerstore": true,
+	"conveniencestore": true, "departmentstore": true,
+	"electronicsstore": true, "florist": true, "furniturestore": true,
+	"gardenstore": true, "grocerystore": true, "hardwarestore": true,
+	"homegoodsstore": true, "jewelrystore": true, "liquorstore": true,
+	"mobilephonestore": true, "movierentalstore": true, "musicstore": true,
+	"outletstore": true, "pawnshop": true, "petstore": true,
+	"pharmacy": true, "shoestore": true, "sportinggoodsstore": true,
+	"tirestore": true, "toystore": true, "bikestore": true, // Store
+}
+
 func isOrgType(s string) bool {
 	for _, raw := range strings.Split(s, ",") {
 		t := strings.ToLower(strings.TrimSpace(raw))
@@ -138,6 +203,9 @@ func isOrgType(s string) bool {
 		}
 		switch t {
 		case "organization", "corporation", "localbusiness", "ngo", "educationalorganization", "governmentorganization", "performinggroup":
+			return true
+		}
+		if localBusinessSubtypes[t] {
 			return true
 		}
 	}
@@ -394,7 +462,16 @@ func extractCopyrightFooter(body, pageURL string) []imprintCandidate {
 // name around it, the address on the following lines, and attaches nearby
 // VAT/register identifiers within an ~800-byte proximity window (gated by
 // country coherence — an identifier whose jurisdiction conflicts with the
-// candidate's own is not attached).
+// candidate's own is not attached). If that suffix-anchored scan finds
+// nothing anywhere on the page, falls back to an explicit trading-name
+// label (labeledNameRE — Firmenname:/Company name:/Unternehmen:/Inhaber:),
+// tagged with Source "imprint_label" rather than "imprint_text" so
+// candidateSourceRank can still prefer a real suffix match over it. This
+// fallback exists because a legal-form suffix (GmbH/AG/Ltd/...) is not
+// universal: a sole trader (Einzelunternehmen) legitimately has none at
+// all, which the suffix scan alone can never find — confirmed via a real,
+// live Austrian sole-trader Impressum (see
+// imprint_extract_real_evidence_test.go).
 func extractImprintText(body, pageURL string) []imprintCandidate {
 	low := strings.ToLower(pageURL)
 	isLegalPage := strings.Contains(low, "imprint") || strings.Contains(low, "impressum") ||
@@ -416,7 +493,13 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 	candOffset := map[string]int{}
 	seen := map[string]bool{}
 	cursor := 0
-	for _, raw := range strings.Split(text, "\n") {
+	lines := strings.Split(text, "\n")
+	// labelName/labelOffset track the best labeledNameRE fallback hit found
+	// while scanning (see below) — only used if the suffix-anchored scan
+	// above finds nothing anywhere on the page.
+	var labelName string
+	var labelOffset int
+	for idx, raw := range lines {
 		lineStart := cursor
 		cursor += len(raw) + 1 // +1 for the '\n' separator
 		line := strings.TrimSpace(raw)
@@ -426,6 +509,36 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 		if strings.Contains(line, "&quot;") || strings.Contains(line, "&nbsp;") ||
 			strings.Contains(line, "&copy;") || strings.Contains(line, "&amp;") {
 			continue
+		}
+		// Sole-trader fallback (Bug 2): an explicit trading-name label
+		// (Firmenname:/Company name:/Unternehmen:/Inhaber:) with no
+		// legal-form suffix required at all — a sole trader
+		// (Einzelunternehmen) legitimately has none. Tried on every
+		// candidate line regardless of whether THIS line also carries a
+		// suffix, but only actually used below if the suffix-anchored scan
+		// comes up completely empty (a suffix match is a strictly stronger
+		// signal than a bare label).
+		if labelName == "" {
+			if m := labeledNameRE.FindStringSubmatch(line); m != nil {
+				cand := collapseSpaces(strings.TrimSpace(m[1]))
+				if cand == "" {
+					// Label alone on its own line: the value is on the
+					// next non-empty line.
+					for j := idx + 1; j < len(lines) && j <= idx+2; j++ {
+						next := strings.TrimSpace(lines[j])
+						if next != "" {
+							cand = collapseSpaces(next)
+							break
+						}
+					}
+				}
+				if cand != "" {
+					if _, _, _, sufOK := detectSuffix(cand); !sufOK && validLabeledName(cand) {
+						labelName = cand
+						labelOffset = lineStart
+					}
+				}
+			}
 		}
 		suf, cc, conf, ok := detectSuffix(line)
 		if !ok {
@@ -448,6 +561,14 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 		if len(out) >= 5 {
 			break
 		}
+	}
+	if len(out) == 0 && labelName != "" {
+		out = append(out, imprintCandidate{
+			Name:    labelName,
+			Source:  "imprint_label",
+			Address: extractAddressNearEntity(text, labelName),
+		})
+		candOffset[labelName] = labelOffset
 	}
 	const proximityBytes = 800
 	ids := findIdentifiers(text, 5)
