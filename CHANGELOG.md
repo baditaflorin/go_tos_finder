@@ -2,6 +2,43 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.14 — 2026-08-23
+
+### Fixed
+
+EU-market-expansion real-evidence round 19: Bulgaria. Fetched a real, live
+diving/sports-equipment retailer's Общи условия page (cressi.bg, naming Кеме
+ЕООД in native Cyrillic script) and ran the shipped 1.7.13 extractor against
+it — it extracted almost nothing (only "contact", CompletenessScore 33).
+suffixTable had zero Bulgarian entries of any kind (Latin or Cyrillic).
+Found and fixed three compounding real bugs, applying round 18's Greek
+lessons proactively this time:
+
+- **No Bulgarian suffix entries at all.** Added "ЕООД" (real-evidence-
+  confirmed) plus "ООД"/"АД"/"ЕАД" (added alongside it on the same
+  well-established-sibling-forms basis round 18 used for Greek).
+- **Bulgaria's ЕИК (Unified Identification Code / BULSTAT) had no
+  identifier pattern at all.** Added it, wired as VAT-equivalent (its
+  9-digit body IS the same number the "BG"-prefixed EU VAT pattern
+  matches), plus a new `bgEIKValid` two-pass weighted-mod-11 checksum (the
+  published BULSTAT algorithm) confirmed against the real value
+  (201845795). Applied round 18's RE2 lesson proactively: no leading `\b`
+  on the Cyrillic-anchored pattern.
+- **The identifier's own line still leaked into Address** (it sits before
+  the real address line on this page) — added "еик" as a skip-past
+  address marker, same shape as round 17/18's Hungarian/Greek markers.
+
+Also confirmed: the pre-existing "BG"-prefixed VAT pattern already matched
+this page's own VAT citation without any changes — "BG" is always Latin
+per EU-wide VAT-number convention, so it was never subject to the
+Cyrillic-`\b` gotcha bug 2 found for the domestic label. "ЕИК" was also
+added to `singleCountryIdentifierKind` (-> "BG") — unlike round 18's Greek
+"ΑΦΜ", Bulgaria is the only EU member using Cyrillic script officially, so
+there's no sibling-country sharing risk to guard against. Four new
+regression tests (imprint_extract_eu_round19_test.go); full existing suite
+still green, no regressions. No dedicated Bulgarian ruleset added —
+consistent with prior rounds' discipline.
+
 ## 1.7.13 — 2026-08-23
 
 ### Fixed

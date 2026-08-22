@@ -263,6 +263,21 @@ var suffixTable = []suffixEntry{
 	{"ZAO", "RU", "high"},
 	{"PAO", "RU", "high"},
 
+	// Bulgaria, round 19 — NATIVE Cyrillic forms (no prior BG suffix
+	// entries existed at all, Latin or otherwise). Real evidence:
+	// cressi.bg's real Общи условия page names "Кеме ЕООД" — confirmed via
+	// this ONE fetched page, so only "ЕООД" is real-evidence-confirmed
+	// this round. "ООД"/"АД"/"ЕАД" are added alongside it on the same
+	// well-established-sibling-forms basis used for Greece's native forms
+	// in round 18 — zero collision risk (Bulgarian Cyrillic letter
+	// sequences here don't match any Russian Cyrillic entry this table
+	// might one day gain: "ЕООД"/"ООД"/"АД"/"ЕАД" are distinct sequences
+	// from "ООО"/"ОАО"/"ЗАО"/"ПАО" above, letter-for-letter).
+	{"ЕООД", "BG", "high"},
+	{"ООД", "BG", "high"},
+	{"АД", "BG", "medium"},
+	{"ЕАД", "BG", "high"},
+
 	// Greece (Latin transliteration; native Greek forms out of scope here)
 	{"A.E.", "GR", "high"},
 	{"E.P.E.", "GR", "high"},
