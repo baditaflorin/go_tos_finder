@@ -2,6 +2,52 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.7.10 — 2026-08-22
+
+### Fixed
+
+EU-market-expansion real-evidence round 15 (new series, rounds 15+, covering
+the 13 remaining EU countries): Romania. Fetched a real, live e-commerce
+company's Termeni si conditii page (emag.ro, naming its operating entity
+DANTE INTERNATIONAL S.A.) and ran the shipped 1.7.9 extractor against it.
+Romania already had a native "S.R.L." suffix entry and a "CUI" identifier
+pattern/checksum wired up since this codebase's first EU-expansion round,
+but had never been real-evidence-verified end to end. Found and fixed two
+concrete, compounding real bugs:
+
+- **Country resolved to "FR" instead of "RO"**: the entity's bare "S.A."
+  legal-form suffix collides with France's own low-confidence "S.A." entry
+  in suffixTable, and Romania's own real "CUI: 14399840" identifier —
+  correctly matched, Register correctly populated as "CUI 14399840" — never
+  overrode the wrong suffix-guessed country, because
+  `singleCountryIdentifierKind` (the mechanism that already lets ground-truth
+  government-identifier evidence override a merely-probabilistic suffix
+  guess for IT/NL/PL/PT/IE/LU/SE/DK/FI/NO) had never had a case for
+  Kind="CUI" at all, despite CUI being wired into vatPatterns and the
+  checksum switch since round 1. Added a "CUI" case returning "RO".
+- **The site's own footer copyright line leaked into Address**: once the
+  country fix surfaced the footer's real content, extractAddressNearEntity's
+  forward-scan stop-marker list (which already excludes Poland's
+  NIP/KRS/REGON, Denmark's CVR, the Netherlands' KvK/BTW-id, France/
+  Luxembourg's RCS, and France/Belgium's TVA from address absorption) had no
+  entry for Romania's own "CUI"/"CIF" label — the unrelated "© 2001-2026
+  Dante International, CUI: 14399840, Reg. Com. J2002000372404" line got
+  absorbed wholesale into Address. Added a word-boundary `cuiWordRE` check
+  (a bare substring check would false-positive on "cui" as an ordinary
+  standalone Romanian word).
+
+One real, honestly-documented gap NOT fixed this round: the entity's own
+run-on sentence (name, then address, then register clause, all in one
+sentence with no punctuation/tag boundary between them) still over-captures
+the register text into Address on this specific page — a same-line
+entity-boundary issue, a different code path from the two fixes above.
+Three new regression tests (imprint_extract_eu_round15_test.go); full
+existing suite still green, no regressions. No dedicated Romanian ruleset
+added: this fixture didn't establish a hard, unconditional register-number
+requirement distinct from the EU baseline — consistent with the discipline
+of rounds 7-14 (Belgium/Portugal/Ireland/Luxembourg/Sweden/Denmark/Finland/
+Norway).
+
 ## 1.7.9 — 2026-08-22
 
 ### Fixed

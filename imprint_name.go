@@ -113,6 +113,16 @@ var bareIntlPhoneRE = regexp.MustCompile(`^\(?\+\d{1,3}\)?[\d\s()\-./]{5,20}$`)
 // substring check like its sibling markers.
 var aveWordRE = regexp.MustCompile(`\bave\.?\b`)
 
+// cuiWordRE matches Romania's "CUI"/"CIF" register-identifier label
+// (imprint_vat.go's "CUI" vatPattern) as a whole word, case-insensitively —
+// see extractAddressNearEntity's doc comment below for the real evidence.
+// A plain substring check (like the DE/NL/FR markers just above it) is
+// unsafe here: "cui" is also an ordinary standalone Romanian word ("to
+// whom"/"nail"), so a bare Contains could break address collection on an
+// unrelated sentence. Word-boundaries avoid that while still catching
+// every real label form ("CUI:", "CUI 123", "CIF#123", ...).
+var cuiWordRE = regexp.MustCompile(`(?i)\b(?:cui|cif)\b`)
+
 // looksAddressLine is a loose heuristic for "this line is part of a postal
 // address": either it carries a postal-code/house-number-shaped digit run
 // (hasDigitRun — see its doc comment for why "any digit at all" was too
@@ -322,7 +332,20 @@ func extractAddressNearEntity(text, name string) string {
 				// looksAddressLine (its own digit run) and gets absorbed
 				// into the address as if it were a continuation postal
 				// line.
-				strings.Contains(low, "rcs") {
+				strings.Contains(low, "rcs") ||
+				// "CUI"/"CIF": Romania's own register-identifier label (see
+				// cuiWordRE's doc comment above). Real evidence: emag.ro's
+				// real Termeni si conditii footer line "© 2001-2026 Dante
+				// International, CUI: 14399840, Reg. Com. J2002000372404"
+				// sits a few lines below the real entity-name paragraph,
+				// its "14399840"/"J2002000372404" digit runs clear
+				// looksAddressLine, and without this marker the whole
+				// unrelated copyright/register line got absorbed into the
+				// Address (visible as a stray ", &copy; 2001-2026 Dante
+				// International, CUI: ..." tail on im.Address) instead of
+				// being left for the CUI identifier match
+				// (extractImprintText/findIdentifiers) to own.
+				cuiWordRE.MatchString(low) {
 				break
 			}
 			if looksAddressLine(clean) {
