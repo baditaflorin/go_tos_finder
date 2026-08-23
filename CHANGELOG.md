@@ -2,6 +2,14 @@
 
 All notable changes to this service are recorded here, newest first.
 
+## 1.8.2 — 2026-08-23
+
+### Security
+- Bumped `golang.org/x/net` v0.52.0 → v0.55.0 (GitHub Dependabot alert
+  #1, medium: Go's HTML parser is vulnerable to a denial of service).
+  Transitive `golang.org/x/sys`/`golang.org/x/text` bumps followed from
+  `go mod tidy`. Dependency version bumps only, no source changes.
+
 ## 1.8.1 — 2026-08-23
 
 ### Changed
