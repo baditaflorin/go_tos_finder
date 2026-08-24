@@ -50,6 +50,9 @@ func classifyLinkEvidence(urlPath, linkText string) (DocType, string, string) {
 		if hubDocTypes[p.docType] {
 			continue
 		}
+		if p.docType == DocDisclaimer {
+			continue // disclaimer text alone is not a legal-document location
+		}
 		if matchTextOrScript(p.textRegex, p.scriptRegex, linkText) {
 			return p.docType, "link_text", ConfLow
 		}

@@ -96,8 +96,12 @@ var patterns = []pattern{
 			"termini-di-servizio", "condiciones", "terminos", "termos",
 			"voorwaarden", "algemene-voorwaarden", "regulamin", "warunki",
 			"vilkar", "anvandarvillkor", "kayttoehdot",
+			"termini-e-condizioni", "termini-e-condizioni-generali", "condizioni-generali",
+			"terminos-y-condiciones", "condiciones-de-uso", "termos-e-condicoes", "termos-de-uso",
+			"algemene-voorwaarden", "termeni-si-conditii", "termeni-si-condiții",
+			"warunki-korzystania", "ogolne-warunki", "polzovatelskoe-soglashenie", "usloviya-ispolzovaniya",
 		),
-		textRegex:  regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)?|terms\s*&\s*conditions|terms\s+and\s+conditions|conditions\s+of\s+use|user\s+agreement|EULA|nutzungsbedingungen|allgemeine\s+gesch[äa]ftsbedingungen|AGB|conditions\s+d['e]\s*utilisation|conditions\s+g[ée]n[ée]rales|termini\s+di\s+servizio|t[ée]rminos\s+(?:y\s+condiciones|de\s+servicio)|condiciones\s+(?:de\s+uso|del\s+servicio)|termos\s+de\s+(?:uso|servi[çc]o)|gebruiksvoorwaarden|algemene\s+voorwaarden|regulamin)\b`),
+		textRegex:  regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)?|terms\s*&\s*conditions|terms\s+and\s+conditions|conditions\s+of\s+use|user\s+agreement|EULA|nutzungsbedingungen|allgemeine\s+gesch[äa]ftsbedingungen|AGB|conditions\s+d['e]\s*utilisation|conditions\s+g[ée]n[ée]rales|termini\s+(?:di\s+servizio|e\s+condizioni)|t[ée]rminos\s+(?:y\s+condiciones|de\s+servicio)|condiciones\s+(?:de\s+uso|del\s+servicio)|termos\s+(?:de\s+(?:uso|servi[çc]o)|e\s+condi[çc][õo]es)|gebruiksvoorwaarden|algemene\s+voorwaarden|regulamin|termeni\s+[șs]i\s+condi[țt]ii)\b`),
 		titleRegex: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)|terms\s+and\s+conditions|terms\s*&\s*conditions|user\s+agreement|end[-\s]user\s+license|EULA|nutzungsbedingungen|gesch[äa]ftsbedingungen|conditions\s+g[ée]n[ée]rales|termini\s+di\s+servizio|t[ée]rminos|condiciones|termos\s+de)\b`),
 		scriptRegex: scriptRE(
 			// Japanese: terms of use / member agreement
@@ -296,9 +300,14 @@ var patterns = []pattern{
 		pathPatterns: pathRE(
 			"imprint", "impressum", "legal-notice", "legal-notices",
 			"mentions-legales", "note-legali", "aviso-legal", "colofon",
+			"legal-information", "legal-info", "company-information", "corporate-information",
+			"about-company", "company-details", "datos-legales", "informacion-legal",
+			"informazioni-legali", "informazioni-societarie", "informations-legales",
+			"informations-juridiques", "informații-legale", "informatii-legale",
+			"bedrijfsgegevens", "bedrijfsinformatie", "dane-firmy", "informacje-prawne", "company-profile",
 		),
-		textRegex:  regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|note\s+legali|aviso\s+legal|colof[oó]n)\b`),
-		titleRegex: regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|aviso\s+legal)\b`),
+		textRegex:  regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|note\s+legali|aviso\s+legal|colof[oó]n|informazioni\s+(?:legali|societarie)|información\s+legal|datos\s+legales|informa[çc][õo]es\s+legais|dados\s+da\s+empresa|informations\s+l[ée]gales|bedrijfsgegevens|wettelijke\s+informatie|informa[țt]ii\s+legale|dane\s+firmy|informacje\s+prawne|juridische\s+informatie|hukuki\s+bilgiler)\b`),
+		titleRegex: regexp.MustCompile(`(?i)\b(?:imprint|impressum|legal\s+notice|mentions\s+l[ée]gales|aviso\s+legal|informazioni\s+(?:legali|societarie)|información\s+legal|informations\s+l[ée]gales|bedrijfsgegevens|informa[țt]ii\s+legale)\b`),
 		scriptRegex: scriptRE(
 			// Japanese: Specified Commercial Transactions Act disclosure (the
 			// JP-mandated seller/company legal-info page — the imprint analogue),
@@ -311,6 +320,9 @@ var patterns = []pattern{
 			// Russian / Greek / Turkish / Arabic legal-notice / company-info
 			"Правовая информация", "Реквизиты", "Юридическая информация",
 			"Νομική σημείωση", "Yasal Uyarı", "Şirket Bilgileri", "إشعار قانوني",
+			"Informații legale", "Informatii legale", "Informazioni legali", "Informazioni societarie",
+			"Información legal", "Datos legales", "Informações legais", "Dados da empresa",
+			"Informations légales", "Bedrijfsgegevens", "Dane firmy", "Informacje prawne",
 		),
 		canonicalPaths: []string{
 			"/imprint", "/impressum", "/legal-notice", "/mentions-legales",
