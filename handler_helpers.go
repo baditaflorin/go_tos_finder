@@ -316,6 +316,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			delete(merged, t)
 		}
 	}
+	discardStandaloneDisclaimer(merged)
 
 	// Build documents[] in documentTypeOrder, and confidence tallies.
 	docs := make([]DocFinding, 0, len(merged))
@@ -368,4 +369,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func discardStandaloneDisclaimer(merged map[DocType]DocFinding) {
+	if _, ok := merged[DocDisclaimer]; !ok {
+		return
+	}
+	for t := range merged {
+		if t != DocDisclaimer && !hubDocTypes[t] {
+			return
+		}
+	}
+	delete(merged, DocDisclaimer)
 }
