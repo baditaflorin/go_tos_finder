@@ -153,6 +153,32 @@ func TestBodyHasTypeSignalScript(t *testing.T) {
 	}
 }
 
+func TestLocalizedEuropeanTermsTitleAndBodySignal(t *testing.T) {
+	cases := []struct {
+		name  string
+		title string
+		body  string
+	}{
+		{"dutch", "Algemene voorwaarden", "Deze algemene voorwaarden gelden voor het gebruik van de dienst."},
+		{"polish", "Regulamin", "Niniejszy regulamin określa warunki korzystania z usługi."},
+		{"romanian", "Termeni și condiții", "Acești termeni și condiții se aplică utilizării serviciului."},
+		{"finnish", "Käyttöehdot", "Näitä käyttöehtoja sovelletaan palvelun käyttöön."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page := `<html><head><title>` + tc.title + `</title></head><body><h1>` + tc.title + `</h1>` +
+				strings.Repeat(tc.body, 20) + `</body></html>`
+			vr := classifyBody(page, 200, DocTermsOfService)
+			if !vr.IsReal || vr.Confidence != ConfHigh {
+				t.Fatalf("localized terms page should be high confidence: %+v", vr)
+			}
+			if !bodyHasTypeSignal(page, DocTermsOfService) {
+				t.Fatal("localized terms body should pass the canonical-probe signal gate")
+			}
+		})
+	}
+}
+
 // TestE2EChineseFooterDetection: end-to-end reproduction of the qq.com / Tencent
 // case the deployed 1.2.1 returned `none` for. A homepage whose footer carries
 // Chinese legal anchors (服务协议, 隐私政策) pointing at opaque rule/policy paths

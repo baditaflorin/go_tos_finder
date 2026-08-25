@@ -102,7 +102,7 @@ var patterns = []pattern{
 			"warunki-korzystania", "ogolne-warunki", "polzovatelskoe-soglashenie", "usloviya-ispolzovaniya",
 		),
 		textRegex:  regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)?|terms\s*&\s*conditions|terms\s+and\s+conditions|conditions\s+of\s+use|user\s+agreement|EULA|nutzungsbedingungen|allgemeine\s+gesch[äa]ftsbedingungen|AGB|conditions\s+d['e]\s*utilisation|conditions\s+g[ée]n[ée]rales|termini\s+(?:di\s+servizio|e\s+condizioni)|t[ée]rminos\s+(?:y\s+condiciones|de\s+servicio)|condiciones\s+(?:de\s+uso|del\s+servicio)|termos\s+(?:de\s+(?:uso|servi[çc]o)|e\s+condi[çc][õo]es)|gebruiksvoorwaarden|algemene\s+voorwaarden|regulamin|termeni\s+[șs]i\s+condi[țt]ii)\b`),
-		titleRegex: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)|terms\s+and\s+conditions|terms\s*&\s*conditions|user\s+agreement|end[-\s]user\s+license|EULA|nutzungsbedingungen|gesch[äa]ftsbedingungen|conditions\s+g[ée]n[ée]rales|termini\s+di\s+servizio|t[ée]rminos|condiciones|termos\s+de)\b`),
+		titleRegex: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)|terms\s+and\s+conditions|terms\s*&\s*conditions|user\s+agreement|end[-\s]user\s+license|EULA|nutzungsbedingungen|gesch[äa]ftsbedingungen|allgemeine\s+bedingungen|algemene\s+voorwaarden|gebruiksvoorwaarden|voorwaarden|conditions\s+g[ée]n[ée]rales|termini\s+di\s+servizio|termini\s+e\s+condizioni|t[ée]rminos|condiciones|termos\s+de|regulamin|warunki(?:\s+(?:korzystania|użytkowania))?|termeni\s+[șs]i\s+condi[țt]ii|obchodn[íi]\s+podm[íi]nky|k[äa]ytt[öo]ehdot|anv[äa]ndarvillkor|handelsvillkor|vilk[åa]r)\b`),
 		scriptRegex: scriptRE(
 			// Japanese: terms of use / member agreement
 			"利用規約", "利用条件", "ご利用規約", "会員規約", "サービス利用規約",
