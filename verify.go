@@ -48,7 +48,7 @@ var legalVocabRE = regexp.MustCompile(`(?i)\b(?:last\s+(?:updated|modified|revis
 // of probe false positives seen on the 100 real rows. Link-discovered docs are
 // exempt — the explicit link is itself the location evidence.
 var docTypeSignalRE = map[DocType]*regexp.Regexp{
-	DocTermsOfService: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use)|terms\s+and\s+conditions|user\s+agreement|acceptance\s+of\s+these\s+terms|by\s+(?:using|accessing))\b`),
+	DocTermsOfService: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use)|terms\s+and\s+conditions|user\s+agreement|acceptance\s+of\s+these\s+terms|by\s+(?:using|accessing)|nutzungsbedingungen|gesch[äa]ftsbedingungen|algemene\s+voorwaarden|gebruiksvoorwaarden|voorwaarden|regulamin|warunki(?:\s+(?:korzystania|użytkowania))?|termeni\s+[șs]i\s+condi[țt]ii|obchodn[íi]\s+podm[íi]nky|k[äa]ytt[öo]ehdot|anv[äa]ndarvillkor|handelsvillkor|vilk[åa]r)\b`),
 	// datenschutz(?:erkl[äa]rung|hinweise)? — see the matching titleRegex fix
 	// in patterns.go: a bare `\bdatenschutz\b` cannot match inside the standard
 	// German compound "Datenschutzerklärung", so a canonical-probed German-only

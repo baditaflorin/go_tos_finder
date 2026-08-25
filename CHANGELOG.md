@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.4 — 2026-08-25
+
+### Fixed
+- Recognize common Dutch, Polish, Romanian, Finnish, and Nordic legal-title
+  compounds as ToS evidence during body verification, preserving high
+  confidence for localized documents found through opaque or canonical links.
+
+
 All notable changes to this service are recorded here, newest first.
 
 ## 1.8.2 — 2026-08-23
