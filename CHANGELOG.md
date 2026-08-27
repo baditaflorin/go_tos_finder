@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.8.7 — 2026-08-27
+
+### Fixed
+- UK inline same-line address extraction: the real swetenhams.co.uk
+  legal-notices page's address ("Registered Office is Cumbria House,
+  16-20 Hockliffe Street, Leighton Buzzard, Bedfordshire, LU7 1GN") sits
+  on the same run-on line as the entity name, but in a phrasing shape
+  ("`<name>` is registered ... under company number `<n>`, Registered
+  Office is `<address>`.") the one existing same-line address pattern
+  (`inlineOfAddressRE`, tuned for Malta's "`<name>` (`<number>`) of
+  `<address>` (\"nickname\")" drafting convention) doesn't match — the
+  address-introducing clause isn't even adjacent to the name, unlike the
+  Malta shape. Added `registeredOfficeAddressRE` (imprint_name.go) as a
+  same-line fallback in `extractAddressNearEntity`, tried only when
+  `inlineOfAddressRE` doesn't already claim the line's address. Verified
+  against swetenhams.co.uk's real raw page markup end-to-end: `Address`
+  now resolves correctly alongside `LegalName` and `Register` (see 1.8.5,
+  1.8.6).
+
+### Note on completeness
+- `CompletenessScore` for this real page reaches 66, not 100 — GB uses the
+  `eu_baseline` ruleset (`legal_name` + `address` + `contact`), and this
+  real page's real static content never discloses a phone number or email
+  address anywhere (re-verified live, 2026-08-27). "contact" is correctly
+  and permanently missing for this specific page; 66/100 is the accurate
+  ceiling, not a remaining bug.
+
 ## 1.8.6 — 2026-08-27
 
 ### Fixed
