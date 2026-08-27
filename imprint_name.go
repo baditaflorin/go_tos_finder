@@ -191,6 +191,20 @@ var cuiWordRE = regexp.MustCompile(`(?i)\b(?:cui|cif)\b`)
 // on any later "of" appearing deeper in the same line/sentence.
 var inlineOfAddressRE = regexp.MustCompile(`^\s*(?:\([^()]{0,40}\)\s*)?of\s+`)
 
+// registeredOfficeAddressRE matches the UK company-law disclosure phrasing
+// "Registered Office is <address>" / "Registered Office: <address>" — a
+// same-line inline-address shape distinct from inlineOfAddressRE's Malta
+// "(<number>) of <address>" convention: here the address-introducing clause
+// isn't adjacent to the entity name at all (it follows an intervening
+// "is registered in <jurisdiction> under company number <n>, " clause), so
+// it's searched for anywhere in the text following the name rather than
+// anchored to the start of it. See extractAddressNearEntity's doc comment
+// below for the real evidence (swetenhams.co.uk). Whitespace class mirrors
+// stripTradingNamePrefix's tradingNamePrefixRE: stripTagsLines never
+// decodes NBSP-shaped entities, and real UK pages use them freely between
+// words in exactly this kind of disclosure sentence.
+var registeredOfficeAddressRE = regexp.MustCompile(`(?i)registered(?:\s|&#160;|&nbsp;)+office(?:\s|&#160;|&nbsp;)+(?:is|:)(?:\s|&#160;|&nbsp;)+`)
+
 // looksAddressLine is a loose heuristic for "this line is part of a postal
 // address": either it carries a postal-code/house-number-shaped digit run
 // (hasDigitRun — see its doc comment for why "any digit at all" was too
@@ -324,6 +338,38 @@ func extractAddressNearEntity(text, name string) string {
 				seg = strings.Trim(seg, " ,;")
 				if seg != "" && looksAddressLine(seg) {
 					parts = append(parts, seg)
+				}
+			}
+			// Same-line inline address, alternate UK phrasing: "<Name>
+			// is registered in <jurisdiction> under company number <n>,
+			// Registered Office is <address>." -- the address-
+			// introducing clause isn't adjacent to the name (unlike the
+			// Malta shape above), so it's searched for anywhere in
+			// `rest` rather than anchored to its start. Only tried when
+			// the Malta shape didn't already claim this line's address.
+			// Cut at the next "(" (a possible trailing defined-term
+			// clause) or sentence-ending "." (a UK postal address never
+			// itself contains a period), whichever comes first. Real
+			// evidence: swetenhams.co.uk's real legal-notices page:
+			// "Swetenhams is a trading name of Sequence (UK) Limited is
+			// registered in England and Wales under company number
+			// 4268443, Registered Office is Cumbria House, 16-20
+			// Hockliffe Street, Leighton Buzzard, Bedfordshire, LU7
+			// 1GN.  VAT Registration Number is 500 2481 05.".
+			if len(parts) == 0 {
+				if loc := registeredOfficeAddressRE.FindStringIndex(rest); loc != nil {
+					seg := rest[loc[1]:]
+					if pIdx := strings.IndexByte(seg, '('); pIdx >= 0 {
+						seg = seg[:pIdx]
+					}
+					if dIdx := strings.IndexByte(seg, '.'); dIdx >= 0 {
+						seg = seg[:dIdx]
+					}
+					seg = collapseSpaces(strings.TrimSpace(seg))
+					seg = strings.Trim(seg, " ,;")
+					if seg != "" && looksAddressLine(seg) {
+						parts = append(parts, seg)
+					}
 				}
 			}
 		}

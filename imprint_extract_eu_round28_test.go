@@ -129,17 +129,26 @@ func TestExtractImprintFieldsCompaniesHouseCleanFooter(t *testing.T) {
 //     matching the marker with a regex whose whitespace class accepts
 //     `&#160;`/`&nbsp;` as well as real whitespace between every word.
 //
-// Known issue found, NOT fixed this round: CompletenessScore comes out 33
-// (only "legal_name"), not 100 — address isn't detected even though it's
-// present in the same real paragraph ("Registered Office is Cumbria
-// House, 16-20 Hockliffe Street, ..."), because it's embedded inline in
-// the same run-on line as the name rather than on a following line or
-// matching the one existing same-line address pattern
-// (inlineOfAddressRE's Malta-drafting "<name> (<number>) of <address>
-// (\"nickname\")" shape — this page's phrasing, "<name> is registered ...
-// under company number <n>, Registered Office is <address>.", doesn't
-// match it). A distinct gap in address-shape matching, not name-candidate
-// formation — flagged for follow-up rather than fixed here.
+// Follow-up fix (round 29): CompletenessScore originally came out 33 (only
+// "legal_name"), not accounting for the address that's present in the same
+// real paragraph ("Registered Office is Cumbria House, 16-20 Hockliffe
+// Street, ..."), because it's embedded inline in the same run-on line as
+// the name rather than on a following line or matching the one then-
+// existing same-line address pattern (inlineOfAddressRE's Malta-drafting
+// "<name> (<number>) of <address> (\"nickname\")" shape — this page's
+// phrasing, "<name> is registered ... under company number <n>,
+// Registered Office is <address>.", doesn't match it). A distinct gap in
+// address-shape matching, not name-candidate formation. Fixed by adding
+// registeredOfficeAddressRE (imprint_name.go) as a same-line fallback in
+// extractAddressNearEntity, tried when inlineOfAddressRE doesn't match.
+//
+// CompletenessScore now reaches 66, not 100: GB uses the eu_baseline
+// ruleset (legal_name + address + contact). This real page's real static
+// content never discloses a phone number or email address anywhere (re-
+// verified live, 2026-08-27: the only "tel"/"phone" hits on the actual
+// page are JS callback-form plumbing, not a disclosed contact value), so
+// "contact" is correctly and permanently missing for this page — 66/100 is
+// the accurate ceiling, not a remaining bug.
 const swetenhamsRealMarkup = `<!DOCTYPE html>
 <html lang="en-GB">
 <head><title>Legal Notices | Swetenhams</title></head>
@@ -185,10 +194,15 @@ func TestExtractImprintFieldsSwetenhamsRealMarkupEndToEnd(t *testing.T) {
 	if im.Register != wantRegister {
 		t.Errorf("Register = %q, want %q", im.Register, wantRegister)
 	}
-	// Deliberately NOT asserting Address/CompletenessScore==100 here — see
-	// the "known issue" doc comment above. Asserting the current (wrong)
-	// value would silently pass once that's fixed instead of failing
-	// loudly to prompt updating this test; asserting the eventually-right
-	// value would fail right now for a documented, separate reason. Left
-	// unasserted on purpose.
+	const wantAddress = "Cumbria House, 16-20 Hockliffe Street, Leighton Buzzard, Bedfordshire, LU7 1GN"
+	if im.Address != wantAddress {
+		t.Errorf("Address = %q, want %q", im.Address, wantAddress)
+	}
+	// 66, not 100: "contact" is correctly missing — this real page never
+	// discloses a phone number or email address at all. See the doc
+	// comment above swetenhamsRealMarkup for why 100 isn't the right
+	// target here.
+	if im.CompletenessScore != 66 {
+		t.Errorf("CompletenessScore = %d, want 66 — FieldsFound: %v, FieldsMissing: %v", im.CompletenessScore, im.FieldsFound, im.FieldsMissing)
+	}
 }
