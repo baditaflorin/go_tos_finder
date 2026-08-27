@@ -702,6 +702,7 @@ func extractEntityAround(text, suffix string) string {
 	// the label strip in the right order.
 	candidate = trimAtConjunction(candidate, suffix)
 	candidate = stripPersonRolePrefix(candidate)
+	candidate = stripTradingNamePrefix(candidate)
 	candidate = stripAwardPrefix(candidate)
 	candidate = stripLabelPrefix(candidate)
 	candidate = trimAtConjunction(candidate, suffix)
@@ -1503,6 +1504,38 @@ func stripPersonRolePrefix(s string) string {
 		}
 	}
 	return s
+}
+
+// stripTradingNamePrefix strips a UK/Irish "trading name" disclosure
+// preamble ("X is a trading name of Y Limited", "X trading as Y Ltd") down
+// to just the actual legal entity name that follows. Real evidence:
+// swetenhams.co.uk's real legal-notices page reads "Swetenhams is a
+// trading name of Sequence (UK) Limited is registered in England and
+// Wales..." — the stem "Swetenhams is a trading name of Sequence (UK)"
+// contains two sentenceStopWords hits ("is", "of") and was rejected by
+// cleanCandidateName as sentence-like before any strip*Prefix function
+// ever ran, even though "Sequence (UK) Limited" is unambiguously the real
+// legal entity name — the same class of gap stripPersonRolePrefix and
+// stripAwardPrefix already close for their own preamble shapes, just for
+// this one. "trading style of" and "trading as" are the same standard UK
+// company-branding phrasing, not independently evidenced this round but
+// structurally identical (strip through the marker, keep what follows).
+var tradingNamePrefixRE = regexp.MustCompile(`(?i)is(?:\s|&#160;|&nbsp;)+a(?:\s|&#160;|&nbsp;)+trading(?:\s|&#160;|&nbsp;)+(?:name|style)(?:\s|&#160;|&nbsp;)+of(?:\s|&#160;|&nbsp;)+|trading(?:\s|&#160;|&nbsp;)+as(?:\s|&#160;|&nbsp;)+`)
+
+func stripTradingNamePrefix(s string) string {
+	// Word-by-word (?:\s|&#160;|&nbsp;)+ rather than a plain string search:
+	// real evidence, swetenhams.co.uk's actual raw markup has a literal,
+	// un-decoded "&#160;" (numeric NBSP entity) between "of" and
+	// "Sequence" ("...trading name of&#160;Sequence (UK) Limited...") —
+	// stripTagsLines never decodes NBSP-shaped entities (same deliberate
+	// non-decoding as "&nbsp;"/"&quot;"/"&copy;" elsewhere in this
+	// codebase), so a plain-space marker string silently never matched
+	// this real page at all despite looking identical when printed.
+	loc := tradingNamePrefixRE.FindStringIndex(s)
+	if loc == nil {
+		return s
+	}
+	return strings.TrimSpace(s[loc[1]:])
 }
 
 // stripAwardPrefix turns "Best convertible bond: Asia Cement Corporation"

@@ -62,15 +62,8 @@ func TestFindIdentifiersCompaniesHouseRealEvidence(t *testing.T) {
 
 // TestExtractImprintFieldsCompaniesHouseCleanFooter: end-to-end proof that
 // a fixed identifierHit reaches the final Imprint.Register field once a
-// name candidate actually forms (a well-structured <footer> with heading +
-// address, the same shape as the existing proxima.ie/round-9 fixture).
-// Real-world register-number VALUES are taken from swetenhams.co.uk (see
-// above); the surrounding HTML structure is reconstructed rather than
-// byte-for-byte, because swetenhams.co.uk's own real markup exposes a
-// SEPARATE, pre-existing bug (see below) that prevents this specific page
-// from forming ANY name candidate at all — orthogonal to the
-// case-sensitivity fix this round targets, so it's flagged, not fixed,
-// here.
+// name candidate forms (a well-structured <footer> with heading + address,
+// the same shape as the existing proxima.ie/round-9 fixture).
 const chFooterFixture = `<!DOCTYPE html>
 <html lang="en-GB">
 <head><title>Legal Notices | Swetenhams</title></head>
@@ -102,16 +95,100 @@ func TestExtractImprintFieldsCompaniesHouseCleanFooter(t *testing.T) {
 	}
 }
 
-// NOTE — separate, pre-existing bug found but NOT fixed this round:
-// running extractImprintFields against swetenhams.co.uk's REAL raw markup
-// (the actual page structure, not the reconstructed clean footer above)
-// returns LegalName="" and Register="" even with this round's (?i) fix
-// applied — despite findIdentifiers correctly finding both CompaniesHouse
-// hits (see TestFindIdentifiersCompaniesHouseRealEvidence above). No name
-// candidate forms at all, so there's no "winner" for
-// backfillWinnerIdentifiers to attach the identifier to. The real page's
-// legal-name sentence is grammatically run-on ("Swetenhams is a trading
-// name of Sequence (UK) Limited is registered in England and Wales..." —
-// missing a "which" before the second "is"), which plausibly confuses
-// candidate formation, but this wasn't root-caused before time ran out
-// this round — flagged for follow-up rather than guessed at.
+// swetenhamsRealMarkup: byte-for-byte real HTML source from
+// swetenhams.co.uk/legal-notices (curl, 2026-08-27) — the page's ACTUAL
+// div-based structure (not a footer), with its real grammatically run-on
+// legal-name sentence and its real un-decoded "&#160;" NBSP entity.
+//
+// Running extractImprintFields against this real markup — even with the
+// (?i) fix above applied — originally returned LegalName="" and
+// Register="", despite findIdentifiers correctly finding both
+// CompaniesHouse hits in the same raw text (see
+// TestFindIdentifiersCompaniesHouseRealEvidence). Two compounding causes,
+// both found and fixed this round:
+//
+//  1. extractEntityAround's backward scan from the "Limited" suffix
+//     correctly stops at the enclosing paragraph boundary, but the whole
+//     paragraph text up to that point — "Swetenhams is a trading name of
+//     Sequence (UK) Limited" — then fails cleanCandidateName's stop-word
+//     gate: the stem "Swetenhams is a trading name of Sequence (UK)"
+//     contains two sentenceStopWords hits ("is", "of"), so it's rejected
+//     as sentence-like before any strip*Prefix function (stripPersonRole-
+//     Prefix, stripAwardPrefix, ...) ever ran — none of the EXISTING
+//     strippers recognize a UK "X is a trading name of Y" disclosure, the
+//     same class of gap they already close for other preamble shapes.
+//     Added stripTradingNamePrefix (imprint_name.go), wired in next to
+//     stripPersonRolePrefix.
+//  2. Even with that stripper added, it still didn't fire: the real raw
+//     markup has a literal, un-decoded "&#160;" between "of" and
+//     "Sequence" ("...trading name of&#160;Sequence (UK) Limited...") —
+//     stripTagsLines never decodes NBSP-shaped entities (same deliberate
+//     non-decoding as "&nbsp;"/"&quot;"/"&copy;" elsewhere in this
+//     codebase) — so a plain-space marker string never matched this real
+//     page at all despite looking identical when printed. Fixed by
+//     matching the marker with a regex whose whitespace class accepts
+//     `&#160;`/`&nbsp;` as well as real whitespace between every word.
+//
+// Known issue found, NOT fixed this round: CompletenessScore comes out 33
+// (only "legal_name"), not 100 — address isn't detected even though it's
+// present in the same real paragraph ("Registered Office is Cumbria
+// House, 16-20 Hockliffe Street, ..."), because it's embedded inline in
+// the same run-on line as the name rather than on a following line or
+// matching the one existing same-line address pattern
+// (inlineOfAddressRE's Malta-drafting "<name> (<number>) of <address>
+// (\"nickname\")" shape — this page's phrasing, "<name> is registered ...
+// under company number <n>, Registered Office is <address>.", doesn't
+// match it). A distinct gap in address-shape matching, not name-candidate
+// formation — flagged for follow-up rather than fixed here.
+const swetenhamsRealMarkup = `<!DOCTYPE html>
+<html lang="en-GB">
+<head><title>Legal Notices | Swetenhams</title></head>
+<body>
+  <div class="cms-page-wrapper">
+  <div class="container">
+    <div class="campaign--container--wrapper container-content">
+      <div class="campaign--container">
+        <div class="header-barcode"></div>
+        <div class="campaign--content">
+          <div class="campaign--title">legal</div>
+          <h1>notices</h1>
+          <hr>
+          <img src="" class="campaign--image">
+          <p>Registered in England and Wales<br />
+Registration number: 4268443<br />
+Registered Office: Cumbria House, 16-20 Hockliffe Street, Leighton Buzzard, Bedfordshire, LU7 1GN<br />
+Data Protection Registration Number: Z8920800<br />
+Financial Services Register number: 302221&#160;<span style="font-size:1.6rem">&#160;</span></p>
+
+<p>Swetenhams is a trading name of&#160;Sequence (UK) Limited is registered in England and Wales under company number 4268443, Registered Office is Cumbria House, 16-20 Hockliffe Street, Leighton Buzzard, Bedfordshire, LU7 1GN. &#160;VAT Registration Number is 500 2481 05. &#160;</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>`
+
+func TestExtractImprintFieldsSwetenhamsRealMarkupEndToEnd(t *testing.T) {
+	im := extractImprintFields("https://www.swetenhams.co.uk/legal-notices", swetenhamsRealMarkup, "swetenhams.co.uk")
+
+	if im.LegalName != "Sequence (UK) Limited" {
+		t.Errorf("LegalName = %q, want %q", im.LegalName, "Sequence (UK) Limited")
+	}
+	if im.Suffix != "Limited" {
+		t.Errorf("Suffix = %q, want \"Limited\"", im.Suffix)
+	}
+	if im.Country != "GB" {
+		t.Errorf("Country = %q, want GB", im.Country)
+	}
+	const wantRegister = "CompaniesHouse Registration number: 4268443"
+	if im.Register != wantRegister {
+		t.Errorf("Register = %q, want %q", im.Register, wantRegister)
+	}
+	// Deliberately NOT asserting Address/CompletenessScore==100 here — see
+	// the "known issue" doc comment above. Asserting the current (wrong)
+	// value would silently pass once that's fixed instead of failing
+	// loudly to prompt updating this test; asserting the eventually-right
+	// value would fail right now for a documented, separate reason. Left
+	// unasserted on purpose.
+}

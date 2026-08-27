@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.8.6 — 2026-08-27
+
+### Fixed
+- UK legal-name candidate formation: a real UK "trading name" disclosure
+  ("Swetenhams is a trading name of Sequence (UK) Limited is registered
+  in England and Wales...") was silently discarded by cleanCandidateName's
+  stop-word gate (the stem contains "is" and "of", two sentenceStopWords
+  hits) before any existing strip*Prefix function got a chance to trim
+  the preamble down to the real entity name. Added stripTradingNamePrefix
+  (imprint_name.go), the same class of fix as stripPersonRolePrefix/
+  stripAwardPrefix for their own preamble shapes. A second, compounding
+  cause on the same real page: the marker phrase's expected space was
+  actually a literal, un-decoded "&#160;" NBSP entity
+  ("...of&#160;Sequence..."), which stripTagsLines never decodes — a
+  plain-space string match therefore never fired even after the stripper
+  was added. Fixed by matching with a regex whose whitespace class
+  accepts `&#160;`/`&nbsp;` as well as real whitespace. Verified against
+  swetenhams.co.uk's real raw page markup end-to-end: LegalName and
+  Register (see 1.8.5) both now resolve correctly together.
+
+### Known issue (not fixed this round)
+- The same real page's address ("Registered Office is Cumbria House, ...")
+  still isn't detected (CompletenessScore comes out 33, not 100) — it's
+  embedded inline in the same run-on line as the name, in a phrasing shape
+  the one existing same-line address pattern (inlineOfAddressRE, tuned for
+  a Malta-drafting "<name> (<number>) of <address> (\"nickname\")" shape)
+  doesn't match. A distinct address-shape-matching gap, not a
+  name-candidate-formation issue — flagged for follow-up.
+
 ## 1.8.5 — 2026-08-27
 
 ### Fixed
