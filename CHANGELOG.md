@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.8.5 — 2026-08-27
+
+### Fixed
+- UK "CompaniesHouse" register-number pattern (`imprint_vat.go`) never
+  matched real pages: it required literal-case "No"/"Number", but real UK
+  imprint/legal-notices text writes lowercase ("Registration number:
+  4268443", "company number 4268443") — same class of bug already fixed
+  for Norway's OrgNr and others. Added `(?i)`. Verified against
+  swetenhams.co.uk's real, live legal-notices page: 0 matches before, 2
+  correct matches after, no new false positives against the VAT/Data-
+  Protection-Registration-Number lines on the same page. This pattern had
+  been present since the very first structured-imprint-extraction commit
+  but, unlike every other country's pattern in this file, had never
+  actually been validated against a real UK page until now.
+
+### Known issue (not fixed this round)
+- A separate, pre-existing bug: `extractImprintFields` forms no name
+  candidate at all for swetenhams.co.uk's real raw markup (LegalName and
+  Register both come back empty even with the above fix applied), despite
+  `findIdentifiers` correctly finding the register number in the same raw
+  text. The real page's legal-name sentence is grammatically run-on
+  ("Swetenhams is a trading name of Sequence (UK) Limited is registered in
+  England and Wales..." — missing a "which"), which plausibly confuses
+  candidate formation, but wasn't root-caused this round — flagged for
+  follow-up.
+
 ## 1.8.4 — 2026-08-25
 
 ### Fixed
