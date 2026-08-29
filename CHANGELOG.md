@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.8.8 — 2026-08-29
+
+### Fixed
+- UK/Ireland register-number extraction, three real-evidence gaps found via
+  a direct domainscope prod audit (essentially zero UK/IE domains had a
+  populated `imprint_register_number` even with round 28's GB
+  case-insensitivity fix already live):
+  - rbo.org.uk (Royal Opera House Covent Garden Foundation): bare
+    "Company number 480523" — an unpadded 6-digit UK company number,
+    below the previous 7-8 digit floor. Widened just the bare "Company
+    No/Number" branch to 6-8 digits.
+  - yoplait.ie (Yoplait UK Ltd, a real GB Companies-House entity despite
+    the `.ie` TLD): "Company Reg Number 02597128" — added "Reg" as an
+    accepted abbreviation of "Registration".
+  - boi.com (Bank of Ireland Group plc): bare "registered number 593672"
+    (593672 is BoI's real CRO number) — added as a new alternative to the
+    CRO/IE pattern.
+- Deliberately did NOT widen the CompaniesHouse pattern's "Registration"/
+  "Registered ... No|Number" branches to 6 digits: doing so regressed
+  round 9's real proxima.ie evidence (a genuine 6-digit Irish CRO number)
+  by making it match both CompaniesHouse/GB and CRO/IE, flipping the
+  correct IE resolution to GB. See `imprint_vat.go`'s CompaniesHouse
+  comment for the full rationale.
+
+### Note on the entity-resolution matcher
+- Verified end-to-end against domainscope-gleif-import's matcher (match.go):
+  its `ukCompanyNumberPattern` and `croCompanyNumberPattern` already parse
+  every one of these three new raw-output shapes correctly (5-8 digit UK
+  range, optional "Reg(?:istration)?" already anticipated, and the CRO
+  formatter's existing "registered " strip collapses the new bare-label
+  match down to a shape its pattern already matches) — no matcher-side
+  changes needed for this round.
+
 ## 1.8.7 — 2026-08-27
 
 ### Fixed
