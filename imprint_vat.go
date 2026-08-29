@@ -95,7 +95,52 @@ func init() {
 		// (matched timestamps, postcodes, product IDs); the prefix is what
 		// makes it a register hit. We capture the prefix as part of the
 		// match string so downstream consumers can audit context.
-		{"CompaniesHouse", "GB", regexp.MustCompile(`(?i)\b(?:Company\s*(?:No|Number)|Registered\s+(?:in\s+(?:England|Scotland|Wales|England\s+and\s+Wales)\s+)?(?:No|Number)|Registration\s+(?:No|Number))\.?\s*[:#]?\s*\d{7,8}\b`)},
+		//
+		// Two real-evidence fixes (round 29, fetched 2026-08-29, part of the
+		// domainscope register-number-extraction improvement pass), applied
+		// as TWO separately-quantified groups rather than one shared digit
+		// range — deliberately, see the note at the end of this comment:
+		//
+		// (1) The bare "Company No"/"Company Number" branch's digit floor is
+		// widened from 7 to 6: rbo.org.uk's real footer ("Royal Opera House
+		// Covent Garden Foundation, a charitable company limited by
+		// guarantee incorporated in England and Wales (Company number
+		// 480523) Charity Registered (Number 211775)") shows a real, live UK
+		// company disclosing an unpadded 6-digit number — older companies
+		// (this one incorporated well before Companies House's modern
+		// 8-digit zero-padding convention took hold) are routinely written
+		// without the leading zeros a strict 7-8 digit count assumed. 0
+		// matches before this widening, 1 correct match after (the adjacent
+		// "Charity Registered (Number 211775)" doesn't collide — no
+		// CompaniesHouse-shaped label precedes it).
+		//
+		// (2) Added "Reg" as an abbreviation of "Registration" between
+		// "Company" and "No"/"Number", at the ORIGINAL 7-8 digit floor:
+		// yoplait.ie's real privacy policy (naming Yoplait UK Ltd, a real
+		// Companies-House-registered entity) writes "Company Reg Number
+		// 02597128" (8 digits) — matched by neither the "Company\s*(?:No|
+		// Number)" branch (an extra "Reg" token sits between "Company" and
+		// "Number") nor the "Registration\s+(?:No|Number)" branch (the label
+		// is the abbreviation "Reg", not the full word "Registration")
+		// before this change.
+		//
+		// Why NOT also widen the "Registration"/"Registered ... No|Number"
+		// branches to 6 digits: doing so regressed round 9's real
+		// proxima.ie evidence ("Company Registration No: 613314", a real
+		// IRISH CRO number, 6 digits) — a 6-digit "Registration No"/
+		// "Registered ... Number" is exactly the shape Ireland's CRO pattern
+		// below also matches, and go_tos_finder's only country-disambiguating
+		// signal between an ambiguous "Company Registration No: NNNNNN"
+		// sentence and Ireland's CRO is the 7-8 vs 5-7 digit-count split
+		// (see the CRO pattern's own doc comment). Widening every branch
+		// uniformly made 613314 match BOTH CompaniesHouse/GB and CRO/IE,
+		// which flipped the real, correct IE resolution to GB (caught by
+		// the existing TestExtractImprintFieldsProximaIrishRealEvidence
+		// test). Kept unwidened, this same collision does NOT occur for
+		// rbo.org.uk's bare "Company number" evidence above, since that
+		// exact wording ("Company" + "number", no "Registration"/"Reg")
+		// isn't a shape CRO's own patterns match at all.
+		{"CompaniesHouse", "GB", regexp.MustCompile(`(?i)\b(?:Company\s*(?:No|Number)\.?\s*[:#]?\s*\d{6,8}|(?:Company\s*Reg(?:istration)?\.?\s+(?:No|Number)|Registered\s+(?:in\s+(?:England|Scotland|Wales|England\s+and\s+Wales)\s+)?(?:No|Number)|Registration\s+(?:No|Number))\.?\s*[:#]?\s*\d{7,8})\b`)},
 		{"EIN", "US", regexp.MustCompile(`\bEIN\s*[:#]?\s*\d{2}-\d{7}\b`)},
 		{"ABN", "AU", regexp.MustCompile(`\bABN\s*[:#]?\s*\d{2}\s?\d{3}\s?\d{3}\s?\d{3}\b`)},
 		{"ACN", "AU", regexp.MustCompile(`\bACN\s*[:#]?\s*\d{3}\s?\d{3}\s?\d{3}\b`)},
@@ -198,7 +243,19 @@ func init() {
 		// label is exactly the kind of ground-truth evidence this codebase
 		// already uses to override a suffix guess (see the REA/Hoja/KvK/NIPC
 		// precedent cited in imprint.go's extractImprintFields).
-		{"CRO", "IE", regexp.MustCompile(`(?i)\b(?:CRO\s*(?:No\.?|Number|Reg(?:istration)?\.?(?:\s*(?:No\.?|Number))?)|Compan(?:y|ies)\s+Registration(?:\s+Office)?(?:\s+No\.?|\s+Number)?)\s*[:#]?\s*\d{5,7}\b`)},
+		//
+		// Added a bare "registered number" alternative (round 29, fetched
+		// 2026-08-29): boi.com's real corporate-information page ("Bank of
+		// Ireland Group plc is a public limited company incorporated in
+		// Ireland, with its registered office at 2 College Green, Dublin,
+		// D02 VR66 and registered number 593672") — 593672 is Bank of
+		// Ireland Group plc's real CRO number — discloses the register
+		// number with neither a "CRO" nor a "Compan(y|ies) Registration"
+		// label, just the bare Companies Act-style phrase "registered
+		// number". Distinguished from "registered office" (which precedes
+		// it on the same real page and must NOT match) by requiring the
+		// literal word "number" immediately after "registered".
+		{"CRO", "IE", regexp.MustCompile(`(?i)\b(?:CRO\s*(?:No\.?|Number|Reg(?:istration)?\.?(?:\s*(?:No\.?|Number))?)|Compan(?:y|ies)\s+Registration(?:\s+Office)?(?:\s+No\.?|\s+Number)?|registered\s+number)\s*[:#]?\s*\d{5,7}\b`)},
 		// Luxembourg — RCS (Registre de Commerce et des Sociétés) company
 		// number, the register disclosure the Loi du 14 août 2000 relative
 		// au commerce électronique (Luxembourg's Directive 2000/31/EC
