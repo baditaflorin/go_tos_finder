@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.9 — 2026-09-10
+
+### Fixed
+- Normalize additional Balkan and Eastern European endonyms (RS, BA, ME,
+  MK, and MD) in verified imprint country extraction, without accepting free
+  text as a country code.
+
 ## 1.8.8 — 2026-08-29
 
 ### Fixed
