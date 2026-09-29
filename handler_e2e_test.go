@@ -192,7 +192,10 @@ func TestFallbackClientSendsRealUserAgent(t *testing.T) {
 func TestHandlerFreshLinkVerificationBudgetAfterCanonicalProbeTimeout(t *testing.T) {
 	allowLoopback(t)
 	oldTimeout := probePhaseTimeout
-	probePhaseTimeout = 30 * time.Millisecond
+	// Keep this comfortably above scheduler noise on loaded CI workers. The
+	// default-path handlers below still hold canonical probes past this phase,
+	// while the explicit /privacy link gets a fresh full verification budget.
+	probePhaseTimeout = 500 * time.Millisecond
 	t.Cleanup(func() { probePhaseTimeout = oldTimeout })
 
 	mux := http.NewServeMux()
