@@ -981,3 +981,7 @@ deploy:
 requires:
   - docker
   - pentest_network
+
+auth:
+  reads_secrets:
+    - openobserve_otlp_ingestion_token
