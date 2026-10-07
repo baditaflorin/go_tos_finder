@@ -985,3 +985,15 @@ requires:
 auth:
   reads_secrets:
     - openobserve_otlp_ingestion_token
+  calls_services:
+    - go-fleet-secrets
+secrets:
+  - env: FLEET_SECRETS_API_KEY_FILE
+    vault_key: go_tos_finder-fleet-secrets-api-key
+    file:
+      source: .secrets/fleet_secrets_api_key
+      target: /run/secrets/fleet_secrets_api_key
+      uid: 100
+      gid: 101
+    key_scope: fleet-secrets.0exec.com
+    key_tier: service
