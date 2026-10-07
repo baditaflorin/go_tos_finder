@@ -11,6 +11,8 @@ services:
     networks:
       - pentest_network
 
+    volumes:
+      - ./.secrets/fleet_secrets_api_key:/run/secrets/fleet_secrets_api_key:ro
 networks:
   pentest_network:
     external: true
