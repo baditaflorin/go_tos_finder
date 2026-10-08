@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.10 — 2026-10-08
+
+### Changed
+- Update the shared go-common dependency to v0.102.34.
+
+
 ## 1.8.9 — 2026-09-10
 
 ### Fixed
