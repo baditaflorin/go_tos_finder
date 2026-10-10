@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.11 — 2026-10-10
+
+Enable opt-in Pyroscope continuous profiling using service-scoped receiver credentials.
+
 ## 1.8.10 — 2026-10-08
 
 ### Changed

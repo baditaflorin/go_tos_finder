@@ -1,7 +1,7 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.8.10"
+version: "1.8.11"
 extra_env:
   PYROSCOPE_SERVER_ADDRESS: "https://openobserve.0own.com/pyroscope"
   PYROSCOPE_UPLOAD_RATE: "30s"
