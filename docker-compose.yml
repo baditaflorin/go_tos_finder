@@ -8,9 +8,16 @@ services:
       - 8316:8316
     environment:
       - PORT=8316
+      - PYROSCOPE_SERVER_ADDRESS=${PYROSCOPE_SERVER_ADDRESS:-}
+      - PYROSCOPE_UPLOAD_RATE=${PYROSCOPE_UPLOAD_RATE:-30s}
+      - PYROSCOPE_BASIC_AUTH_USER_FILE=/run/secrets/pyroscope_basic_auth_user
+      - PYROSCOPE_BASIC_AUTH_PASSWORD_FILE=/run/secrets/pyroscope_basic_auth_password
     networks:
       - pentest_network
 
+    volumes:
+      - ./.secrets/pyroscope_basic_auth_user:/run/secrets/pyroscope_basic_auth_user:ro
+      - ./.secrets/pyroscope_basic_auth_password:/run/secrets/pyroscope_basic_auth_password:ro
 networks:
   pentest_network:
     external: true
