@@ -1,7 +1,11 @@
 id: go_tos_finder
 name: Legal Document Finder
 category: legal_analysis
-version: "1.8.10"
+version: "1.8.11"
+extra_env:
+  PYROSCOPE_SERVER_ADDRESS: "https://openobserve.0own.com/pyroscope"
+  PYROSCOPE_UPLOAD_RATE: "30s"
+
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
@@ -985,3 +989,21 @@ requires:
 auth:
   reads_secrets:
     - openobserve_otlp_ingestion_token
+    - pyroscope-go_tos_finder-user
+    - pyroscope-go_tos_finder-password
+
+secrets:
+  - env: PYROSCOPE_BASIC_AUTH_USER_FILE
+    vault_key: pyroscope-go_tos_finder-user
+    file:
+      source: .secrets/pyroscope_basic_auth_user
+      target: /run/secrets/pyroscope_basic_auth_user
+      uid: 100
+      gid: 101
+  - env: PYROSCOPE_BASIC_AUTH_PASSWORD_FILE
+    vault_key: pyroscope-go_tos_finder-password
+    file:
+      source: .secrets/pyroscope_basic_auth_password
+      target: /run/secrets/pyroscope_basic_auth_password
+      uid: 100
+      gid: 101
