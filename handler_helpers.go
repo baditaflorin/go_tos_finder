@@ -280,6 +280,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if base == nil {
 		base = u
 	}
+	if !sameSiteHost(base, u) {
+		resp.Detection.OffsiteRedirect = strings.ToLower(base.Hostname())
+	}
 
 	// Phase 1: scan links in the rendered HTML.
 	linkHits := linkScan(html, base)
@@ -320,8 +323,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		defer wg.Done()
 		g, gctx := errgroup.WithContext(probeCtx)
 		g.SetLimit(probeWorkers)
-		for _, cand := range probeList {
-			cand := cand
+		for rank, cand := range probeList {
+			cand, rank := cand, rank
 			probedMu.Lock()
 			_, already := probedHits[cand.DocType]
 			probedMu.Unlock()
@@ -356,6 +359,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				}
 				view := st.view(pm.body)
 				vr := classifyView(view, pm.status, cand.DocType)
+				if vr.IsReal {
+					st.noteProbeFP(view.fp, cand.DocType)
+				}
 				if !vr.IsReal || st.sameAsHomepage(pm.body) {
 					probedMu.Lock()
 					rejectedCount++
@@ -388,6 +394,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					Confidence:   vr.Confidence,
 					Title:        vr.Title,
 					Evidence:     vr.Evidence,
+					probeRank:    rank,
+					fp:           view.fp,
 				}
 				if cand.DocType == DocImprint {
 					// vr.IsReal is already confirmed true above — capture the
@@ -396,7 +404,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					hit.Body = pm.body
 				}
 				probedMu.Lock()
-				if cur, exists := probedHits[cand.DocType]; !exists || confidenceRank(vr.Confidence) > confidenceRank(cur.Confidence) {
+				if cur, exists := probedHits[cand.DocType]; !exists ||
+					confidenceRank(vr.Confidence) > confidenceRank(cur.Confidence) ||
+					(confidenceRank(vr.Confidence) == confidenceRank(cur.Confidence) && rank < cur.probeRank) {
 					probedHits[cand.DocType] = hit
 				}
 				probedMu.Unlock()
@@ -433,6 +443,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		_ = g2.Wait()
 	}()
 	wg.Wait()
+	// Catch-all probe hits: a page fingerprint answered for two or more document
+	// types (or the homepage itself) is a wildcard route, not a document.
+	for t, h := range probedHits {
+		if st.catchAll(h.fp) {
+			delete(probedHits, t)
+			rejectedCount++
+		}
+	}
 	resp.Detection.PathsProbed = probedCount
 	resp.Detection.ProbesRejected = rejectedCount
 	resp.Detection.RateLimited = st.rateLimited.Load()
@@ -547,12 +565,43 @@ type scanState struct {
 	mu       sync.Mutex
 	views    map[uint64]*bodyView
 	homeHash uint64
+	homeFP   uint64
+	// fpTypes records, per page fingerprint (title + visible text), which
+	// document types' canonical probes answered with that exact page. A real site
+	// never serves the same text as its /terms AND its /dmca; a fingerprint
+	// shared by probes of two or more types is a catch-all route (bufaloscr.com
+	// answers every path with its 45 KB SPA shell, differing only in a nonce, so
+	// a byte hash cannot see it) and carries no evidence about any of them.
+	fpTypes map[uint64]map[DocType]bool
 }
 
 func newScanState(homepage string) *scanState {
-	st := &scanState{views: map[uint64]*bodyView{}}
-	st.homeHash = bodyHash(truncateUTF8(homepage, verifyBodyBytes))
+	st := &scanState{views: map[uint64]*bodyView{}, fpTypes: map[uint64]map[DocType]bool{}}
+	hp := truncateUTF8(homepage, verifyBodyBytes)
+	st.homeHash = bodyHash(hp)
+	st.homeFP = analyzeBody(hp).fp
 	return st
+}
+
+// noteProbeFP records that a canonical probe for type t returned a real-looking
+// page with fingerprint fp.
+func (st *scanState) noteProbeFP(fp uint64, t DocType) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	m := st.fpTypes[fp]
+	if m == nil {
+		m = map[DocType]bool{}
+		st.fpTypes[fp] = m
+	}
+	m[t] = true
+}
+
+// catchAll reports whether a fingerprint was served by probes of >= 2 types, or
+// equals the homepage's own.
+func (st *scanState) catchAll(fp uint64) bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return fp == st.homeFP || len(st.fpTypes[fp]) >= 2
 }
 
 func bodyHash(s string) uint64 {
@@ -654,6 +703,15 @@ func verifyLink(ctx context.Context, client *http.Client, st *scanState, t DocTy
 		}
 		if vr.Title != "" {
 			hit.Title = vr.Title
+		}
+		if hasEvidenceTok(vr.Evidence, "pdf_document") && confidenceRank(hit.LinkConfidence) < confidenceRank(ConfMedium) &&
+			!matchTextOrScript(titleRegexFor(t), scriptRegexFor(t), hit.LinkText) {
+			// A PDF carries no type information of its own; with only a weak link
+			// signal (anchor text "Sales and delivery terms" on a ToS slot) it is
+			// not evidence of the document type.
+			hit.Confidence = ConfLow
+			hit.Evidence = append(hit.Evidence, "page_exists_unconfirmed", "pdf_weak_link")
+			return hit
 		}
 		hit.Confidence = vr.Confidence
 		// An explicit link to a real page is location evidence: hold it to at

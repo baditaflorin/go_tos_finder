@@ -61,6 +61,10 @@ type pattern struct {
 	titleRegex     *regexp.Regexp
 	canonicalPaths []string
 
+	// pathFast is the set-based twin of pathPatterns (built in init); see
+	// patterns_path.go.
+	pathFast *pathMatcher
+
 	// scriptRegex matches CJK / Cyrillic / Greek / Arabic / Thai / Hindi
 	// legal-document phrases in link text, titles, and bodies. These scripts
 	// have no ASCII word boundaries (Go's regexp `\b` is ASCII-only), so the
@@ -370,6 +374,12 @@ var patterns = []pattern{
 		textRegex:      regexp.MustCompile(`(?i)^\s*(?:legal|policies|rechtliches|legal\s+(?:center|centre|hub|information)|legal\s+&\s+compliance)\s*$`),
 		canonicalPaths: nil,
 	},
+}
+
+func init() {
+	for i := range patterns {
+		patterns[i].pathFast = newPathMatcher(patterns[i].pathPatterns)
+	}
 }
 
 // patternByType is a lookup built once at init.

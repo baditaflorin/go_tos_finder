@@ -409,6 +409,41 @@ func tagInner(src, name string) string {
 	}
 }
 
+// headingTexts returns the decoded text of the first max <h1>/<h2>/<h3>
+// elements in src (document order). Linear time.
+func headingTexts(src string, max int) []string {
+	var out []string
+	from := 0
+	for len(out) < max {
+		i := indexFold(src, "<h", from)
+		if i < 0 || i+3 >= len(src) {
+			return out
+		}
+		from = i + 2
+		if src[i+2] < '1' || src[i+2] > '3' || !isTagNameEnd(src[i+3]) {
+			continue
+		}
+		gt := strings.IndexByte(src[i+3:], '>')
+		if gt < 0 {
+			return out
+		}
+		start := i + 3 + gt + 1
+		end := indexFold(src, "</h", start)
+		if end < 0 {
+			return out
+		}
+		inner := src[start:end]
+		if len(inner) > 600 {
+			inner = truncateUTF8(inner, 600)
+		}
+		if t := cleanText(inner); t != "" {
+			out = append(out, t)
+		}
+		from = end
+	}
+	return out
+}
+
 // cleanText decodes entities and collapses whitespace of a raw HTML fragment.
 func cleanText(raw string) string { return stripTags(raw) }
 

@@ -305,7 +305,11 @@ func TestValidateIdentifierChecksumsDEAndAT(t *testing.T) {
 		{"DE corrupted check digit", "VAT", "DE123456789", "DE", checksumInvalid},
 		{"AT valid", "VAT", "ATU12345675", "AT", checksumValid},
 		{"AT corrupted check digit", "VAT", "ATU12345670", "AT", checksumInvalid},
-		{"GB has no implemented algorithm", "VAT", "GB123456789", "GB", formatValid},
+		// 1.9.0: GB now HAS a published algorithm (mod 97, see gbVATValid), so the
+		// "no algorithm => format_valid" guarantee is pinned on member states that
+		// still have none (LV, CY, LT) instead.
+		{"LV has no implemented algorithm", "VAT", "LV12345678901", "LV", formatValid},
+		{"CY has no implemented algorithm", "VAT", "CY12345678X", "CY", formatValid},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

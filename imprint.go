@@ -699,7 +699,15 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 		}
 	}
 	if im.VAT != "" && vatValidation == "" {
-		vatValidation = string(validateIdentifier("VAT", im.VAT, vatCountryHint(im.VAT)))
+		hint := vatCountryHint(im.VAT)
+		if hint == "" {
+			// A VAT written without its country prefix ("B88665179" on a .es
+			// imprint) used to be validated against NO country and so never got
+			// past format_valid. The imprint's own country (suffix / identifier /
+			// TLD derived) is the right hint.
+			hint = vatPrefixForCountry(im.Country)
+		}
+		vatValidation = string(validateIdentifier("VAT", im.VAT, hint))
 	}
 	if im.VAT != "" {
 		im.VATValidation = vatValidation
@@ -722,6 +730,19 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	}
 	im.Country = country
 	im.Ruleset = rulesetFor(country)
+
+	// A VAT written without its country prefix (JSON-LD vatID "B88665179" on a
+	// .es imprint) could only ever reach format_valid, because the prefix is the
+	// sole country signal at extraction time. Now that the country is known,
+	// promote it to checksum_valid when it verifies under that country. Only an
+	// UPGRADE: a merely-guessed country (suffix, TLD) must never turn a number
+	// into "invalid".
+	if im.VAT != "" && im.VATValidation == string(formatValid) && vatCountryHint(im.VAT) == "" {
+		if h := vatPrefixForCountry(country); h != "" &&
+			validateIdentifier("VAT", im.VAT, h) == checksumValid {
+			im.VATValidation = string(checksumValid)
+		}
+	}
 
 	im.ResponsiblePerson = extractResponsiblePerson(text)
 	if im.ResponsiblePerson == "" && im.Suffix == "" && im.LegalName != "" {
@@ -773,4 +794,17 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 
 	scoreImprint(&im, hasImprintContact(body))
 	return im
+}
+
+// vatPrefixForCountry maps an ISO country to its VAT prefix (Greece is "EL").
+// Empty for non-VAT countries.
+func vatPrefixForCountry(cc string) string {
+	cc = strings.ToUpper(strings.TrimSpace(cc))
+	if cc == "GR" {
+		return "EL"
+	}
+	if knownVATPrefixes[cc] {
+		return cc
+	}
+	return ""
 }

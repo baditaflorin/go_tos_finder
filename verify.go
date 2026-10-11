@@ -134,9 +134,11 @@ type bodyView struct {
 	pdf        bool
 	title      string
 	h1         string
-	text       string // visible text, <= maxVerifyText
-	lower      string // strings.ToLower(text)
-	redirect   bool   // tiny body that JS/meta-redirects away
+	headings   []string // first few h1-h3 texts (document order)
+	text       string   // visible text, <= maxVerifyText
+	lower      string   // strings.ToLower(text)
+	redirect   bool     // tiny body that JS/meta-redirects away
+	fp         uint64   // fingerprint of title + visible text (catch-all detection)
 	soft404    bool
 	legalVocab bool
 }
@@ -152,11 +154,13 @@ func analyzeBody(body string) *bodyView {
 	}
 	v.title = cleanText(tagInner(body, "title"))
 	v.h1 = cleanText(tagInner(body, "h1"))
+	v.headings = headingTexts(body, 8)
 	if v.small {
 		v.redirect = jsRedirectRE.MatchString(body) || metaRefreshRE.MatchString(body)
 	}
 	v.text = visibleText(body, maxVerifyText)
 	v.lower = strings.ToLower(v.text)
+	v.fp = bodyHash(v.title + "\x00" + v.text)
 	// Soft-404 / parked / placeholder: title or h1 naming it is disqualifying on
 	// any page; the same phrases inside the body text only count on short pages.
 	switch {
@@ -271,10 +275,22 @@ func classifyView(v *bodyView, httpStatus int, want DocType) verifyResult {
 			return res
 		}
 	}
+	// A section heading that names the type ("Termini e condizioni" under an
+	// h1 of just "Termini", androniteam.com) is weaker than the title but
+	// stronger than generic vocabulary: medium.
+	if tr != nil || sr != nil {
+		for _, h := range v.headings {
+			if matchTextOrScript(tr, sr, h) {
+				res.Confidence = ConfMedium
+				res.Evidence = append(res.Evidence, "heading_matches_type")
+				return res
+			}
+		}
+	}
 	// Cross-type guard: the page announces itself (title or h1) as a DIFFERENT
 	// legal document than the one we are looking for — e.g. /terms-of-use that
 	// serves the Privacy Policy — so it is no evidence for `want`.
-	if other := otherTitleType(want, res.Title, v.h1); other != "" {
+	if other := otherTitleType(want, res.Title, v.h1); other != "" && !hubDocTypes[want] {
 		res.IsReal = false
 		res.Confidence = ConfNone
 		res.Evidence = append(res.Evidence, "rejected:title_is_"+string(other))
@@ -321,4 +337,14 @@ func confidenceRank(c string) int {
 	default:
 		return 0
 	}
+}
+
+// hasEvidenceTok reports whether any evidence token starts with tok.
+func hasEvidenceTok(ev []string, tok string) bool {
+	for _, e := range ev {
+		if strings.HasPrefix(e, tok) {
+			return true
+		}
+	}
+	return false
 }

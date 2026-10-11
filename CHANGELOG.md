@@ -1,5 +1,88 @@
 # Changelog
 
+## 1.9.0 — 2026-10-11
+
+Pass-3 detector review (CPU hog, 33 % timeouts, 36 % NoData). Measured on 150
+real domains replayed from recorded bytes (old vs new code on identical input).
+
+### Performance (CPU per request 212 ms -> 29 ms, 7.4x; worst page 6.2 s -> 0.24 s)
+- Profile of 1.8.x: ~77 % of CPU was Go's regexp NFA. `homepageBlockRE` ran
+  over the whole homepage (up to 4 MB) on every request (27 %), and every
+  canonical-probe verification re-ran 8-12 `(?i)` alternation regexes over 64 KB
+  (23 %); `anchorRE` scanned 4 MB homepages at ~1 MB/s; path classification ran
+  ~100 regexes per anchor (25 %).
+- New `fastre.go`: a sound required-literal prefilter in front of every large
+  vocabulary regex (the accepted language is unchanged; equivalence is
+  property-tested), linear-time `visibleText` / `stripTags` / `tagInner` /
+  anchor scanner, set-based path matching, one memoised body analysis per distinct
+  body.
+- The service built TWO fleet fetch clients per request, each with its own
+  `http.Transport` and idle pool, and never closed them: 3 -> 724 goroutines
+  after 40 sequential requests (a memory/GC hog in a 1 GiB container). One shared
+  client now (goroutine growth bounded, tested).
+- Fewer, smarter probes: refund/shipping/GDPR/SLA/copyright/community/disclaimer
+  are no longer probed (0 of 184 documents in the sample were found that way) and
+  imprint canonical paths are (they were starved behind 29 ToS/privacy probes).
+  Probing stops on 429/503.
+
+### Timeouts / budget
+- One 24 s wall-clock budget (DomainScope's inner timeout is 30 s; the old
+  budget was 32 s plus an unbounded DNS pre-check). Link verification and probes
+  run concurrently, each with its own deadline; the scan answers with whatever it
+  verified (`detection.budget_exhausted`).
+- Homepage fetch: one 10 s attempt; ONE retry only for a fast reset/5xx, never a
+  timeout (a dead origin used to cost 2 x 12 s). On TLS-cert / refused / reset /
+  DNS failure of `https://<domain>` try `https://www.<domain>` then
+  `http://<domain>` (`detection.fallback_origin`): amf-france.org,
+  anthonyraneri.com, appzer.de ... were NoData only because the bare apex has no
+  valid certificate.
+- In-flight cap (32, `TOS_FINDER_MAX_INFLIGHT`): saturated scans answer 503
+  `overloaded` after 2 s instead of queueing until the caller's deadline.
+
+### Fixed (false negatives)
+- The soft-404 gate read `<script>` text: `console.log("... element not
+  found")` rejected genuine Terms/Privacy pages (academyart.edu, avophotonics.com,
+  ...). It now looks at visible text, and the body-text rule only applies to
+  SHORT pages; title/h1 naming a 404 still rejects any page.
+- Verification GET answered 429/403/503 (rate limit / bot challenge after the
+  homepage fetch and the probe burst) dropped real footer links (bleepingcomputer.com,
+  blackrock.com, buffalonew.com). They are now kept as `link_unverified:http_<code>`.
+- Link text was not HTML-decoded ("Terms &amp; Conditions" never matched);
+  `terms-%26-conditions`, `aviso-de-privacidad`, `politica-de-privacidade`,
+  Datenschutz variants, `.pdf` documents and `href=\"...\"` fragments from JS
+  strings (fetch URLs ending `%22`) are now handled; verification reads 256 KB
+  (title was past 64 KB on Wix/Next pages); a section heading naming the type
+  ("Termini e condizioni") earns medium confidence; links to the apex/subdomains of
+  the same registrable domain (public-suffix aware) are accepted when the site
+  fetched as www.
+
+### Fixed (false positives / honesty)
+- A link whose target is a verified-dead page (404/410, soft-404, a page titled as
+  a DIFFERENT document, e.g. /terms-of-use serving the privacy policy) is no
+  longer listed in `documents[]` (it polluted `documents_present` /
+  `domain_legal_doc_items`); it is reported in `rejected_links`.
+- Catch-all sites that answer every canonical probe with one SPA shell
+  (bufaloscr.com) are detected by page fingerprint and yield NoData.
+- `verdict` counts DISTINCT document URLs (megogo.net: three labelled links to one
+  /en/rules page was "comprehensive") and derives "has ToS/privacy" from evidenced
+  documents, not from the presence of a dead link.
+- `detection.offsite_redirect` flags documents that belong to a redirect target on
+  another registrable domain.
+
+### Imprint / VAT
+- Added the published VAT checksums for CZ, HU, EE, GB, SK, SI, LU, MT, CH (UID)
+  and the Spanish DNI/NIE forms; an unprefixed VAT is promoted to checksum_valid
+  when it verifies under the imprint country. Previously these all answered
+  `format_valid`, which DomainScope stores as `imprint_vat_valid=false`: 7 of the 10
+  "invalid" VATs in the 20k-row window recompute as VALID.
+- Tests that pinned the old behaviour (GB/LU/MT "no algorithm => format_valid")
+  were inverted to the stronger assertion; the "no algorithm" guarantee is now pinned
+  on LV/CY.
+
+### Tooling
+- `harness_test.go`: env-gated (`TOS_VALIDATE=1`) record/replay harness running the
+  real handler against recorded bytes (old vs new on identical input, CPU/request).
+
 ## 1.8.10 — 2026-10-08
 
 ### Changed

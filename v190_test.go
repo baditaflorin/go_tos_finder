@@ -192,15 +192,6 @@ func TestClassifyBodyPDF(t *testing.T) {
 	}
 }
 
-func hasEvidenceTok(ev []string, tok string) bool {
-	for _, e := range ev {
-		if strings.HasPrefix(e, tok) {
-			return true
-		}
-	}
-	return false
-}
-
 // --- homepage block gate ------------------------------------------------------
 
 func TestIsHomepageBlockedSizeAndTitle(t *testing.T) {
@@ -585,5 +576,82 @@ func TestProbePlanKeepsImprintAndCapsTotal(t *testing.T) {
 	}
 	if haveRefund {
 		t.Error("refund/shipping/SLA are never found by probing; they must not be probed")
+	}
+}
+
+// The set-based path matcher must accept exactly what the reference regexps
+// (pathRE / pathREContains) accept.
+func TestPathMatcherEquivalentToRegexps(t *testing.T) {
+	rng := rand.New(rand.NewSource(11))
+	segs := []string{"privacy", "privacy-policy", "Privacy.HTML", "privacy.php5", "privacy.policy.html", "terms", "terms-of-service.aspx", "tos", "agb.pdf",
+		"cookie-settings", "blog", "my-cookies-page", "de", "en", "legal", "politique-confidentialite", "datenschutzerklärung", "informații-legale",
+		"aviso-de-privacidad", "x", "", "terms-&-conditions", "impressum.htm", "dmca.asp", "sla", "SLA.PDF", "thermometer", "paralegal"}
+	for i := 0; i < 3000; i++ {
+		var parts []string
+		for k, n := 0, 1+rng.Intn(4); k < n; k++ {
+			parts = append(parts, segs[rng.Intn(len(segs))])
+		}
+		path := "/" + strings.Join(parts, "/")
+		if rng.Intn(5) == 0 {
+			path += "/"
+		}
+		for _, p := range patterns {
+			want := matchPathOnly(path, p.pathPatterns)
+			got := p.pathFast.match(path, pathSegments(path))
+			if got != want {
+				t.Fatalf("%s: path %q fast=%v regexps=%v", p.docType, path, got, want)
+			}
+		}
+	}
+}
+
+// A redirect to a different host (google.vu -> www.google.com, eclektikvegan.com
+// -> caligurllyfe.com) is reported so consumers can discount "documents" that
+// belong to the redirect target.
+func TestOffsiteRedirectIsReported(t *testing.T) {
+	allowLoopback(t)
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			http.Redirect(w, r, strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)+"/home", http.StatusFound)
+		case "/home":
+			_, _ = w.Write([]byte(`<html><head><title>Elsewhere</title></head><body><footer><a href="/privacy">Privacy Policy</a></footer></body></html>`))
+		case "/privacy":
+			_, _ = w.Write([]byte(realPrivacyPage()))
+		}
+	}))
+	defer srv.Close()
+	code, resp := scanJSON(t, srv.URL)
+	if code != http.StatusOK || resp.Detection.OffsiteRedirect != "localhost" {
+		t.Fatalf("want offsite_redirect=localhost, got code=%d %+v", code, resp.Detection)
+	}
+}
+
+// bufaloscr.com answers EVERY path with the same SPA shell (differing only in a
+// per-request nonce, so a byte hash cannot match). 1.8.x reported it as having
+// ToS+privacy from the /tos and /privacy-policy probes; 1.9.0 first widened that
+// to AUP/DMCA/imprint/cookies — the catch-all detector must reject all of them.
+func TestHandlerRejectsCatchAllProbes(t *testing.T) {
+	allowLoopback(t)
+	var n int
+	var mu sync.Mutex
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		n++
+		nonce := n
+		mu.Unlock()
+		_, _ = w.Write([]byte(fmt.Sprintf(`<html><head><title>Los Bufalos Mojados</title><meta name="nonce" content="%d"></head><body><div id="app">`+
+			strings.Repeat("Welcome to our restaurant. Liability and jurisdiction apply to nothing here. ", 40)+`</div></body></html>`, nonce)))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	code, resp := scanJSON(t, srv.URL)
+	if code != http.StatusNotFound || resp.DocumentsFound != 0 {
+		t.Fatalf("a catch-all SPA must yield NoData, got code=%d found=%d docs=%+v", code, resp.DocumentsFound, resp.Documents)
+	}
+	if resp.Detection.ProbesRejected == 0 {
+		t.Error("probes_rejected_soft404 should count the rejected catch-all hits")
 	}
 }

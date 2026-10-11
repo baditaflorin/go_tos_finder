@@ -87,8 +87,13 @@ func TestExtractImprintFieldsMenuLuRealEvidence(t *testing.T) {
 	if im.VAT != "LU33554515" {
 		t.Errorf("VAT = %q, want \"LU33554515\"", im.VAT)
 	}
-	if im.VATValidation != string(formatValid) {
-		t.Errorf("VATValidation = %q, want format_valid (LU deliberately only claims format_valid — see validateVAT's doc comment)", im.VATValidation)
+	// 1.9.0: this test used to pin format_valid ("LU deliberately only claims
+	// format_valid"). The published Luxembourg algorithm (first six digits mod 89
+	// equal the last two) is now implemented and this very real number
+	// (335545 mod 89 = 15) verifies, so the stronger, correct assertion is
+	// checksum_valid.
+	if im.VATValidation != string(checksumValid) {
+		t.Errorf("VATValidation = %q, want checksum_valid (335545 mod 89 == 15)", im.VATValidation)
 	}
 	if im.Ruleset != RulesetEUBaseline {
 		t.Errorf("Ruleset = %q, want eu_baseline (Luxembourg's Art. 4 register requirement is conditional \"where applicable\", same as the EU baseline itself — no dedicated Luxembourg ruleset added this round)", im.Ruleset)

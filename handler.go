@@ -93,6 +93,13 @@ type DocFinding struct {
 	// DomainScope's documents_present / domain_legal_doc_items, and "the footer
 	// links to /privacy but /privacy is a soft-404" is not a present document.
 	rejected bool
+
+	// probeRank is the position of a probed path in the canonical plan; ties
+	// between equally-confident probes go to the lower rank so the result does
+	// not depend on which of the parallel probes answered first.
+	probeRank int
+	// fp is the fingerprint (title + visible text) of the probed page.
+	fp uint64
 }
 
 // RejectedLink is a footer/page link that looked like a legal document but whose
@@ -126,6 +133,11 @@ type DetectionSummary struct {
 	// FallbackOrigin names the alternate origin that served the homepage when
 	// https://<domain> itself failed ("www" or "http").
 	FallbackOrigin string `json:"fallback_origin,omitempty"`
+	// OffsiteRedirect is the final host when the homepage redirected to a
+	// DIFFERENT registrable domain (eclektikvegan.com -> caligurllyfe.com,
+	// google.vu -> www.google.com). Every document is then the redirect target's,
+	// not necessarily the queried domain's own; consumers can discount them.
+	OffsiteRedirect string `json:"offsite_redirect,omitempty"`
 }
 
 // Status classifies the outcome for the caller (domainscope) so a dead /
@@ -490,6 +502,7 @@ func isWeakUnconfirmed(d DocFinding) bool {
 		switch {
 		case strings.HasPrefix(e, "title_matches_type"),
 			strings.HasPrefix(e, "legal_vocabulary"),
+			strings.HasPrefix(e, "heading_matches_type"),
 			strings.HasPrefix(e, "pdf_document"):
 			// Corroborated by the document's own content.
 			return false

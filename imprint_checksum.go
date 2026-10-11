@@ -75,6 +75,13 @@ func validateIdentifier(kind, value, country string) validity {
 			return formatValid
 		}
 		return mod11Verdict(esCIFValid(digits[len(digits)-9:]))
+	case "UID":
+		// Switzerland's UID (CHE-###.###.###, + MWST/TVA/IVA for the VAT
+		// form): 9 digits, weighted mod-11 check — see chUIDValid.
+		if d := extractDigits(value); len(d) == 9 {
+			return mod11Verdict(chUIDValid(d))
+		}
+		return formatValid
 	case "PartitaIVA":
 		// Italy's Partita IVA — 11 digits, Luhn-valid (same algorithm
 		// validateVAT's IT case already uses for the "IT"-prefixed VAT
@@ -515,7 +522,38 @@ func validateVAT(country, raw string) validity {
 		}
 		return formatValid
 	case "ES":
-		return mod11Verdict(esCIFValid(raw))
+		return esNIFVerdict(raw)
+	case "CZ":
+		// 8 digits = legal entity (IČO, mod-11); 9-10 digits = a natural person
+		// (rodné číslo) whose check differs and is not implemented.
+		if len(raw) == 8 {
+			return mod11Verdict(czICOValid(raw))
+		}
+		return formatValid
+	case "HU":
+		return mod11Verdict(huAdoszamValid(raw))
+	case "EE":
+		return mod11Verdict(eeVATValid(raw))
+	case "GB":
+		if len(raw) == 9 || len(raw) == 12 {
+			return mod11Verdict(gbVATValid(raw[:9]))
+		}
+		return formatValid // GD/HA government/health-authority formats
+	case "SK":
+		return mod11Verdict(skVATValid(raw))
+	case "SI":
+		return mod11Verdict(siVATValid(raw))
+	case "LU":
+		return mod11Verdict(luVATValid(raw))
+	case "MT":
+		return mod11Verdict(mtVATValid(raw))
+	case "CH":
+		// UID after a "CHE" prefix: validateVAT splits the first two letters
+		// off, leaving "E" + 9 digits (+ optional MWST/TVA/IVA suffix).
+		if d := extractDigits(raw); len(d) == 9 {
+			return mod11Verdict(chUIDValid(d))
+		}
+		return formatValid
 	case "AT":
 		// ATU + 8 digits; last is a check digit (weighted mod-10).
 		body := strings.TrimPrefix(raw, "U")
@@ -577,15 +615,181 @@ func validateVAT(country, raw string) validity {
 		// vatPatterns doc comment) — format_valid, same discipline as
 		// LU/GB below.
 		return formatValid
-	case "LU", "GB":
-		// Recognised format; algorithms are documented but we only claim
-		// format_valid here to keep the false-"invalid" rate at zero.
-		return formatValid
 	}
 	return formatValid
 }
 
 // --- per-country algorithms -------------------------------------------------
+
+// 1.9.0: the member states below used to fall through to formatValid ("no
+// algorithm implemented"), which DomainScope's Map() then stored as
+// imprint_vat_valid=false (it maps every non-checksum_valid VAT to false). In
+// the 20k-row production window 10 of 238 VAT numbers were stored "invalid",
+// and an independent recomputation shows 7 of those 10 are checksum-VALID
+// (CZ26421232, EE102324299, HU18333886, GB707748315, CHE-188.552.084,
+// CHE-107.885.990, PL 6662110699). Each algorithm below is the published one
+// (EU VIES / national registry) and is pinned in v190_vat_test.go by real
+// numbers from that window plus a one-digit corruption of each.
+
+func digitsOf(s string) ([]int, bool) {
+	d := make([]int, len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return nil, false
+		}
+		d[i] = int(s[i] - '0')
+	}
+	return d, true
+}
+
+// eeVATValid: Estonia, 9 digits; weights 3,7,1,3,7,1,3,7 over the first 8,
+// check = (10 - sum mod 10) mod 10.
+func eeVATValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 9 {
+		return false
+	}
+	w := []int{3, 7, 1, 3, 7, 1, 3, 7}
+	sum := 0
+	for i, x := range w {
+		sum += x * d[i]
+	}
+	return (10-sum%10)%10 == d[8]
+}
+
+// gbVATValid: United Kingdom, 9 digits; weights 8,7,6,5,4,3,2,10,1 and a
+// mod-97 residue of 0 (old numbers) or 42/55 (post-2010 numbers, prefix >= 100).
+func gbVATValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 9 {
+		return false
+	}
+	w := []int{8, 7, 6, 5, 4, 3, 2, 10, 1}
+	sum := 0
+	for i, x := range w {
+		sum += x * d[i]
+	}
+	r := sum % 97
+	if r == 0 {
+		return true
+	}
+	return d[0]*100+d[1]*10+d[2] >= 100 && (r == 42 || r == 55)
+}
+
+// skVATValid: Slovakia, 10 digits: not starting with 0, third digit in
+// {2,3,4,7,8,9}, divisible by 11.
+func skVATValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 10 || d[0] == 0 {
+		return false
+	}
+	switch d[2] {
+	case 2, 3, 4, 7, 8, 9:
+	default:
+		return false
+	}
+	n := 0
+	for _, x := range d {
+		n = n*10 + x
+	}
+	return n%11 == 0
+}
+
+// siVATValid: Slovenia, 8 digits; weights 8..2 over the first 7,
+// check = 11 - sum mod 11 (10 -> 0, 11 invalid).
+func siVATValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 8 || d[0] == 0 {
+		return false
+	}
+	sum := 0
+	for i := 0; i < 7; i++ {
+		sum += (8 - i) * d[i]
+	}
+	c := 11 - sum%11
+	if c == 10 {
+		c = 0
+	}
+	return c == d[7]
+}
+
+// luVATValid: Luxembourg, 8 digits: the first six mod 89 equal the last two.
+func luVATValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 8 {
+		return false
+	}
+	head := 0
+	for i := 0; i < 6; i++ {
+		head = head*10 + d[i]
+	}
+	return head%89 == d[6]*10+d[7]
+}
+
+// mtVATValid: Malta, 8 digits; weights 3,4,6,7,8,9 over the first six,
+// last two digits = 37 - sum mod 37 (artemisialtd.com's MT2336-6423).
+func mtVATValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 8 || d[0] == 0 {
+		return false
+	}
+	w := []int{3, 4, 6, 7, 8, 9}
+	sum := 0
+	for i, x := range w {
+		sum += x * d[i]
+	}
+	return 37-sum%37 == d[6]*10+d[7]
+}
+
+// chUIDValid: Switzerland UID/MWST number body (9 digits); weights
+// 5,4,3,2,7,6,5,4 over the first eight, check = 11 - sum mod 11 (11 -> 0,
+// 10 invalid).
+func chUIDValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 9 {
+		return false
+	}
+	w := []int{5, 4, 3, 2, 7, 6, 5, 4}
+	sum := 0
+	for i, x := range w {
+		sum += x * d[i]
+	}
+	c := 11 - sum%11
+	if c == 11 {
+		c = 0
+	}
+	return c != 10 && c == d[8]
+}
+
+// esNIFVerdict validates the three Spanish tax-ID shapes: CIF (legal entity,
+// letter + 7 digits + control), DNI/NIF (8 digits + control letter) and NIE
+// (X/Y/Z + 7 digits + control letter). The old code ran every ES value through
+// the CIF algorithm only, so a sole trader's perfectly valid DNI-based NIF
+// ("ES38837115M", bufetesanchezcasero.com) was reported checksum_invalid.
+func esNIFVerdict(raw string) validity {
+	const letters = "TRWAGMYFPDXBNJZSQVHLCKE"
+	if len(raw) != 9 {
+		return formatValid
+	}
+	switch {
+	case raw[0] >= '0' && raw[0] <= '9':
+		n, bad := atoiN(raw[:8]) // atoiN reports "errored", not "ok"
+		if bad || !isAlpha(raw[8]) {
+			return checksumInvalid
+		}
+		return mod11Verdict(letters[n%23] == raw[8])
+	case raw[0] == 'X' || raw[0] == 'Y' || raw[0] == 'Z':
+		body := string("012"[strings.IndexByte("XYZ", raw[0])]) + raw[1:8]
+		n, bad := atoiN(body)
+		if bad || !isAlpha(raw[8]) {
+			return checksumInvalid
+		}
+		return mod11Verdict(letters[n%23] == raw[8])
+	case raw[0] == 'K' || raw[0] == 'L' || raw[0] == 'M':
+		return formatValid // special-case natural persons; no verified algorithm
+	}
+	return mod11Verdict(esCIFValid(raw))
+}
 
 // deVATValid verifies a German USt-IdNr (9 digits) using the documented
 // "Modulo 11/10" iterative algorithm (the same one the Bundeszentralamt für
