@@ -79,8 +79,12 @@ func TestExtractImprintFieldsArtemisiaMtRealEvidence(t *testing.T) {
 	if im.VAT != "MT23366423" {
 		t.Errorf("VAT = %q, want MT23366423 (dash stripped by cleanIdentifierValue)", im.VAT)
 	}
-	if im.VATValidation != string(formatValid) {
-		t.Errorf("VATValidation = %q, want format_valid (no MT checksum algorithm implemented)", im.VATValidation)
+	// 1.9.0: pinned format_valid when no MT algorithm existed. The published
+	// Maltese algorithm (weights 3,4,6,7,8,9; check = 37 - sum mod 37) is now
+	// implemented and this REAL number verifies (sum 162, 162 mod 37 = 14,
+	// 37-14 = 23 = its own last two digits), so assert checksum_valid.
+	if im.VATValidation != string(checksumValid) {
+		t.Errorf("VATValidation = %q, want checksum_valid (MT23366423: 37-162%%37 == 23)", im.VATValidation)
 	}
 	if im.Ruleset != RulesetEUBaseline {
 		t.Errorf("Ruleset = %q, want eu_baseline (no dedicated Maltese ruleset added this round)", im.Ruleset)
@@ -88,8 +92,8 @@ func TestExtractImprintFieldsArtemisiaMtRealEvidence(t *testing.T) {
 	if !containsStr(im.FieldsFound, "legal_name") || !containsStr(im.FieldsFound, "address") {
 		t.Errorf("FieldsFound = %v, want legal_name and address present", im.FieldsFound)
 	}
-	if !containsStr(im.FieldsMissing, "vat_valid") {
-		t.Errorf("FieldsMissing = %v, want vat_valid present (no MT checksum algorithm implemented)", im.FieldsMissing)
+	if !containsStr(im.FieldsFound, "vat_valid") || containsStr(im.FieldsMissing, "vat_valid") {
+		t.Errorf("FieldsFound=%v FieldsMissing=%v, want vat_valid FOUND now that the MT checksum verifies", im.FieldsFound, im.FieldsMissing)
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,8 +25,28 @@ const (
 	probeTimeout   = 10 * time.Second
 	maxBodyBytes   = 4 * 1024 * 1024
 	maxRedirects   = 5
-	maxProbes      = 30
+	// maxProbes caps the speculative canonical-path probes per request. It was
+	// 30; in a 150-domain sample only 19 of 184 documents were ever found by a
+	// probe (none of them refund/shipping/GDPR/SLA/copyright/community pages),
+	// while the other probes were the bulk of the outbound requests (and of the
+	// target-side rate-limiting that turned real footer links into 429/403).
+	maxProbes = 22
+
+	// totalBudgetDefault is the hard wall-clock budget of one scan. DomainScope's inner
+	// per-call timeout is 30 s (SERVICE_CATALOG_TIMEOUT_MS, serviceclient/config.go);
+	// the pre-1.9 budget was requestTimeout+probeTimeout+10s = 32 s PLUS an
+	// unbounded DNS pre-check, so a slow target was killed by the caller at 30 s
+	// (recorded as status 3 with no body) instead of being answered. The scan now
+	// always answers, with whatever it verified, inside this budget.
+	totalBudgetDefault = 24 * time.Second
+	// homepageTimeout bounds one homepage attempt. Together with the single,
+	// fast-failure-only retry (see fetchHomepage) a dead origin costs <= ~10 s
+	// instead of 2 x 12 s.
+	homepageTimeout = 10 * time.Second
 )
+
+// totalBudget is a variable so tests can exercise the budget boundary.
+var totalBudget = totalBudgetDefault
 
 // probePhaseTimeout bounds one bounded verification phase.  Canonical-path
 // probing and verification of explicitly discovered links are separate phases:
@@ -65,6 +86,29 @@ type DocFinding struct {
 	// discovery/verification instead of costing a second HTTP round trip.
 	// Internal extraction input — not serialised.
 	Body string `json:"-"`
+
+	// rejected marks a link-discovered finding whose target was verified dead
+	// (HTTP 404/410, soft-404 body). Such links are reported in
+	// Response.RejectedLinks, never in documents[]: documents[] feeds
+	// DomainScope's documents_present / domain_legal_doc_items, and "the footer
+	// links to /privacy but /privacy is a soft-404" is not a present document.
+	rejected bool
+
+	// probeRank is the position of a probed path in the canonical plan; ties
+	// between equally-confident probes go to the lower rank so the result does
+	// not depend on which of the parallel probes answered first.
+	probeRank int
+	// fp is the fingerprint (title + visible text) of the probed page.
+	fp uint64
+}
+
+// RejectedLink is a footer/page link that looked like a legal document but whose
+// target turned out not to be one (dead page, soft-404, a page that announces
+// itself as a different document type). Kept for transparency only.
+type RejectedLink struct {
+	Type   DocType `json:"type"`
+	URL    string  `json:"url"`
+	Reason string  `json:"reason"`
 }
 
 // DetectionSummary is an aggregate evidence trail describing how the result
@@ -78,6 +122,22 @@ type DetectionSummary struct {
 	HighConfidence   int    `json:"high_confidence"`
 	MediumConfidence int    `json:"medium_confidence"`
 	LowConfidence    int    `json:"low_confidence"`
+
+	// BudgetExhausted is true when the scan hit its wall-clock budget and
+	// answered with what it had verified so far.
+	BudgetExhausted bool `json:"budget_exhausted,omitempty"`
+	// RateLimited is true when the target answered a verification fetch with
+	// 429/503 or a bot-challenge; remaining speculative probes were skipped and
+	// affected links are reported as link_unverified rather than rejected.
+	RateLimited bool `json:"rate_limited,omitempty"`
+	// FallbackOrigin names the alternate origin that served the homepage when
+	// https://<domain> itself failed ("www" or "http").
+	FallbackOrigin string `json:"fallback_origin,omitempty"`
+	// OffsiteRedirect is the final host when the homepage redirected to a
+	// DIFFERENT registrable domain (eclektikvegan.com -> caligurllyfe.com,
+	// google.vu -> www.google.com). Every document is then the redirect target's,
+	// not necessarily the queried domain's own; consumers can discount them.
+	OffsiteRedirect string `json:"offsite_redirect,omitempty"`
 }
 
 // Status classifies the outcome for the caller (domainscope) so a dead /
@@ -114,14 +174,15 @@ type Response struct {
 	// machine-readable enricher-level classification domainscope keys on
 	// (alongside the HTTP status code). Additive to the historical body:
 	// the success shape is unchanged except for this field.
-	Result           string       `json:"result,omitempty"`
-	Reason           string       `json:"reason,omitempty"`
-	FetchedURL       string       `json:"fetched_url,omitempty"`
-	ResolvedIP       string       `json:"resolved_ip,omitempty"`
-	Documents        []DocFinding `json:"documents"`
-	DocumentsFound   int          `json:"documents_found"`
-	DocumentsMissing []DocType    `json:"documents_missing"`
-	ImprintPresent   bool         `json:"imprint_present"`
+	Result           string         `json:"result,omitempty"`
+	Reason           string         `json:"reason,omitempty"`
+	FetchedURL       string         `json:"fetched_url,omitempty"`
+	ResolvedIP       string         `json:"resolved_ip,omitempty"`
+	Documents        []DocFinding   `json:"documents"`
+	RejectedLinks    []RejectedLink `json:"rejected_links,omitempty"`
+	DocumentsFound   int            `json:"documents_found"`
+	DocumentsMissing []DocType      `json:"documents_missing"`
+	ImprintPresent   bool           `json:"imprint_present"`
 	// Imprint is structured, field-level imprint/Impressum compliance
 	// evidence (legal name, address, register, VAT + checksum validation,
 	// responsible person, completeness against the applicable EU/DE/AT
@@ -195,6 +256,12 @@ func fallbackClient() *http.Client {
 	)
 }
 
+// clientHook, when non-nil, may wrap/replace the transport of every client
+// built by newClient. It exists solely so the env-gated record/replay
+// validation harness (harness_test.go) can run the real handler against
+// recorded bytes; production leaves it nil.
+var clientHook func(*http.Client)
+
 func newClient() *http.Client {
 	c := fleetfetch.NewHTTPClient(
 		fleetfetch.WithRender(renderMode()),
@@ -213,7 +280,46 @@ func newClient() *http.Client {
 		req.Header.Set("User-Agent", userAgent)
 		return nil
 	}
+	if clientHook != nil {
+		clientHook(c)
+	}
 	return c
+}
+
+var (
+	sharedClientMu sync.Mutex
+	sharedClient   *http.Client
+)
+
+// httpClient returns the process-wide fetch client.
+//
+// Before 1.9 every request built TWO clients (newClient() twice), and each
+// fleetfetch.NewHTTPClient/safehttp.NewClient owns its own *http.Transport with
+// its own idle keep-alive pool. A transport is never closed, so every request
+// left ~18 goroutines (connection read/write loops) plus buffers behind until
+// the remote closed the idle connection — measured: 3 -> 724 goroutines after 40
+// sequential requests — and the fetch-cache hop paid a fresh TCP connection
+// per request. Under sustained load that is both a memory and a GC/CPU hog (the
+// ~118 % CPU / 1 GiB container). One shared client pools connections and bounds
+// the idle set (safehttp: MaxIdleConns 20, IdleConnTimeout 30 s).
+func httpClient() *http.Client {
+	sharedClientMu.Lock()
+	defer sharedClientMu.Unlock()
+	if sharedClient == nil {
+		sharedClient = newClient()
+	}
+	return sharedClient
+}
+
+// resetSharedClient drops the shared client (tests/harness install clientHook
+// and need a fresh one).
+func resetSharedClient() {
+	sharedClientMu.Lock()
+	defer sharedClientMu.Unlock()
+	if sharedClient != nil {
+		sharedClient.CloseIdleConnections()
+	}
+	sharedClient = nil
 }
 
 // writeJSON serialises a Response at the given HTTP status. The success body
@@ -396,16 +502,37 @@ func isWeakUnconfirmed(d DocFinding) bool {
 		switch {
 		case strings.HasPrefix(e, "title_matches_type"),
 			strings.HasPrefix(e, "legal_vocabulary"),
-			strings.HasPrefix(e, "link_unverified"),
-			strings.HasPrefix(e, "link_target_soft404"):
-			// Corroborated, or held up by the link itself / explicitly a soft404
-			// link the site references — not a generic-catch-all over-claim.
+			strings.HasPrefix(e, "heading_matches_type"),
+			strings.HasPrefix(e, "pdf_document"):
+			// Corroborated by the document's own content.
 			return false
+		case strings.HasPrefix(e, "link_unverified"):
+			// The body could not be fetched (fetch noise, bot challenge,
+			// 403/429/503). A real FOOTER link whose path or anchor text names the
+			// type is still location evidence the site references the document;
+			// a lone low-floor in-page link (an article titled "Privacy ...") is
+			// not.
+			if d.Source == "footer_link" || linkTextNamesType(d) {
+				return false
+			}
+			hasUnconfirmedBody = true
 		case strings.HasPrefix(e, "page_exists_unconfirmed"):
 			hasUnconfirmedBody = true
 		}
 	}
 	return hasUnconfirmedBody
+}
+
+// linkTextNamesType reports whether the anchor text is a strict phrase for the
+// finding's own type ("Privacy Policy", "Terms of Service", "利用規約"), as
+// opposed to the bare-word text match ("privacy") that an article title can
+// satisfy. An unverifiable in-page link whose text is the full phrase is real
+// location evidence (osmfoundation.org links its privacy policy this way).
+func linkTextNamesType(d DocFinding) bool {
+	if d.LinkText == "" {
+		return false
+	}
+	return matchTextOrScript(titleRegexFor(d.Type), scriptRegexFor(d.Type), d.LinkText)
 }
 
 // hasEvidence reports whether finding d carries an evidence token with the
@@ -419,32 +546,84 @@ func hasEvidence(d DocFinding, prefix string) bool {
 	return false
 }
 
+// countsAsDoc reports whether a finding is a present, evidenced document: not a
+// hub directory page, not a weak generic-catch-all hit, not a verified-dead link,
+// and either unverified-by-status (Status 0) or a 2xx/3xx.
+func countsAsDoc(d DocFinding) bool {
+	if hubDocTypes[d.Type] || d.rejected {
+		return false
+	}
+	if isWeakUnconfirmed(d) {
+		return false
+	}
+	return d.Status == 0 || (d.Status >= 200 && d.Status < 400)
+}
+
 // countSuccess counts docs that are present (link-only with no HEAD result, or
 // a verified 2xx) and carry real evidence. Excluded: hub directory pages, weak
-// generic-catch-all hits, and footer links whose target turned out to be a
-// soft-404 (the link exists but the document does NOT — counting it would be a
-// "claimed a doc that 404s" false positive). Such soft-404 links are still
-// LISTED in documents[] for transparency, just not counted as found.
+// generic-catch-all hits, and dead/soft-404 links (a link whose target is not a
+// document is not a document). Dead links are no longer listed in documents[]
+// at all (see Response.RejectedLinks).
 func countSuccess(docs []DocFinding) int {
 	n := 0
 	for _, d := range docs {
-		if hubDocTypes[d.Type] {
-			continue
-		}
-		if isWeakUnconfirmed(d) {
-			continue
-		}
-		if hasEvidence(d, "link_target_soft404") {
-			continue
-		}
-		if d.Status == 0 || (d.Status >= 200 && d.Status < 400) {
+		if countsAsDoc(d) {
 			n++
 		}
 	}
 	return n
 }
 
-// verdictOf maps documents_found + missing list to a coarse verdict label.
+// docIdentity normalises a document URL for "same document" comparison: the
+// fragment is dropped (megogo.net links #agreement / #agreement-privacy /
+// #agreement-privacy-cookie-policy, three "documents", to ONE /en/rules page),
+// plus the trailing slash and the host's case/www.
+func docIdentity(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	return host + strings.TrimRight(u.EscapedPath(), "/") + "?" + u.RawQuery
+}
+
+// verdictOfDocs derives the coarse completeness label from the evidenced
+// documents. Unlike the old count-of-types rule it (a) counts DISTINCT document
+// URLs — one combined "rules" page reached through three differently-labelled
+// links is one document, not three — and (b) derives "has ToS / has privacy"
+// from the evidenced documents, not from mere presence in the merged map (a
+// dead soft-404 link used to satisfy "has privacy").
+func verdictOfDocs(docs []DocFinding) string {
+	counted := map[DocType]bool{}
+	distinct := map[string]bool{}
+	for _, d := range docs {
+		if !countsAsDoc(d) {
+			continue
+		}
+		counted[d.Type] = true
+		distinct[docIdentity(d.URL)] = true
+	}
+	if len(counted) == 0 {
+		return "none"
+	}
+	missing := make([]DocType, 0, len(expectedDocTypes))
+	for _, t := range expectedDocTypes {
+		if !counted[t] {
+			missing = append(missing, t)
+		}
+	}
+	v := verdictOf(len(distinct), missing)
+	if v == "sparse" && len(counted) >= 2 && counted[DocTermsOfService] && counted[DocPrivacyPolicy] {
+		// One page that serves as both ToS and privacy policy: more than one
+		// document's worth of coverage, less than a set of separate documents.
+		return "partial"
+	}
+	return v
+}
+
+// verdictOf maps a document count + missing list to a coarse verdict label.
+// found is the number of DISTINCT evidenced documents; missing is the expected
+// types not evidenced.
 func verdictOf(found int, missing []DocType) string {
 	// Critical = ToS + Privacy. If neither is found, it's "none".
 	hasToS, hasPrivacy := true, true

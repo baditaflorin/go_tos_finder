@@ -28,13 +28,14 @@ func classifyLink(urlPath, linkText string) (DocType, string) {
 // false friend on its own).
 func classifyLinkEvidence(urlPath, linkText string) (DocType, string, string) {
 	linkText = strings.TrimSpace(linkText)
+	segs := pathSegments(urlPath)
 	// Pass 1: specific (non-hub) path matches. Check whether the SAME doc
 	// type is also corroborated by the anchor text → medium floor.
 	for _, p := range patterns {
 		if hubDocTypes[p.docType] {
 			continue
 		}
-		if matchPathOnly(urlPath, p.pathPatterns) {
+		if p.pathFast.match(urlPath, segs) {
 			floor := ConfLow
 			if matchTextOrScript(p.textRegex, p.scriptRegex, linkText) {
 				floor = ConfMedium // path AND text agree
@@ -42,11 +43,15 @@ func classifyLinkEvidence(urlPath, linkText string) (DocType, string, string) {
 			return p.docType, "url_path", floor
 		}
 	}
-	// Pass 2: specific (non-hub) link-text matches (path didn't match any type).
+	// Pass 2: specific (non-hub) link-text matches (skipped for a text-less
+	// anchor: an icon/image link can only be classified by its path). (path didn't match any type).
 	// This is the arm that fires on CJK / Cyrillic footer links whose href is an
 	// opaque ID (e.g. 服务协议 → /rule/202504020001): the script-aware text match
 	// is the only available signal, so it classifies on anchor text alone.
 	for _, p := range patterns {
+		if linkText == "" {
+			break
+		}
 		if hubDocTypes[p.docType] {
 			continue
 		}
@@ -64,7 +69,7 @@ func classifyLinkEvidence(urlPath, linkText string) (DocType, string, string) {
 		if !hubDocTypes[p.docType] {
 			continue
 		}
-		if matchPathOnly(urlPath, p.pathPatterns) {
+		if p.pathFast.match(urlPath, segs) {
 			if p.docType == DocLegalHub && !isBareHubPath(urlPath) {
 				continue
 			}

@@ -45,6 +45,8 @@ var homepageBlockRE = regexp.MustCompile(`(?i)(?:` +
 	`your\s+ip\s+(?:address\s+)?has\s+been\s+(?:blocked|banned|flagged)|` +
 	`bot\s+detection|` +
 	`pardon\s+our\s+interruption|` +
+	`making\s+sure\s+you(?:'|&#39;|&#x27;|\x{2019})?re\s+not\s+a\s+bot|` +
+	`checking\s+if\s+the\s+site\s+connection\s+is\s+secure|` +
 	`\bjust\s+a\s+moment\.\.\.` +
 	`)`)
 
@@ -60,6 +62,16 @@ var homepageBlockRE = regexp.MustCompile(`(?i)(?:` +
 // are all under 50 bytes.
 const minHomepageBytes = 50
 
+// blockBodyMaxBytes is the largest homepage body still treated as a possible
+// WAF/bot interstitial by body phrase. Challenge pages are tiny (Cloudflare's
+// "Just a moment..." ~5 KB, Akamai/Apache 403 stubs < 1 KB, PerimeterX/DataDome
+// < 30 KB). A real 4 MB homepage that happens to contain "access denied" in a
+// script string or a blog post is not an interstitial — and running
+// homepageBlockRE over it was 27 % of all CPU in the 1.8.x profile. A block
+// page that is large (ancestry.ca serves a 540 KB branded 403) still announces
+// itself in its <title>, which is always checked.
+const blockBodyMaxBytes = 64 * 1024
+
 // isHomepageBlocked reports whether a successfully-fetched (HTTP < 500)
 // homepage body is actually a bot-block / WAF-challenge interstitial (or an
 // unusably empty stub) rather than real site content, plus a short
@@ -68,7 +80,14 @@ func isHomepageBlocked(body string, httpStatus int) (bool, string) {
 	if len(strings.TrimSpace(body)) < minHomepageBytes {
 		return true, "empty_or_stub_body"
 	}
-	if homepageBlockRE.MatchString(body) {
+	// The <title> is the strongest and cheapest signal and is valid at any size.
+	if title := cleanText(tagInner(truncateUTF8(body, 128*1024), "title")); title != "" && homepageBlockRE.MatchString(title) {
+		return true, "bot_or_waf_challenge"
+	}
+	if len(body) > blockBodyMaxBytes {
+		return false, ""
+	}
+	if homepageBlockFast.MatchString(body) {
 		return true, "bot_or_waf_challenge"
 	}
 	return false, ""

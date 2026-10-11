@@ -18,10 +18,6 @@ const (
 // observed in production are ~114 bytes; legitimate policy pages are KBs.
 const minRealDocBytes = 600
 
-// titleRE / h1RE pull the first <title> and first <h1> text from a body.
-var titleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
-var h1RE = regexp.MustCompile(`(?is)<h1[^>]*>(.*?)</h1>`)
-
 // metaRefreshRE detects <meta http-equiv="refresh" content="0;url=...">.
 var metaRefreshRE = regexp.MustCompile(`(?is)<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*>`)
 
@@ -88,18 +84,117 @@ var scriptLegalVocabRE = regexp.MustCompile(`(?i)(?:` + strings.Join([]string{
 	"προσωπικών δεδομένων", "kişisel veri", "gizlilik", "البيانات الشخصية", "الخصوصية",
 }, "|") + `)`)
 
-// bodyHasTypeSignal reports whether a body carries type-specific vocabulary for
-// `want` (Latin docTypeSignalRE or the type's non-Latin scriptRegex), or generic
+// Fast (prefiltered) twins of the body-level vocabulary regexes. The plain
+// regexes stay the single source of truth for the accepted language (and are
+// still used on short strings: titles, link text); these wrappers add a sound
+// necessary-literal prefilter so a non-matching 24 KB body costs a handful of
+// strings.Contains passes instead of a full NFA scan. See fastre.go.
+var (
+	softNotFoundFast     = newFastRE(softNotFoundRE)
+	legalVocabFast       = newFastRE(legalVocabRE)
+	scriptLegalVocabFast = newFastRE(scriptLegalVocabRE)
+	homepageBlockFast    = newFastRE(homepageBlockRE)
+	docTypeSignalFast    = func() map[DocType]*fastRE {
+		m := make(map[DocType]*fastRE, len(docTypeSignalRE))
+		for t, re := range docTypeSignalRE {
+			m[t] = newFastRE(re)
+		}
+		return m
+	}()
+	scriptSignalFast = func() map[DocType]*fastRE {
+		m := make(map[DocType]*fastRE)
+		for _, p := range patterns {
+			if p.scriptRegex != nil {
+				m[p.docType] = newFastRE(p.scriptRegex)
+			}
+		}
+		return m
+	}()
+)
+
+// maxVerifyText bounds the visible text a verification looks at. A real legal
+// document announces itself (title, h1, "these terms", "we collect", "last
+// updated") in its opening paragraphs; scanning more only burns CPU.
+const maxVerifyText = 24 * 1024
+
+// softTextWindow / softShortText implement the soft-404 text rule: a branded
+// error template is SHORT, so the body-text phrase check (not found, 404, coming
+// soon, ...) only applies to pages with little visible text. Long legal
+// documents routinely contain "not found" / "404" in ordinary prose or phone
+// numbers and must not be rejected for it.
+const softShortText = 6 * 1024
+
+// bodyView is the one-time, linear-time analysis of a fetched body from which
+// every verification decision is derived. Building it once per distinct body
+// (the handler memoises on a body hash) is what keeps a site that answers all 30
+// canonical probes with the same SPA shell from costing 30 analyses.
+type bodyView struct {
+	trimmedLen int
+	small      bool
+	pdf        bool
+	title      string
+	h1         string
+	headings   []string // first few h1-h3 texts (document order)
+	text       string   // visible text, <= maxVerifyText
+	lower      string   // strings.ToLower(text)
+	redirect   bool     // tiny body that JS/meta-redirects away
+	challenge  bool     // bot / WAF interstitial served with a 2xx
+	fp         uint64   // fingerprint of title + visible text (catch-all detection)
+	soft404    bool
+	legalVocab bool
+}
+
+func analyzeBody(body string) *bodyView {
+	v := &bodyView{}
+	trimmed := strings.TrimSpace(body)
+	v.trimmedLen = len(trimmed)
+	v.small = v.trimmedLen < minRealDocBytes
+	if strings.HasPrefix(trimmed, "%PDF-") {
+		v.pdf = true
+		return v
+	}
+	v.title = cleanText(tagInner(body, "title"))
+	v.h1 = cleanText(tagInner(body, "h1"))
+	v.headings = headingTexts(body, 8)
+	if v.small {
+		v.redirect = jsRedirectRE.MatchString(body) || metaRefreshRE.MatchString(body)
+	}
+	// A bot-challenge page served with HTTP 200 (Anubis "Making sure you're not a
+	// bot!", Cloudflare "Just a moment...") says nothing about the requested path:
+	// businesstimesofspain.com answered every /legal/* link with one.
+	v.challenge = homepageBlockRE.MatchString(v.title) || (v.small && homepageBlockFast.MatchString(body))
+	v.text = visibleText(body, maxVerifyText)
+	v.lower = strings.ToLower(v.text)
+	v.fp = bodyHash(v.title + "\x00" + v.text)
+	// Soft-404 / parked / placeholder: title or h1 naming it is disqualifying on
+	// any page; the same phrases inside the body text only count on short pages.
+	switch {
+	case softNotFoundFast.MatchString(v.title), softNotFoundFast.MatchString(v.h1):
+		v.soft404 = true
+	case len(v.text) < softShortText && softNotFoundFast.Match(v.text, v.lower):
+		v.soft404 = true
+	}
+	v.legalVocab = legalVocabFast.Match(v.text, v.lower) || scriptLegalVocabFast.Match(v.text, v.lower)
+	return v
+}
+
+// hasTypeSignal reports whether the view carries type-specific vocabulary for
+// want (Latin docTypeSignalRE or the type's non-Latin scriptRegex), or generic
 // legal vocabulary in any script. Used as the false-positive guard on
 // canonical-probe hits.
+func (v *bodyView) hasTypeSignal(want DocType) bool {
+	if re, ok := docTypeSignalFast[want]; ok && re.Match(v.text, v.lower) {
+		return true
+	}
+	if sr, ok := scriptSignalFast[want]; ok && sr.Match(v.text, v.lower) {
+		return true
+	}
+	return v.legalVocab
+}
+
+// bodyHasTypeSignal is the single-body convenience form of (*bodyView).hasTypeSignal.
 func bodyHasTypeSignal(body string, want DocType) bool {
-	if re, ok := docTypeSignalRE[want]; ok && re.MatchString(body) {
-		return true
-	}
-	if sr := scriptRegexFor(want); sr != nil && sr.MatchString(body) {
-		return true
-	}
-	return legalVocabRE.MatchString(body) || scriptLegalVocabRE.MatchString(body)
+	return analyzeBody(body).hasTypeSignal(want)
 }
 
 // verifyResult is the outcome of fetching a candidate URL's body and checking
@@ -113,17 +208,24 @@ type verifyResult struct {
 
 // classifyBody inspects a fetched body and returns whether it is a genuine
 // document and how confident we are it matches `want`. `httpStatus` is the
-// status of the GET; `bodyLen` is the number of bytes read (the body itself
-// may be longer if truncated, so pass the on-the-wire length when known).
+// status of the GET.
 //
 // Decision logic (precision-first — this is the fix for the ~528k soft-404
 // false positives in production):
 //   - A 2xx with a tiny body that JS/meta-redirects away  -> NOT real.
-//   - A body whose title/text screams "404 / parked / for sale" -> NOT real.
+//   - A title/h1 (or, on short pages, body text) that screams "404 / parked /
+//     for sale"                                            -> NOT real.
 //   - A body whose <title>/<h1> matches the doc type's titleRegex -> high.
-//   - A body that's a substantial page with legal vocabulary    -> medium.
-//   - Anything else that's a real page but unconfirmed          -> low.
+//   - A body whose title names a DIFFERENT legal document type    -> NOT real
+//     for this type (a /terms-of-use URL that serves the privacy policy).
+//   - A body that's a substantial page with legal vocabulary      -> medium.
+//   - Anything else that's a real page but unconfirmed            -> low.
 func classifyBody(body string, httpStatus int, want DocType) verifyResult {
+	return classifyView(analyzeBody(body), httpStatus, want)
+}
+
+// classifyView is classifyBody over a pre-computed bodyView.
+func classifyView(v *bodyView, httpStatus int, want DocType) verifyResult {
 	res := verifyResult{Confidence: ConfNone}
 	// Error responses can reuse legal templates or CDN challenge text; they
 	// are not evidence that the requested document exists.
@@ -131,27 +233,37 @@ func classifyBody(body string, httpStatus int, want DocType) verifyResult {
 		res.Evidence = append(res.Evidence, "rejected:http_status")
 		return res
 	}
-	trimmed := strings.TrimSpace(body)
-	res.Title = strings.TrimSpace(stripTags(firstGroup(titleRE, body)))
+	if v.pdf {
+		// A PDF is a real document; its type can only be vouched for by the
+		// link (path/anchor text) that led here, which the caller applies as
+		// the confidence floor.
+		res.IsReal = true
+		res.Confidence = ConfLow
+		res.Evidence = append(res.Evidence, "pdf_document")
+		return res
+	}
+	res.Title = v.title
+	if v.challenge {
+		res.Evidence = append(res.Evidence, "rejected:bot_challenge")
+		return res
+	}
 
 	// Gate 1: redirect-stub parking pages (the 114-byte production pattern).
-	smallBody := len(trimmed) < minRealDocBytes
-	if smallBody && (jsRedirectRE.MatchString(body) || metaRefreshRE.MatchString(body)) {
+	if v.small && v.redirect {
 		res.Evidence = append(res.Evidence, "rejected:redirect_stub")
 		return res
 	}
 
-	// Gate 2: soft-404 / parked / placeholder text is disqualifying even on
-	// a large branded error page.  The old small-body-only guard let CDN 200
-	// error templates (often several KB of navigation) become legal docs.
-	hay := res.Title + " " + stripTags(body)
-	if softNotFoundRE.MatchString(hay) {
+	// Gate 2: soft-404 / parked / placeholder text is disqualifying even on a
+	// large branded error page — see analyzeBody for how title/h1/short-text
+	// are weighed (script text no longer counts).
+	if v.soft404 {
 		res.Evidence = append(res.Evidence, "rejected:soft_404")
 		return res
 	}
 
 	// Gate 3: empty/near-empty body with no useful title is not a document.
-	if smallBody && res.Title == "" {
+	if v.small && res.Title == "" {
 		res.Evidence = append(res.Evidence, "rejected:empty_body")
 		return res
 	}
@@ -166,14 +278,34 @@ func classifyBody(body string, httpStatus int, want DocType) verifyResult {
 	tr := titleRegexFor(want)
 	sr := scriptRegexFor(want)
 	if tr != nil || sr != nil {
-		h1 := strings.TrimSpace(stripTags(firstGroup(h1RE, body)))
-		if matchTextOrScript(tr, sr, res.Title) || matchTextOrScript(tr, sr, h1) {
+		if matchTextOrScript(tr, sr, res.Title) || matchTextOrScript(tr, sr, v.h1) {
 			res.Confidence = ConfHigh
 			res.Evidence = append(res.Evidence, "title_matches_type")
 			return res
 		}
 	}
-	if legalVocabRE.MatchString(body) || scriptLegalVocabRE.MatchString(body) {
+	// A section heading that names the type ("Termini e condizioni" under an
+	// h1 of just "Termini", androniteam.com) is weaker than the title but
+	// stronger than generic vocabulary: medium.
+	if tr != nil || sr != nil {
+		for _, h := range v.headings {
+			if matchTextOrScript(tr, sr, h) {
+				res.Confidence = ConfMedium
+				res.Evidence = append(res.Evidence, "heading_matches_type")
+				return res
+			}
+		}
+	}
+	// Cross-type guard: the page announces itself (title or h1) as a DIFFERENT
+	// legal document than the one we are looking for — e.g. /terms-of-use that
+	// serves the Privacy Policy — so it is no evidence for `want`.
+	if other := otherTitleType(want, res.Title, v.h1); other != "" && !hubDocTypes[want] {
+		res.IsReal = false
+		res.Confidence = ConfNone
+		res.Evidence = append(res.Evidence, "rejected:title_is_"+string(other))
+		return res
+	}
+	if v.legalVocab {
 		res.Confidence = ConfMedium
 		res.Evidence = append(res.Evidence, "legal_vocabulary")
 		return res
@@ -183,11 +315,20 @@ func classifyBody(body string, httpStatus int, want DocType) verifyResult {
 	return res
 }
 
-// firstGroup returns the first capture group of the first match, or "".
-func firstGroup(re *regexp.Regexp, s string) string {
-	m := re.FindStringSubmatch(s)
-	if len(m) >= 2 {
-		return m[1]
+// otherTitleType returns the first non-hub doc type OTHER than want whose
+// title/script regex matches the page's title or h1, or "" when none does. Only
+// the unambiguous core types are consulted: ToS, privacy, cookie, imprint —
+// the four a mis-served page is realistically confused with — to keep the guard
+// narrow (no "legal" vs "terms" hair-splitting).
+func otherTitleType(want DocType, title, h1 string) DocType {
+	for _, t := range []DocType{DocTermsOfService, DocPrivacyPolicy, DocCookiePolicy, DocImprint} {
+		if t == want {
+			continue
+		}
+		p := patternByType[t]
+		if matchTextOrScript(p.titleRegex, p.scriptRegex, title) || matchTextOrScript(p.titleRegex, p.scriptRegex, h1) {
+			return t
+		}
 	}
 	return ""
 }
@@ -205,4 +346,14 @@ func confidenceRank(c string) int {
 	default:
 		return 0
 	}
+}
+
+// hasEvidenceTok reports whether any evidence token starts with tok.
+func hasEvidenceTok(ev []string, tok string) bool {
+	for _, e := range ev {
+		if strings.HasPrefix(e, tok) {
+			return true
+		}
+	}
+	return false
 }

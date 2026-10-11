@@ -61,6 +61,10 @@ type pattern struct {
 	titleRegex     *regexp.Regexp
 	canonicalPaths []string
 
+	// pathFast is the set-based twin of pathPatterns (built in init); see
+	// patterns_path.go.
+	pathFast *pathMatcher
+
 	// scriptRegex matches CJK / Cyrillic / Greek / Arabic / Thai / Hindi
 	// legal-document phrases in link text, titles, and bodies. These scripts
 	// have no ASCII word boundaries (Go's regexp `\b` is ASCII-only), so the
@@ -100,6 +104,15 @@ var patterns = []pattern{
 			"terminos-y-condiciones", "condiciones-de-uso", "termos-e-condicoes", "termos-de-uso",
 			"algemene-voorwaarden", "termeni-si-conditii", "termeni-si-condiții",
 			"warunki-korzystania", "ogolne-warunki", "polzovatelskoe-soglashenie", "usloviya-ispolzovaniya",
+			// 1.9.0: more real footer slugs. url.Path is percent-DECODED before
+			// matching, so "terms-%26-conditions" arrives as "terms-&-conditions"
+			// (ascendyoursuccess.com's ToS link was missed for exactly this).
+			"terms-&-conditions", "terms-conditions-of-use", "terms-of-sale", "conditions-of-sale",
+			"terms-use", "website-terms", "site-terms", "terms-of-website-use",
+			"conditions-generales-de-vente", "conditions-generales-d-utilisation", "condiciones-generales",
+			"condizioni-di-vendita", "condizioni-generali-di-vendita", "termini-condizioni",
+			"allgemeine-geschaeftsbedingungen", "allgemeine-geschaftsbedingungen", "agbs", "gebruiksvoorwaarden",
+			"terminos-de-uso", "terminos-y-condiciones-de-uso",
 		),
 		textRegex:  regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)?|terms\s*&\s*conditions|terms\s+and\s+conditions|conditions\s+of\s+use|user\s+agreement|EULA|nutzungsbedingungen|allgemeine\s+gesch[äa]ftsbedingungen|AGB|conditions\s+d['e]\s*utilisation|conditions\s+g[ée]n[ée]rales|termini\s+(?:di\s+servizio|e\s+condizioni)|t[ée]rminos\s+(?:y\s+condiciones|de\s+servicio)|condiciones\s+(?:de\s+uso|del\s+servicio)|termos\s+(?:de\s+(?:uso|servi[çc]o)|e\s+condi[çc][õo]es)|gebruiksvoorwaarden|algemene\s+voorwaarden|regulamin|termeni\s+[șs]i\s+condi[țt]ii)\b`),
 		titleRegex: regexp.MustCompile(`(?i)\b(?:terms\s+(?:of\s+)?(?:service|use|conditions)|terms\s+and\s+conditions|terms\s*&\s*conditions|user\s+agreement|end[-\s]user\s+license|EULA|nutzungsbedingungen|gesch[äa]ftsbedingungen|allgemeine\s+bedingungen|algemene\s+voorwaarden|gebruiksvoorwaarden|voorwaarden|conditions\s+g[ée]n[ée]rales|termini\s+di\s+servizio|termini\s+e\s+condizioni|t[ée]rminos|condiciones|termos\s+de|regulamin|warunki(?:\s+(?:korzystania|użytkowania))?|termeni\s+[șs]i\s+condi[țt]ii|obchodn[íi]\s+podm[íi]nky|k[äa]ytt[öo]ehdot|anv[äa]ndarvillkor|handelsvillkor|vilk[åa]r)\b`),
@@ -125,7 +138,7 @@ var patterns = []pattern{
 		),
 		canonicalPaths: []string{
 			"/terms", "/terms-of-service", "/terms-of-use", "/terms-and-conditions",
-			"/tos", "/legal/terms", "/conditions", "/user-agreement", "/eula", "/agb",
+			"/tos", "/legal/terms", "/agb", "/conditions", "/user-agreement", "/eula",
 			// non-Latin canonical paths seen in the wild (CJK sites frequently
 			// expose romanised or kanji policy paths)
 			"/kiyaku", "/riyou-kiyaku", "/利用規約", "/terms-of-use.html",
@@ -145,8 +158,14 @@ var patterns = []pattern{
 			"privacidade", "privacyverklaring", "privacybeleid",
 			"polityka-prywatnosci", "prywatnosc", "personvern", "integritetspolicy",
 			"tietosuoja",
+			// 1.9.0: Spanish/Portuguese/German/French footer slugs that were
+			// missed (daximart.com links /pages/aviso-de-privacidad).
+			"aviso-de-privacidad", "aviso-privacidad", "politica-de-privacidad", "politica-de-privacidade",
+			"datenschutzbestimmungen", "datenschutzrichtlinie", "datenschutzinformation", "datenschutzinformationen",
+			"protection-des-donnees", "politique-de-protection-des-donnees", "donnees-personnelles",
+			"privacy-and-cookies", "privacy-cookies", "gizlilik-politikasi",
 		),
-		textRegex: regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
+		textRegex: regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|aviso\s+de\s+privacidad|aviso\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
 		// datenschutz(?:erkl[äa]rung|hinweise)? — NOT bare "datenschutz": the
 		// standalone word is rare as a page <title>, while "Datenschutzerklärung"
 		// (the compound word) is the standard, near-universal title for a German
@@ -157,7 +176,7 @@ var patterns = []pattern{
 		// title match every other language gets. Found via the charset fix's own
 		// test fixture (a real German title, decoded correctly, still failed to
 		// classify as high-confidence) — a distinct, charset-independent bug.
-		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
+		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|aviso\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
 		scriptRegex: scriptRE(
 			// Japanese: privacy policy / handling of personal information
 			"プライバシーポリシー", "プライバシー", "個人情報保護方針", "個人情報の取り扱い", "個人情報保護",
@@ -357,6 +376,12 @@ var patterns = []pattern{
 	},
 }
 
+func init() {
+	for i := range patterns {
+		patterns[i].pathFast = newPathMatcher(patterns[i].pathPatterns)
+	}
+}
+
 // patternByType is a lookup built once at init.
 var patternByType = func() map[DocType]pattern {
 	m := make(map[DocType]pattern, len(patterns))
@@ -399,19 +424,48 @@ func titleRegexFor(t DocType) *regexp.Regexp {
 	return nil
 }
 
+// probePlan is the ordered list of document types worth a speculative
+// canonical-path probe and how many of their canonical paths to try. In a
+// 150-domain real sample only 19 of 184 documents were found by a probe — all
+// ToS / privacy / cookie / DMCA / AUP; refund, shipping, GDPR, SLA, copyright,
+// community and disclaimer pages were never found that way (they are linked from
+// the footer when they exist) — so probing them was ~8 requests per scan for
+// nothing, and the cap of 30 was exhausted by ToS + privacy before imprint paths
+// were ever reached. Imprint now gets its four canonical paths.
+var probePlan = []struct {
+	docType DocType
+	n       int
+}{
+	{DocTermsOfService, 8},
+	{DocPrivacyPolicy, 6},
+	{DocImprint, 4},
+	{DocCookiePolicy, 2},
+	{DocDMCA, 1},
+	{DocAcceptableUse, 1},
+}
+
 // allCanonicalProbes returns (docType, path) pairs to probe, capped at maxN
-// total to keep request budget bounded. Hub types are never canonical-probed.
+// total to keep request budget bounded. Hub types are never canonical-probed,
+// nor are types outside probePlan.
 func allCanonicalProbes(missing []DocType, maxN int) []probeCandidate {
 	out := make([]probeCandidate, 0, maxN)
+	want := make(map[DocType]bool, len(missing))
 	for _, dt := range missing {
-		if hubDocTypes[dt] {
+		want[dt] = true
+	}
+	for _, step := range probePlan {
+		if !want[step.docType] || hubDocTypes[step.docType] {
 			continue
 		}
-		for _, p := range canonicalPathsFor(dt) {
+		paths := canonicalPathsFor(step.docType)
+		if len(paths) > step.n {
+			paths = paths[:step.n]
+		}
+		for _, p := range paths {
 			if len(out) >= maxN {
 				return out
 			}
-			out = append(out, probeCandidate{DocType: dt, Path: p})
+			out = append(out, probeCandidate{DocType: step.docType, Path: p})
 		}
 	}
 	return out

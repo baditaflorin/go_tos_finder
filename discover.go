@@ -1,9 +1,12 @@
 package main
 
 import (
+	"html"
 	"net/url"
 	"regexp"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // linkScan scans rendered HTML and returns the best DocFinding per type from
@@ -29,6 +32,12 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		// Platform-wide or social-network legal links in a footer are not this
 		// target's documents. Keep the origin and its subdomains only.
 		if !sameSiteHost(u, base) {
+			continue
+		}
+		// A link to the site root is never a legal document (budongsam.com's
+		// "Copyright" link pointed at "/", and the homepage then verified as a
+		// "copyright policy" on its generic legal vocabulary).
+		if (u.Path == "" || u.Path == "/") && u.RawQuery == "" {
 			continue
 		}
 		linkText := strings.TrimSpace(stripTags(a.Inner))
@@ -63,13 +72,29 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 	return out
 }
 
+// sameSiteHost reports whether u belongs to the same site as base: the same
+// registrable domain (eTLD+1, public-suffix aware), so example.com <-> www.
+// example.com <-> legal.example.com match, while platform-wide or social-network
+// legal links in a footer (policies.google.com, facebook.com/policy) and sibling
+// tenants of a multi-tenant suffix (foo.myshopify.com vs bar.myshopify.com, both
+// in the public-suffix list) do not. The previous check only accepted base's own
+// host and its subdomains, so a site that fetched as https://www.x.com lost every
+// footer link that pointed at the apex https://x.com/privacy.
 func sameSiteHost(u, base *url.URL) bool {
 	if u == nil || base == nil {
 		return false
 	}
 	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
 	baseHost := strings.ToLower(strings.TrimSuffix(base.Hostname(), "."))
-	return host != "" && baseHost != "" && (host == baseHost || strings.HasSuffix(host, "."+baseHost))
+	if host == "" || baseHost == "" {
+		return false
+	}
+	if host == baseHost || strings.HasSuffix(host, "."+baseHost) {
+		return true
+	}
+	a, errA := publicsuffix.EffectiveTLDPlusOne(host)
+	b, errB := publicsuffix.EffectiveTLDPlusOne(baseHost)
+	return errA == nil && errB == nil && a == b
 }
 
 func stripFragment(u *url.URL) string {
@@ -87,47 +112,155 @@ type anchor struct {
 	Offset int
 }
 
+// anchorRE is the reference definition of what an anchor is. Production uses the
+// linear-time scanAnchors below (the regexp ran at ~1 MB/s on a 4 MB homepage);
+// the two are kept equivalent by TestScanAnchorsMatchesRegexp.
 var anchorRE = regexp.MustCompile(`(?is)<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)</a>`)
 
-func extractAnchors(html string) []anchor {
-	matches := anchorRE.FindAllStringSubmatchIndex(html, -1)
-	out := make([]anchor, 0, len(matches))
-	for _, m := range matches {
-		// m: [start, end, g1s, g1e, g2s, g2e, g3s, g3e, g4s, g4e]
-		var href, inner string
-		switch {
-		case m[2] != -1:
-			href = html[m[2]:m[3]]
-		case m[4] != -1:
-			href = html[m[4]:m[5]]
-		case m[6] != -1:
-			href = html[m[6]:m[7]]
+func extractAnchors(html string) []anchor { return scanAnchors(html) }
+
+func isWordByte(c byte) bool {
+	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func isSpaceByte(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
+}
+
+// scanAnchors is the single-pass equivalent of anchorRE.FindAllStringSubmatchIndex.
+func scanAnchors(src string) []anchor {
+	var out []anchor
+	i := 0
+	for {
+		p := indexFold(src, "<a", i)
+		if p < 0 {
+			return out
 		}
-		if m[8] != -1 {
-			inner = html[m[8]:m[9]]
+		q := p + 2
+		if q >= len(src) {
+			return out
 		}
-		out = append(out, anchor{
-			Href:   strings.TrimSpace(href),
-			Inner:  inner,
-			Offset: m[0],
-		})
+		if isWordByte(src[q]) { // \b after "a"
+			i = q
+			continue
+		}
+		gt := strings.IndexByte(src[q:], '>')
+		if gt < 0 {
+			return out
+		}
+		regionEnd := q + gt
+		// Find "\bhref\s*=\s*" before the first '>'.
+		href, valEnd, ok := "", 0, false
+		for h := q; ; {
+			h = indexFold(src[:regionEnd], "href", h)
+			if h < 0 {
+				break
+			}
+			if h > 0 && isWordByte(src[h-1]) { // \b before href
+				h += 4
+				continue
+			}
+			k := h + 4
+			for k < len(src) && isSpaceByte(src[k]) {
+				k++
+			}
+			if k >= len(src) || src[k] != '=' {
+				h += 4
+				continue
+			}
+			k++
+			for k < len(src) && isSpaceByte(src[k]) {
+				k++
+			}
+			if k >= len(src) {
+				break
+			}
+			switch c := src[k]; {
+			case c == '"' || c == '\'':
+				e := strings.IndexByte(src[k+1:], c)
+				if e < 0 {
+					// unterminated quote: the regexp alternative fails; try the
+					// unquoted branch exactly as the regexp would.
+					e2 := k
+					for e2 < len(src) && !isSpaceByte(src[e2]) && src[e2] != '>' {
+						e2++
+					}
+					if e2 == k {
+						h += 4
+						continue
+					}
+					href, valEnd, ok = src[k:e2], e2, true
+				} else {
+					href, valEnd, ok = src[k+1:k+1+e], k+1+e+1, true
+				}
+			default:
+				e2 := k
+				for e2 < len(src) && !isSpaceByte(src[e2]) && src[e2] != '>' {
+					e2++
+				}
+				if e2 == k {
+					h += 4
+					continue
+				}
+				href, valEnd, ok = src[k:e2], e2, true
+			}
+			break
+		}
+		if !ok {
+			i = q
+			continue
+		}
+		g := strings.IndexByte(src[valEnd:], '>')
+		if g < 0 {
+			return out
+		}
+		innerStart := valEnd + g + 1
+		closeAt := indexFold(src, "</a>", innerStart)
+		if closeAt < 0 {
+			return out
+		}
+		out = append(out, anchor{Href: cleanHref(href), Inner: src[innerStart:closeAt], Offset: p})
+		i = closeAt + 4
 	}
-	return out
+}
+
+// cleanHref normalises an href value: surrounding/escaped quotes left by HTML
+// that sits inside a JS/JSON string (`href=\"https://x/privacy\"`) are removed
+// — they previously produced fetch URLs ending in %22 — and entities decoded.
+func cleanHref(h string) string {
+	h = strings.TrimSpace(h)
+	if strings.IndexByte(h, '\\') >= 0 {
+		h = strings.ReplaceAll(h, `\/`, `/`)
+		h = strings.TrimLeft(h, `\"'`)
+		if i := strings.IndexAny(h, `\"'`); i >= 0 {
+			h = h[:i]
+		}
+	}
+	h = strings.Trim(h, `"'`)
+	if strings.IndexByte(h, '&') >= 0 {
+		h = html.UnescapeString(h)
+	}
+	return strings.TrimSpace(h)
 }
 
 // footerBounds locates the byte range of the last <footer>...</footer> in the
 // HTML, falling back to the bottom 30% of the document if no <footer> exists.
-func footerBounds(html string) (int, int) {
-	low := strings.ToLower(html)
-	if idx := strings.LastIndex(low, "<footer"); idx >= 0 {
-		end := strings.Index(low[idx:], "</footer>")
-		if end < 0 {
-			return idx, len(html)
+func footerBounds(src string) (int, int) {
+	idx := -1
+	for _, tag := range []string{"<footer", "<FOOTER", "<Footer"} {
+		if k := strings.LastIndex(src, tag); k > idx {
+			idx = k
 		}
-		return idx, idx + end + len("</footer>")
+	}
+	if idx >= 0 {
+		end := indexFold(src, "</footer>", idx)
+		if end < 0 {
+			return idx, len(src)
+		}
+		return idx, end + len("</footer>")
 	}
 	// Fallback: anything beyond 70% of the page treated as "footer-ish".
-	return (len(html) * 7) / 10, len(html)
+	return (len(src) * 7) / 10, len(src)
 }
 
 // absolutize resolves a possibly-relative URL against `base`.
@@ -148,14 +281,4 @@ func absolutize(href string, base *url.URL) string {
 		return ""
 	}
 	return u.String()
-}
-
-// stripTags returns text content with HTML tags removed. Quick and lossy.
-var tagRE = regexp.MustCompile(`<[^>]+>`)
-var wsRE = regexp.MustCompile(`\s+`)
-
-func stripTags(html string) string {
-	s := tagRE.ReplaceAllString(html, " ")
-	s = wsRE.ReplaceAllString(s, " ")
-	return strings.TrimSpace(s)
 }
