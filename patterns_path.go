@@ -12,7 +12,7 @@ import (
 func pathRE(tokens ...string) []*regexp.Regexp {
 	out := make([]*regexp.Regexp, 0, len(tokens))
 	for _, t := range tokens {
-		re := regexp.MustCompile(`(?i)(^|/)` + regexp.QuoteMeta(t) + `(/|\.html?|\.php|\.aspx?|$)`)
+		re := regexp.MustCompile(`(?i)(^|/)` + regexp.QuoteMeta(t) + `(/|\.html?|\.php|\.aspx?|\.pdf|$)`)
 		out = append(out, re)
 	}
 	return out

@@ -17,7 +17,11 @@ const stalenessThreshold = 2 * 365 * 24 * time.Hour
 // verifyBodyBytes caps how much of a candidate document body we read for
 // content verification. Enough to capture <head>, <title>, <h1> and a slab of
 // opening prose for the legal-vocabulary signal, without slurping whole pages.
-const verifyBodyBytes = 64 * 1024
+// 256 KB (was 64 KB): heavy inline <head> scripts (Wix, Next/Nuxt, GTM bundles)
+// routinely push <title> and the first paragraphs past 64 KB, which left e.g.
+// avophotonics.com/terms "titleless" and unverifiable. Every scan of this body
+// is linear-time (see fastre.go), so the bigger window costs ~nothing.
+const verifyBodyBytes = 256 * 1024
 
 // probeMeta is the raw outcome of a single candidate fetch: status, size,
 // freshness header, and a bounded slice of the body for content verification.

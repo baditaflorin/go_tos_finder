@@ -61,6 +61,10 @@ func e2eServer() *httptest.Server {
 		case "/cookies":
 			_, _ = w.Write([]byte(`<html><head><title>Cookie Policy</title></head><body><h1>Cookie Policy</h1>` +
 				strings.Repeat("This cookie policy explains how we use cookies. ", 20) + `</body></html>`))
+		case "/legal":
+			// A real hub page: it lists the legal documents.
+			_, _ = w.Write([]byte(`<html><head><title>Legal</title></head><body><h1>Legal</h1>` +
+				strings.Repeat("These terms and policies are governed by the law of the seller. ", 20) + `</body></html>`))
 		default:
 			// Soft-404 parking stub on ALL probed canonical paths (/dmca, /aup, ...).
 			_, _ = w.Write([]byte(parkingStub))
@@ -112,7 +116,8 @@ func TestHandlerEndToEnd(t *testing.T) {
 		}
 	}
 
-	// The /legal hub link should be recorded but NOT counted as a document.
+	// The /legal hub link (a real page) should be recorded but NOT counted as a
+	// document.
 	if _, ok := byType[DocLegalHub]; !ok {
 		t.Error("expected legal_hub to be recorded from footer link")
 	}
