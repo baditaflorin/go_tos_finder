@@ -512,7 +512,7 @@ func isWeakUnconfirmed(d DocFinding) bool {
 			// type is still location evidence the site references the document;
 			// a lone low-floor in-page link (an article titled "Privacy ...") is
 			// not.
-			if d.Source == "footer_link" {
+			if d.Source == "footer_link" || linkTextNamesType(d) {
 				return false
 			}
 			hasUnconfirmedBody = true
@@ -521,6 +521,18 @@ func isWeakUnconfirmed(d DocFinding) bool {
 		}
 	}
 	return hasUnconfirmedBody
+}
+
+// linkTextNamesType reports whether the anchor text is a strict phrase for the
+// finding's own type ("Privacy Policy", "Terms of Service", "利用規約"), as
+// opposed to the bare-word text match ("privacy") that an article title can
+// satisfy. An unverifiable in-page link whose text is the full phrase is real
+// location evidence (osmfoundation.org links its privacy policy this way).
+func linkTextNamesType(d DocFinding) bool {
+	if d.LinkText == "" {
+		return false
+	}
+	return matchTextOrScript(titleRegexFor(d.Type), scriptRegexFor(d.Type), d.LinkText)
 }
 
 // hasEvidence reports whether finding d carries an evidence token with the

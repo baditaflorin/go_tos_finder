@@ -34,6 +34,12 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		if !sameSiteHost(u, base) {
 			continue
 		}
+		// A link to the site root is never a legal document (budongsam.com's
+		// "Copyright" link pointed at "/", and the homepage then verified as a
+		// "copyright policy" on its generic legal vocabulary).
+		if (u.Path == "" || u.Path == "/") && u.RawQuery == "" {
+			continue
+		}
 		linkText := strings.TrimSpace(stripTags(a.Inner))
 		if len(linkText) > 80 {
 			linkText = linkText[:80]

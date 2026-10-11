@@ -655,3 +655,83 @@ func TestHandlerRejectsCatchAllProbes(t *testing.T) {
 		t.Error("probes_rejected_soft404 should count the rejected catch-all hits")
 	}
 }
+
+// dict.cc answers every /<word> with a dictionary look-up titled "<word> |
+// Übersetzung ...": /terms, /dmca and /cookie-policy "verified" as ToS / DMCA /
+// cookie policy (title_matches_type for "dmca"). budongsam.com's "Copyright" link
+// pointed at "/" and the homepage became a copyright policy.
+func TestHandlerRejectsPathEchoTemplates(t *testing.T) {
+	allowLoopback(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		word := strings.Trim(r.URL.Path, "/")
+		if word == "" {
+			word = "home"
+		}
+		_, _ = w.Write([]byte(`<html><head><title>` + word + ` | Translation English-German</title></head><body><h1>` + word + `</h1>` +
+			strings.Repeat("Translations for this word: liability, jurisdiction, warranty. ", 40) + `</body></html>`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	code, resp := scanJSON(t, srv.URL)
+	if code != http.StatusNotFound || resp.DocumentsFound != 0 {
+		t.Fatalf("path-echo template must yield NoData, got code=%d docs=%+v", code, resp.Documents)
+	}
+}
+
+func TestRootLinkIsNeverALegalDocument(t *testing.T) {
+	base, _ := url.Parse("https://www.example.com/")
+	for _, h := range []string{
+		`<footer><a href="/">Copyright</a></footer>`,
+		`<footer><a href="https://www.example.com">Terms</a></footer>`,
+		`<footer><a href="https://example.com/">Privacy Policy</a></footer>`,
+	} {
+		if hits := linkScan(h, base); len(hits) != 0 {
+			t.Errorf("link to the site root must be ignored: %s -> %+v", h, hits)
+		}
+	}
+}
+
+// osmfoundation.org links its privacy policy as "Privacy Policy" to a wiki page;
+// when the verification fetch fails the full-phrase anchor text is still real
+// location evidence, whereas a bare-word in-page link is not.
+func TestUnverifiedLinkWithFullPhraseTextIsKept(t *testing.T) {
+	keep := DocFinding{Type: DocPrivacyPolicy, URL: "https://x.org/wiki/Privacy_policy", Source: "page_link", LinkText: "Privacy Policy",
+		LinkConfidence: ConfLow, Confidence: ConfLow, Evidence: []string{"link_unverified:fetch_failed:floor=low"}}
+	if isWeakUnconfirmed(keep) {
+		t.Error("an unverified in-page link with the full phrase 'Privacy Policy' must be kept")
+	}
+	drop := keep
+	drop.LinkText = "Privacy"
+	if !isWeakUnconfirmed(drop) {
+		t.Error("an unverified in-page link with only the bare word 'Privacy' (an article?) must stay weak")
+	}
+}
+
+// businesstimesofspain.com: every /legal/* link answers 200 with Anubis'
+// "Making sure you're not a bot!" page. The link is real, the page was never seen.
+func TestChallengeBodyIsNotADocumentButKeepsTheLink(t *testing.T) {
+	allowLoopback(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			_, _ = w.Write([]byte(`<html><head><title>Times</title></head><body><footer><a href="/legal/terms">Terms &amp; Conditions</a> <a href="/legal/privacy">Privacy Policy</a></footer></body></html>`))
+			return
+		}
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>Making sure you&#39;re not a bot!</title></head><body><h1>Making sure you&#39;re not a bot!</h1><p>Protected by Anubis</p></body></html>`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	code, resp := scanJSON(t, srv.URL)
+	if code != http.StatusOK || resp.DocumentsFound != 2 {
+		t.Fatalf("challenged links must stay as unverified documents: code=%d docs=%+v", code, resp.Documents)
+	}
+	for _, d := range resp.Documents {
+		if !hasEvidence(d, "link_unverified:bot_challenge") || d.Title != "" {
+			t.Errorf("challenge page must not become the document's title/evidence: %+v", d)
+		}
+	}
+	if vr := classifyBody(`<html><head><title>Making sure you're not a bot!</title></head><body>x</body></html>`, 200, DocTermsOfService); vr.IsReal {
+		t.Error("a bot-challenge body is never a verified document")
+	}
+}

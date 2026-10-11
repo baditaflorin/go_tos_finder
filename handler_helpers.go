@@ -382,6 +382,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					probedMu.Unlock()
 					return nil
 				}
+				// Last line of defence: a generic template that answers any path.
+				if st.isTemplateEcho(gctx, client, base, view, cand.Path) {
+					probedMu.Lock()
+					rejectedCount++
+					probedMu.Unlock()
+					return nil
+				}
 				staleness, isoDate := stalenessOf(pm.lastMod, now)
 				hit := DocFinding{
 					Type:         cand.DocType,
@@ -573,6 +580,11 @@ type scanState struct {
 	// answers every path with its 45 KB SPA shell, differing only in a nonce, so
 	// a byte hash cannot see it) and carries no evidence about any of them.
 	fpTypes map[uint64]map[DocType]bool
+
+	ctrlOnce sync.Once
+	ctrlView *bodyView
+	ctrlTok  string
+	ctrlOK   bool
 }
 
 func newScanState(homepage string) *scanState {
@@ -581,6 +593,79 @@ func newScanState(homepage string) *scanState {
 	st.homeHash = bodyHash(hp)
 	st.homeFP = analyzeBody(hp).fp
 	return st
+}
+
+// controlToken is a deterministic per-host nonexistent path token (random-looking
+// but stable so recorded runs replay identically).
+func controlToken(host string) string {
+	return "tosf-" + strconv.FormatUint(bodyHash(host)%0xffffffff, 16)
+}
+
+// control lazily fetches ONE page at a path that cannot exist and remembers the
+// answer. It is only requested when a canonical probe is about to be accepted.
+func (st *scanState) control(ctx context.Context, client *http.Client, base *url.URL) (*bodyView, string, bool) {
+	st.ctrlOnce.Do(func() {
+		tok := controlToken(base.Hostname())
+		pm, err := probeVerify(ctx, client, joinBaseAndPath(base, "/"+tok))
+		if err != nil || pm.status < 200 || pm.status >= 400 {
+			return
+		}
+		st.ctrlView, st.ctrlTok, st.ctrlOK = st.view(pm.body), tok, true
+	})
+	return st.ctrlView, st.ctrlTok, st.ctrlOK
+}
+
+// pathToken is the lower-cased last path segment without extension.
+func pathToken(p string) string {
+	p = strings.ToLower(strings.Trim(p, "/"))
+	if i := strings.LastIndexByte(p, '/'); i >= 0 {
+		p = p[i+1:]
+	}
+	if i := strings.IndexByte(p, '.'); i > 0 {
+		p = p[:i]
+	}
+	return p
+}
+
+// titleTemplate replaces every occurrence of the requested path (full "legal/terms"
+// first, then its last segment; hyphen, space and underscore forms) in a title by a
+// placeholder; "" when the title does not contain it at all.
+func titleTemplate(title, path string) string {
+	lt := strings.ToLower(title)
+	full := strings.ToLower(strings.Trim(path, "/"))
+	if i := strings.IndexByte(full, '.'); i > 0 {
+		full = full[:i]
+	}
+	found := false
+	for _, base := range []string{full, pathToken(path)} {
+		for _, form := range []string{base, strings.ReplaceAll(base, "-", " "), strings.ReplaceAll(base, "-", "_")} {
+			if form != "" && strings.Contains(lt, form) {
+				lt = strings.ReplaceAll(lt, form, "\u00a7")
+				found = true
+			}
+		}
+	}
+	if !found {
+		return ""
+	}
+	return lt
+}
+
+// isTemplateEcho reports whether a probed page is the site's generic template
+// answering ANY path: the same fingerprint as a nonexistent path, or a title that
+// merely echoes the requested path token inside an otherwise identical template
+// (dict.cc answers /terms, /dmca and /cookie-policy with dictionary look-ups titled
+// "terms | Übersetzung Englisch-Deutsch").
+func (st *scanState) isTemplateEcho(ctx context.Context, client *http.Client, base *url.URL, view *bodyView, probePath string) bool {
+	cv, ctok, ok := st.control(ctx, client, base)
+	if !ok {
+		return false
+	}
+	if cv.fp == view.fp {
+		return true
+	}
+	tp, tc := titleTemplate(view.title, probePath), titleTemplate(cv.title, "/"+ctok)
+	return tp != "" && tp == tc
 }
 
 // noteProbeFP records that a canonical probe for type t returned a real-looking
@@ -692,7 +777,21 @@ func verifyLink(ctx context.Context, client *http.Client, st *scanState, t DocTy
 		return unverified("http_" + strconv.Itoa(pm.status))
 	}
 	if pm.status >= 200 && pm.status < 400 {
-		vr := classifyView(st.view(pm.body), pm.status, t)
+		view := st.view(pm.body)
+		if view.challenge {
+			// The target answered 2xx with a bot-challenge page: we never saw the
+			// document. Same treatment as a 403/429: keep the link, unverified.
+			st.rateLimited.Store(true)
+			hit.Status = 0
+			return unverified("bot_challenge")
+		}
+		vr := classifyView(view, pm.status, t)
+		if vr.IsReal && view.fp == st.homeFP && !view.pdf && confidenceRank(hit.LinkConfidence) < confidenceRank(ConfMedium) {
+			// A weakly-evidenced link whose target renders exactly like the
+			// homepage is the homepage (or a catch-all), not a document.
+			vr.IsReal = false
+			vr.Evidence = []string{"rejected:same_as_homepage"}
+		}
 		if !vr.IsReal {
 			// A link to a soft-404 / a page that announces itself as another
 			// document: the site references it, but the document is not there.

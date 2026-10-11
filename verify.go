@@ -138,6 +138,7 @@ type bodyView struct {
 	text       string   // visible text, <= maxVerifyText
 	lower      string   // strings.ToLower(text)
 	redirect   bool     // tiny body that JS/meta-redirects away
+	challenge  bool     // bot / WAF interstitial served with a 2xx
 	fp         uint64   // fingerprint of title + visible text (catch-all detection)
 	soft404    bool
 	legalVocab bool
@@ -158,6 +159,10 @@ func analyzeBody(body string) *bodyView {
 	if v.small {
 		v.redirect = jsRedirectRE.MatchString(body) || metaRefreshRE.MatchString(body)
 	}
+	// A bot-challenge page served with HTTP 200 (Anubis "Making sure you're not a
+	// bot!", Cloudflare "Just a moment...") says nothing about the requested path:
+	// businesstimesofspain.com answered every /legal/* link with one.
+	v.challenge = homepageBlockRE.MatchString(v.title) || (v.small && homepageBlockFast.MatchString(body))
 	v.text = visibleText(body, maxVerifyText)
 	v.lower = strings.ToLower(v.text)
 	v.fp = bodyHash(v.title + "\x00" + v.text)
@@ -238,6 +243,10 @@ func classifyView(v *bodyView, httpStatus int, want DocType) verifyResult {
 		return res
 	}
 	res.Title = v.title
+	if v.challenge {
+		res.Evidence = append(res.Evidence, "rejected:bot_challenge")
+		return res
+	}
 
 	// Gate 1: redirect-stub parking pages (the 114-byte production pattern).
 	if v.small && v.redirect {

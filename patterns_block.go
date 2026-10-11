@@ -45,6 +45,8 @@ var homepageBlockRE = regexp.MustCompile(`(?i)(?:` +
 	`your\s+ip\s+(?:address\s+)?has\s+been\s+(?:blocked|banned|flagged)|` +
 	`bot\s+detection|` +
 	`pardon\s+our\s+interruption|` +
+	`making\s+sure\s+you(?:'|&#39;|&#x27;|\x{2019})?re\s+not\s+a\s+bot|` +
+	`checking\s+if\s+the\s+site\s+connection\s+is\s+secure|` +
 	`\bjust\s+a\s+moment\.\.\.` +
 	`)`)
 
