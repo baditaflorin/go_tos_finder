@@ -36,8 +36,8 @@ real domains replayed from recorded bytes (old vs new code on identical input).
   `http://<domain>` (`detection.fallback_origin`): amf-france.org,
   anthonyraneri.com, appzer.de ... were NoData only because the bare apex has no
   valid certificate.
-- In-flight cap (32, `TOS_FINDER_MAX_INFLIGHT`): saturated scans answer 503
-  `overloaded` after 2 s instead of queueing until the caller's deadline.
+- In-flight cap (64, `TOS_FINDER_MAX_INFLIGHT`): a saturated scan queues up to 8 s,
+  then answers 503 `overloaded` instead of queueing until the caller's deadline.
 
 ### Fixed (false negatives)
 - The soft-404 gate read `<script>` text: `console.log("... element not

@@ -5,6 +5,12 @@ version: "1.9.0"
 trl: 6
 trl_assessed_at: "2026-07-31"
 trl_assessor: "claude-trl-reaudit-2026-07-31"
+# 2026-10-11 (1.9.0) - pass-3 review: CPU/request 195 ms -> 28 ms on 150 recorded
+# real domains (regexp NFA 77 %, per-request transports leaked ~18 goroutines each),
+# 24 s scan budget (DomainScope's inner timeout is 30 s), www/http origin fallback,
+# soft-404 gate no longer reads <script> text, catch-all/template probe rejection.
+# TRL stays at 6: still no JS render engine (JS-rendered SPA footers carry no
+# links) and the hand-judged samples are n=40-77, not a measured population rate.
 # 2026-08-23 (1.8.0) - EU-market-expansion real-evidence round 27: Malta -
 # the LAST of the 13 target EU countries for this multi-round expansion
 # (rounds 15-27 now cover Romania, Czechia, Hungary, Greece, Bulgaria,

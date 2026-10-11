@@ -20,14 +20,16 @@ import (
 )
 
 // maxInflight bounds the scans running at once in this process. A scan is
-// mostly I/O wait, so the cap is generous; it exists so that a burst (DomainScope
-// fans out hundreds of domains) cannot grow memory without bound or starve the
-// CPU until every scan misses the caller's 30 s deadline. A scan that cannot get
-// a slot within slotWait is answered 503 "overloaded" immediately (honest,
-// cheap) instead of being queued until the caller gives up.
+// mostly I/O wait (~28 ms CPU), so the cap is generous; it exists so that a burst
+// (DomainScope fans out hundreds of domains at once) cannot grow memory without
+// bound inside the 1 GiB container (a scan can hold a 4 MB homepage plus up to 8
+// in-flight 256 KB probe bodies) or starve the CPU until every scan misses the
+// caller's 30 s deadline. A scan queues up to slotWait for a slot (the wait counts
+// against its 24 s budget) and is otherwise answered 503 "overloaded" immediately
+// (honest, cheap) instead of being queued until the caller gives up.
 var (
-	maxInflight = envInt("TOS_FINDER_MAX_INFLIGHT", 32)
-	slotWait    = 2 * time.Second
+	maxInflight = envInt("TOS_FINDER_MAX_INFLIGHT", 64)
+	slotWait    = 8 * time.Second
 	inflightSem = make(chan struct{}, maxInflight)
 )
 
