@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1 — 2026-10-12
+
+### Changed
+- Enable authenticated Common Crawl fetch-cache access for DomainScope archive runs.
+
 ## 1.9.0 — 2026-10-11
 
 Pass-3 detector review (CPU hog, 33 % timeouts, 36 % NoData). Measured on 150
