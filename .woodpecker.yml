@@ -1,11 +1,18 @@
 # Woodpecker CI (services-registry ADR-0035). Mirrors the same gate
 # fleet-runner deploy's pre-flight already runs — one definition of
 # "green," not two.
+# Triggers: one pipeline per PR update and one per push to main;
+# a push to a PR branch is covered by its pull_request run, so it no longer
+# starts a second identical pipeline (services-registry templates/woodpecker-go-ci.yml).
+when:
+  - event: pull_request
+  - event: push
+    branch: main
+  - event: manual
+
 steps:
   test:
     image: golang:1.25
     commands:
       - go build ./...
       - go test ./...
-    when:
-      event: [push, pull_request]
