@@ -9,11 +9,13 @@ services:
     environment:
       - PORT=8316
       - FLEET_FETCH_CACHE_API_KEY_FILE=/run/secrets/fleet_fetch_cache_api_key
+      - FLEET_SECRETS_API_KEY_FILE=/run/secrets/fleet_secrets_api_key
     networks:
       - pentest_network
 
     volumes:
       - ./.secrets/fleet_fetch_cache_api_key:/run/secrets/fleet_fetch_cache_api_key:ro
+      - ./.secrets/fleet_secrets_api_key:/run/secrets/fleet_secrets_api_key:ro
 networks:
   pentest_network:
     external: true
