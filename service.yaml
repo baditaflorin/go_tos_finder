@@ -1006,7 +1006,7 @@ secrets:
       uid: 100
       gid: 101
   - env: FLEET_SECRETS_API_KEY_FILE
-    vault_key: go_tos_finder-3000943-fleet-secrets-api-key
+    vault_key: go_tos_finder-fleet-secrets-api-key
     file:
       source: .secrets/fleet_secrets_api_key
       target: /run/secrets/fleet_secrets_api_key
