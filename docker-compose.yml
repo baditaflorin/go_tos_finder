@@ -14,6 +14,7 @@ services:
 
     volumes:
       - ./.secrets/fleet_fetch_cache_api_key:/run/secrets/fleet_fetch_cache_api_key:ro
+      - ./.secrets/fleet_secrets_api_key:/run/secrets/fleet_secrets_api_key:ro
 networks:
   pentest_network:
     external: true
