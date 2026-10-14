@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.9.3 — 2026-10-14
+
+### Fixed (Austrian imprints, real evidence: 200 live .at domains re-enriched with 1.9.2)
+- A bare "GmbH"/"AG" suffix no longer outranks local evidence when the country is DE-or-AT: the register type
+  (FN / Handelsgericht vs HRB / Amtsgericht), then the postcode shape (4-digit AT vs 5-digit DE), then the ccTLD
+  decide. 45 of 200 Austrian companies (ages.at, graz.at, herold.at, ...) had been given the German ruleset.
+- Addresses are now also found when no legal entity was detected (associations, public bodies, universities have
+  no legal-form suffix): the three real Austrian shapes "Street 1, 1010 Wien", street and postcode on separate
+  lines (blank lines tolerated), and a labelled "Anschrift:". 70 of 105 Austrian-ruleset imprints had no address.
+- The Mediengesetz §25 "Medieninhaber" is used as the legal name when no entity was detected.
+- A "legal name" that is only a label ending in ":" ("Company register court:") is rejected.
+- A labelled phone/fax line ("Tel.: +43 ...") is no longer absorbed into the postal address.
+
 ## 1.9.2 — 2026-10-14
 
 ### Added
