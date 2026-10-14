@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.2 — 2026-10-14
+
+### Added
+- Enable authenticated Fleet Graph call telemetry with a dedicated file-backed writer credential.
+
 ## 1.9.1 — 2026-10-12
 
 ### Changed
