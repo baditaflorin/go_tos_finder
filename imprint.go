@@ -698,6 +698,10 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 			}
 		}
 	}
+	// A "name" that is just a label ending in a colon ("Company register court:") is not a legal name.
+	if strings.HasSuffix(strings.TrimSpace(im.LegalName), ":") {
+		im.LegalName, im.Suffix = "", ""
+	}
 	if im.VAT != "" && vatValidation == "" {
 		hint := vatCountryHint(im.VAT)
 		if hint == "" {
@@ -728,6 +732,9 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	if country == "" {
 		country = tldCountryOf(hostname)
 	}
+	// A suffix-only DE/AT guess ("GmbH") must not outrank the register type, the postcode shape or
+	// the ccTLD (imprint_at.go).
+	country = refineDEATCountry(country, im.VAT, im.Register, im.Address, text, hostname)
 	im.Country = country
 	im.Ruleset = rulesetFor(country)
 
@@ -789,6 +796,18 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 			// "register" checklist item rather than silently requiring a
 			// number too.
 			im.Register = court
+		}
+	}
+
+	// Austrian institutions (associations, public bodies, universities) have no legal-form suffix, so
+	// no entity is detected and the entity-anchored address search finds nothing. Fall back to the
+	// Medieninhaber (Mediengesetz §25) and to the page's own postal address (imprint_at.go).
+	if country == "AT" {
+		if im.LegalName == "" {
+			im.LegalName = extractMedieninhaber(text)
+		}
+		if im.Address == "" {
+			im.Address = extractATPostalAddress(text)
 		}
 	}
 

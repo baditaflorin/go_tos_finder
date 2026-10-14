@@ -566,6 +566,11 @@ func extractAddressNearEntity(text, name string) string {
 			if bareIntlPhoneRE.MatchString(clean) {
 				continue
 			}
+			// A labelled phone/fax line ("Tel.: +43 (0)5 0485-333") is contact data, not part of the
+			// postal address, although its digit run satisfies looksAddressLine (herold.at).
+			if imprintPhoneRE.MatchString(clean) {
+				continue
+			}
 			// Stop before absorbing an identifier/register/contact line
 			// into the address — those are separate fields (Register/VAT
 			// are found independently via findIdentifiers+proximity in
