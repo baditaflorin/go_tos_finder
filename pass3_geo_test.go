@@ -39,10 +39,11 @@ func TestClassifyScriptLinkText(t *testing.T) {
 		// Russian / Ukrainian (vk / yandex footer)
 		{"ru user agreement", "/terms", "Пользовательское соглашение", DocTermsOfService},
 		{"ru privacy", "/privacy", "Политика конфиденциальности", DocPrivacyPolicy},
-		// Greek / Turkish / Arabic / Thai / Vietnamese
+		// Greek / Turkish / Arabic / Persian / Thai / Vietnamese
 		{"el terms", "/oroi", "Όροι χρήσης", DocTermsOfService},
 		{"tr privacy", "/g", "Gizlilik Politikası", DocPrivacyPolicy},
 		{"ar terms", "/t", "شروط الاستخدام", DocTermsOfService},
+		{"fa privacy policy", "/p/abc", "سیاست حفظ حریم خصوصی", DocPrivacyPolicy},
 		{"th privacy", "/p", "นโยบายความเป็นส่วนตัว", DocPrivacyPolicy},
 		{"vi terms", "/dk", "Điều khoản sử dụng", DocTermsOfService},
 	}
@@ -68,6 +69,7 @@ func TestScriptLinkTextDoesNotFalsePositive(t *testing.T) {
 		{"/login", "로그인"},        // ko "Login"
 		{"/about", "О компании"}, // ru "About the company"
 		{"/home", "Ana Sayfa"},   // tr "Home page"
+		{"/about", "درباره ما"},  // fa "About us"
 	}
 	for _, c := range cases {
 		t.Run(c.text, func(t *testing.T) {
@@ -109,6 +111,23 @@ func TestClassifyBodyScriptTitle(t *testing.T) {
 	}
 }
 
+func TestPersianPrivacyPolicyTitleAndBody(t *testing.T) {
+	// Persian Globe's first-party privacy page uses this exact title phrase
+	// (https://www.persianglobe.net/privacy); Farsi text was absent from the
+	// legal document script vocabulary, so title confirmation and the
+	// canonical-probe type guard both missed it.
+	const title = "سیاست حفظ حریم خصوصی"
+	body := `<html><head><title>` + title + `</title></head><body><h1>` + title + `</h1>` +
+		strings.Repeat("این سیاست حفظ حریم خصوصی نحوه گردآوری و پردازش اطلاعات شخصی را توضیح می‌دهد. ", 20) + `</body></html>`
+	vr := classifyBody(body, 200, DocPrivacyPolicy)
+	if !vr.IsReal || vr.Confidence != ConfHigh {
+		t.Fatalf("Persian privacy policy should be a high-confidence document: %+v", vr)
+	}
+	if !bodyHasTypeSignal(body, DocPrivacyPolicy) {
+		t.Fatal("Persian privacy policy body should satisfy the canonical-probe type guard")
+	}
+}
+
 // TestScriptSoftNotFound: a CJK / Cyrillic soft-404 page must still be rejected
 // (geo FP-hardening — a Japanese/Chinese/Korean/Russian "page not found" that
 // 200s should not count as a found document).
@@ -141,6 +160,7 @@ func TestBodyHasTypeSignalScript(t *testing.T) {
 		{"zh terms body", "本协议适用于您使用本服务的行为。服务条款如下。", DocTermsOfService, true},
 		{"ko privacy body", "본 개인정보처리방침은 회원의 개인정보를 보호합니다.", DocPrivacyPolicy, true},
 		{"ru terms body", "Настоящее соглашение регулирует использование сервиса.", DocTermsOfService, true},
+		{"fa privacy body", "این سیاست حفظ حریم خصوصی، اطلاعات شخصی کاربران را توضیح می‌دهد.", DocPrivacyPolicy, true},
 		// Unrelated CJK marketing copy must NOT pass for a niche probe type.
 		{"zh marketing not shipping", "欢迎来到我们的视频平台，观看精彩内容。", DocShippingPolicy, false},
 	}

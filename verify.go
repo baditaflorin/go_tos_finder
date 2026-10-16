@@ -80,8 +80,9 @@ var scriptLegalVocabRE = regexp.MustCompile(`(?i)(?:` + strings.Join([]string{
 	"개인정보", "본 약관", "본 정책", "시행일", "수집", "이용약관",
 	// Russian / Ukrainian
 	"персональных данных", "настоящ", "конфиденциальност", "обработк", "соглашени",
-	// Greek / Turkish / Arabic
+	// Greek / Turkish / Arabic / Persian
 	"προσωπικών δεδομένων", "kişisel veri", "gizlilik", "البيانات الشخصية", "الخصوصية",
+	"حریم خصوصی", "اطلاعات شخصی",
 }, "|") + `)`)
 
 // Fast (prefiltered) twins of the body-level vocabulary regexes. The plain
