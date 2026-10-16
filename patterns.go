@@ -187,10 +187,11 @@ var patterns = []pattern{
 			// Russian / Ukrainian: privacy policy
 			"Политика конфиденциальности", "Конфиденциальность", "Политика конфиденц",
 			"Політика конфіденційності",
-			// Greek / Turkish / Arabic
+			// Greek / Turkish / Arabic / Persian
 			"Πολιτική απορρήτου", "Πολιτική Απορρήτου",
 			"Gizlilik Politikası", "Gizlilik İlkesi", "Kişisel Verilerin Korunması",
 			"سياسة الخصوصية", "الخصوصية",
+			"سیاست حفظ حریم خصوصی", "حریم خصوصی", "اطلاعات شخصی",
 			// Thai / Hindi / Indonesian-Malay / Vietnamese
 			"นโยบายความเป็นส่วนตัว", "गोपनीयता नीति",
 			"Kebijakan Privasi", "Dasar Privasi", "Chính sách bảo mật", "Chính sách quyền riêng tư",

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.4 — 2026-10-16
+
+### Fixed
+- Recognize Persian privacy-policy titles and body vocabulary. A first-party Persian privacy page uses “سیاست حفظ حریم خصوصی”; previously Farsi title and body text did not match the service's script-aware privacy signals.
+
 ## 1.9.3 — 2026-10-14
 
 ### Fixed (Austrian imprints, real evidence: 200 live .at domains re-enriched with 1.9.2)
