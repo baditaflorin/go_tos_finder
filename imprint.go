@@ -737,6 +737,19 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	country = refineDEATCountry(country, im.VAT, im.Register, im.Address, text, hostname)
 	im.Country = country
 	im.Ruleset = rulesetFor(country)
+	// Japanese Specified Commercial Transactions Act disclosures commonly
+	// publish the operator and address in a key/value table. Those labels
+	// are not entity suffixes, so the general candidate extractor misses
+	// them; use the country-specific labels only after country resolution.
+	if country == "JP" {
+		jpName, jpAddress := extractJapaneseImprintFields(text)
+		if im.LegalName == "" {
+			im.LegalName = jpName
+		}
+		if im.Address == "" {
+			im.Address = jpAddress
+		}
+	}
 
 	// A VAT written without its country prefix (JSON-LD vatID "B88665179" on a
 	// .es imprint) could only ever reach format_valid, because the prefix is the
