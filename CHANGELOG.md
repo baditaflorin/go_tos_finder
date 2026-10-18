@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.6 — 2026-10-18
+
+### Fixed
+- Align the runtime version with service metadata; validate the parity with a regression test and go test ./...
+
 ## 1.9.5 — 2026-10-17
 
 ### Fixed
