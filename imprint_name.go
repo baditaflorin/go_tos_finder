@@ -1688,6 +1688,11 @@ func formatRegister(kind, value string) string {
 		break
 	}
 	v = strings.TrimLeft(v, " :.,#-")
+	if kind == "法人番号" {
+		// Keep the field label while normalizing fullwidth digits to the
+		// canonical 13-digit representation.
+		v = extractDigits(normalizeJapaneseDigits(v))
+	}
 	// A literal, un-decoded "&nbsp;" (see trimLeadingTrailingNBSP's doc
 	// comment for why stripTagsLines never decodes it) commonly sits right
 	// between a label's colon and its value — real evidence,

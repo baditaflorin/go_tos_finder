@@ -85,6 +85,19 @@ func init() {
 		{"HRA", "DE", regexp.MustCompile(`\bHRA\s?\d{1,6}\b`)},
 		{"USt-IdNr", "DE", regexp.MustCompile(`USt[- ]?IdNr\.?\s*:?\s*DE\d{9}`)},
 		{"Steuernummer", "DE", regexp.MustCompile(`Steuernummer\s*:?\s*[\d/]{10,15}`)},
+		// Japan's Corporate Number (法人番号) is a labelled 13-digit
+		// government identifier. RE2's `\b` is ASCII-only, so the Japanese
+		// label anchors the match; an explicit digit boundary prevents a
+		// 14-digit run from being accepted as a 13-digit identifier. Fullwidth
+		// digits are normalized before checksum validation and output.
+		{"法人番号", "JP", regexp.MustCompile(`法人番号\s*[:：#]?\s*[0-9０-９]{13}(?:$|[^0-9０-９])`)},
+		// Japan's qualified-invoice issuer registration is `T` plus 13
+		// digits. The same shape is assigned to non-corporate issuers and
+		// those digits do NOT necessarily have a Corporate Number checksum,
+		// so this is format-only tax evidence. Requiring a specific invoice
+		// label (or a T-prefixed generic 登録番号) avoids treating an
+		// arbitrary 13-digit number as tax data.
+		{"InvoiceIssuerRegistration", "JP", regexp.MustCompile(`(?:適格請求書発行事業者登録番号|適格請求書発行事業者|インボイス登録番号|登録番号)\s*[:：#]?\s*[TtＴｔ][\s-]*[0-9０-９]{13}(?:$|[^0-9０-９])`)},
 		// Austria — Firmenbuch company-register number (ECG §5 / UGB §14):
 		// "FN" followed by 4-6 digits and a single check letter, e.g.
 		// "FN 123456a". Not present in the upstream go_legal_entity table —
@@ -604,4 +617,49 @@ func findIdentifiers(text string, max int) []identifierHit {
 		}
 	}
 	return hits
+}
+
+// findIdentifiersByKind scans one label-anchored identifier family without
+// the cross-family hit cap used by findIdentifiers. It is used only for
+// ambiguity checks where truncating later kinds could otherwise hide a
+// second distinct identifier on the same disclosure page.
+func findIdentifiersByKind(text, kind string) []identifierHit {
+	var hits []identifierHit
+	seen := map[string]bool{}
+	for _, p := range vatPatterns {
+		if p.name != kind {
+			continue
+		}
+		for _, m := range p.re.FindAllString(text, -1) {
+			key := p.name + ":" + m
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			hits = append(hits, identifierHit{
+				Kind:       p.name,
+				Value:      m,
+				Country:    p.country,
+				Validation: string(validateIdentifier(p.name, m, p.country)),
+			})
+		}
+	}
+	return hits
+}
+
+func oneDistinctIdentifier(hits []identifierHit) (identifierHit, bool) {
+	byValue := make(map[string]identifierHit, len(hits))
+	for _, hit := range hits {
+		value := cleanIdentifierValue(hit.Kind, hit.Value)
+		if value != "" {
+			byValue[value] = hit
+		}
+	}
+	if len(byValue) != 1 {
+		return identifierHit{}, false
+	}
+	for _, hit := range byValue {
+		return hit, true
+	}
+	return identifierHit{}, false
 }

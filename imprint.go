@@ -698,6 +698,28 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 			}
 		}
 	}
+	// Some Japanese disclosure pages put 法人番号 several sections away
+	// from the operator-name row, beyond extractImprintText's ordinary
+	// 800-byte association window. A single distinct label-anchored number
+	// on this already-verified imprint page is still useful evidence; abstain
+	// when the page lists multiple distinct numbers to avoid guessing which
+	// entity they belong to.
+	if corporateID, unique := oneDistinctIdentifier(findIdentifiersByKind(text, "法人番号")); unique {
+		if im.Register == "" {
+			im.Register = formatRegister(corporateID.Kind, corporateID.Value)
+		}
+		im.Country = "JP"
+	}
+	// Invoice IDs use the same T+13 shape for corporate and non-corporate
+	// issuers. Keep this contextual identifier format-only and apply the same
+	// uniqueness guard before using a page-level fallback.
+	if invoiceID, unique := oneDistinctIdentifier(findIdentifiersByKind(text, "InvoiceIssuerRegistration")); unique {
+		if im.VAT == "" {
+			im.VAT = cleanIdentifierValue(invoiceID.Kind, invoiceID.Value)
+			vatValidation = invoiceID.Validation
+		}
+		im.Country = "JP"
+	}
 	// A "name" that is just a label ending in a colon ("Company register court:") is not a legal name.
 	if strings.HasSuffix(strings.TrimSpace(im.LegalName), ":") {
 		im.LegalName, im.Suffix = "", ""
