@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.7 — 2026-10-18
+
+### Changed
+- fix: extract Japanese corporate and invoice identifiers (#77)
+- docs(claude): refresh CLAUDE.md from the services-registry canonical 9a62b0cad [skip ci]
+- chore(deps): bump github.com/baditaflorin/go-common to v0.103.0 (#76)
+
 ## 1.9.6 — 2026-10-18
 
 ### Fixed
