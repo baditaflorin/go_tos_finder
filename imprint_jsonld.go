@@ -714,6 +714,16 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			}
 		}
 	}
+	// Japanese disclosure pages commonly identify the operator in a local
+	// key/value row (運営会社, 販売業者, etc.) without a Latin legal-form
+	// suffix. Reuse that explicit identity as a proximity anchor so nearby
+	// national identifiers are attached to the same candidate.
+	if jpCandidate, offset, ok := japaneseImprintCandidate(text); ok {
+		if _, alreadyTracked := candOffset[jpCandidate.Name]; !alreadyTracked {
+			out = append(out, jpCandidate)
+			candOffset[jpCandidate.Name] = offset
+		}
+	}
 	const proximityBytes = 800
 	ids := findIdentifiers(text, 5)
 	if len(out) > 0 && len(ids) > 0 {
@@ -785,7 +795,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// registration number) is the same round-22 addition, same
 			// shape. Real evidence: sgermobil.si's real Splošni pogoji
 			// page.
-			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse",
+			case "HRB", "HRA", "Steuernummer", "USt-IdNr", "FN", "CompaniesHouse", "法人番号",
 				"EIN", "ABN", "ACN", "CUI", "KvK", "SIRET", "SIREN", "REA", "Hoja",
 				"KRS", "REGON", "CRO", "RCS", "Organisationsnummer", "CVR", "Y-tunnus", "OrgNr", "IČO",
 				"Cégjegyzékszám", "Γ.Ε.ΜΗ.", "MBS", "Matična številka", "HE", "Įmonės kodas", "registrikood", "Company Registration Number":
@@ -819,7 +829,7 @@ func extractImprintText(body, pageURL string) []imprintCandidate {
 			// условия page. "OIB" (Croatia) joins for the same reason: the
 			// same 11-digit body the "HR"-prefixed EU VAT pattern matches.
 			// Real evidence: mako.hr's real Opći uvjeti page.
-			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК", "OIB", "VAT Number", "Reģistrācijas numurs":
+			case "VAT", "PartitaIVA", "CIF", "NIP", "NIPC", "Adószám", "ΑΦΜ", "ЕИК", "OIB", "VAT Number", "Reģistrācijas numurs", "InvoiceIssuerRegistration":
 				if out[best].VAT == "" {
 					out[best].VAT = cleanIdentifierValue(id.Kind, id.Value)
 					if out[best].Country == "" {

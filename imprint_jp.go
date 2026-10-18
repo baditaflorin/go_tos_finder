@@ -14,6 +14,12 @@ import (
 // these label/value rows.
 var japaneseAddressEvidenceRE = regexp.MustCompile(`[0-9０-９]|〒|丁目|番地|番|号`)
 
+var japaneseCompanyLabels = []string{
+	"運営会社", "販売業者", "販売事業者", "事業者名", "会社名", "商号",
+}
+
+var japaneseAddressLabels = []string{"所在地", "住所", "本店所在地"}
+
 var japaneseImprintLabels = []string{
 	"運営会社", "販売業者", "販売事業者", "事業者名", "会社名", "商号",
 	"所在地", "住所", "本店所在地",
@@ -21,17 +27,63 @@ var japaneseImprintLabels = []string{
 	"商品代金", "商品代金以外", "支払方法", "お支払い方法", "商品の引渡時期", "返品特約",
 }
 
+// normalizeJapaneseDigits converts the fullwidth digits commonly used in
+// Japanese legal disclosures to ASCII digits. The invoice registration
+// prefix may also be rendered as fullwidth T/t; normalize it to ASCII T.
+func normalizeJapaneseDigits(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= '０' && r <= '９':
+			b.WriteRune('0' + (r - '０'))
+		case r == 'Ｔ' || r == 'ｔ':
+			b.WriteByte('T')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func extractJapaneseImprintFields(text string) (name, address string) {
 	lines := strings.Split(text, "\n")
-	name = japaneseLabeledValue(lines, []string{"運営会社", "販売業者", "販売事業者", "事業者名", "会社名", "商号"}, 1)
+	name = japaneseLabeledValue(lines, japaneseCompanyLabels, 1)
 	if !validJapaneseCompanyValue(name) {
 		name = ""
 	}
-	address = japaneseLabeledValue(lines, []string{"所在地", "住所", "本店所在地"}, 4)
+	address = japaneseLabeledValue(lines, japaneseAddressLabels, 4)
 	if !validJapaneseAddressValue(address) {
 		address = ""
 	}
 	return name, address
+}
+
+// japaneseImprintCandidate uses the operator/company row already understood
+// by the JP disclosure parser as an entity anchor for nearby identifiers.
+// This lets the ordinary candidate proximity logic attach 法人番号 and
+// invoice-registration evidence even when the company name has no Latin
+// legal-form suffix.
+func japaneseImprintCandidate(text string) (imprintCandidate, int, bool) {
+	lines := strings.Split(text, "\n")
+	name := japaneseLabeledValue(lines, japaneseCompanyLabels, 1)
+	if !validJapaneseCompanyValue(name) {
+		return imprintCandidate{}, 0, false
+	}
+	offset := strings.Index(text, name)
+	if offset < 0 {
+		return imprintCandidate{}, 0, false
+	}
+	address := japaneseLabeledValue(lines, japaneseAddressLabels, 4)
+	if !validJapaneseAddressValue(address) {
+		address = ""
+	}
+	return imprintCandidate{
+		Name:       name,
+		Country:    "JP",
+		Confidence: "high",
+		Source:     "imprint_label",
+		Address:    address,
+	}, offset, true
 }
 
 func japaneseLabeledValue(lines, labels []string, maxLines int) string {

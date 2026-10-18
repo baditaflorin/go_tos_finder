@@ -32,6 +32,26 @@ func mod11Verdict(ok bool) validity {
 	return checksumInvalid
 }
 
+// jpCorporateNumberValid applies the National Tax Agency's check-digit rule
+// to the leading digit and 12-digit base of a Japanese Corporate Number.
+// Starting at the base number's rightmost digit, multiply alternating
+// digits by 1 and 2; the leading digit is 9 minus the sum modulo 9.
+func jpCorporateNumberValid(s string) bool {
+	d, ok := digitsOf(s)
+	if !ok || len(d) != 13 {
+		return false
+	}
+	sum := 0
+	for i := 12; i >= 1; i-- {
+		weight := 1
+		if (12-i)%2 == 1 {
+			weight = 2
+		}
+		sum += d[i] * weight
+	}
+	return d[0] == 9-sum%9
+}
+
 // validateIdentifier returns the structural-validation verdict for a single
 // VAT/registration identifier. The check-digit algorithms below are the
 // publicly documented ones used by the EU VIES system and the national
@@ -178,6 +198,13 @@ func validateIdentifier(kind, value, country string) validity {
 		// fix — see czICOValid's doc comment for the algorithm and the
 		// real-evidence confirmation (onlineshop.cz's real IČO, 24717509).
 		return mod11Verdict(czICOValid(extractDigits(value)))
+	case "法人番号":
+		// Japan's Corporate Number is a leading check digit followed by a
+		// 12-digit base number. This check applies only to the labelled
+		// Corporate Number kind; invoice issuer IDs are validated as
+		// format-only because individual issuers use the same T+13 shape
+		// without sharing the corporate-number checksum.
+		return mod11Verdict(jpCorporateNumberValid(extractDigits(normalizeJapaneseDigits(value))))
 	case "ABN":
 		if abnValid(extractDigits(value)) {
 			return checksumValid
@@ -288,6 +315,10 @@ func cleanIdentifierValue(kind, value string) string {
 		// clean), so this is a safe superset fix, not a behavior change
 		// for those.
 		return onlyAlnum(value)
+	case "法人番号":
+		return extractDigits(normalizeJapaneseDigits(value))
+	case "InvoiceIssuerRegistration":
+		return onlyAlnum(normalizeJapaneseDigits(value))
 	}
 	return value
 }
@@ -298,7 +329,7 @@ func cleanIdentifierValue(kind, value string) string {
 // though they're captured by their own label-anchored patterns rather than
 // vatPatterns' generic "COUNTRYCODE + digits" VAT entries.
 func isVATLikeIdentifierKind(kind string) bool {
-	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК" || kind == "OIB" || kind == "VAT Number" || kind == "Reģistrācijas numurs"
+	return kind == "VAT" || kind == "PartitaIVA" || kind == "CIF" || kind == "NIP" || kind == "NIPC" || kind == "Adószám" || kind == "ΑΦΜ" || kind == "ЕИК" || kind == "OIB" || kind == "VAT Number" || kind == "Reģistrācijas numurs" || kind == "InvoiceIssuerRegistration"
 }
 
 // singleCountryIdentifierKind returns the ISO-3166-1 alpha-2 country a
@@ -449,6 +480,11 @@ func singleCountryIdentifierKind(kind string) string {
 		// evidence: artemisialtd.com's real Terms of Sale page states
 		// "Our company registration number is C 71943".
 		return "MT"
+	case "法人番号", "InvoiceIssuerRegistration":
+		// Both identifiers are issued under Japan's national system. Invoice
+		// registration numbers remain a separate VAT-like kind and do not
+		// inherit Corporate Number checksum rules.
+		return "JP"
 	}
 	// Deliberately NOT a case here: "IČO" (Czechia, added round 16) is NOT
 	// single-country the way the cases above are. Former Czechoslovakia
