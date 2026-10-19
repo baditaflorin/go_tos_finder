@@ -12,7 +12,7 @@ when:
 
 steps:
   test:
-    image: golang:1.25
+    image: golang:1.26
     commands:
       - go build ./...
       - go test ./...
