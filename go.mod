@@ -3,7 +3,7 @@ module github.com/baditaflorin/go_tos_finder
 go 1.26.0
 
 require (
-	github.com/baditaflorin/go-common v0.104.1
+	github.com/baditaflorin/go-common v0.105.0
 	golang.org/x/net v0.61.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0
