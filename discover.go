@@ -1,7 +1,7 @@
 package main
 
 import (
-	"html"
+	htmlstd "html"
 	"net/url"
 	"regexp"
 	"strings"
@@ -16,9 +16,27 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 	out := make(map[DocType]DocFinding)
 	anchors := extractAnchors(html)
 	footerStart, footerEnd := footerBounds(html)
+	var scriptTargets map[string]*url.URL
 
 	for _, a := range anchors {
-		abs := absolutize(a.Href, base)
+		linkText := strings.TrimSpace(stripTags(a.Inner))
+		if len(linkText) > 80 {
+			linkText = linkText[:80]
+		}
+		rawHref := htmlstd.UnescapeString(strings.TrimSpace(a.Href))
+		abs := ""
+		scripted := false
+		if strings.HasPrefix(strings.ToLower(rawHref), "javascript:") {
+			if scriptTargets == nil {
+				scriptTargets = staticScriptLegalURLs(html)
+			}
+			abs, scripted = staticScriptLegalTarget(scriptTargets, rawHref, linkText)
+			if !scripted {
+				continue
+			}
+		} else {
+			abs = absolutize(rawHref, base)
+		}
 		if abs == "" {
 			continue
 		}
@@ -31,7 +49,7 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		}
 		// Platform-wide or social-network legal links in a footer are not this
 		// target's documents. Keep the origin and its subdomains only.
-		if !sameSiteHost(u, base) {
+		if !sameSiteHost(u, base) && !scripted {
 			continue
 		}
 		// A link to the site root is never a legal document (budongsam.com's
@@ -39,10 +57,6 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		// "copyright policy" on its generic legal vocabulary).
 		if (u.Path == "" || u.Path == "/") && u.RawQuery == "" {
 			continue
-		}
-		linkText := strings.TrimSpace(stripTags(a.Inner))
-		if len(linkText) > 80 {
-			linkText = linkText[:80]
 		}
 		dt, how, floor := classifyLinkEvidence(u.Path, linkText)
 		if dt == "" {
@@ -70,6 +84,56 @@ func linkScan(html string, base *url.URL) map[DocType]DocFinding {
 		out[dt] = hit
 	}
 	return out
+}
+
+var (
+	jsLegalCallRE          = regexp.MustCompile(`(?is)^\s*javascript:\s*([a-z_$][a-z0-9_$]*)\s*\(\s*\)\s*;?\s*$`)
+	jsFunctionDefinitionRE = regexp.MustCompile(`(?s)\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(\s*\)\s*\{([^{}]{0,1000})\}`)
+	jsURLLiteralRE         = regexp.MustCompile(`(?is)["'](https?://[^"'\s]+)["']`)
+)
+
+// staticScriptLegalURLs indexes zero-argument page functions that contain one
+// unambiguous, absolute HTTP(S) URL literal.
+func staticScriptLegalURLs(pageHTML string) map[string]*url.URL {
+	urls := make(map[string]*url.URL)
+	for _, function := range jsFunctionDefinitionRE.FindAllStringSubmatch(pageHTML, -1) {
+		if len(function) != 3 {
+			continue
+		}
+		literals := jsURLLiteralRE.FindAllStringSubmatch(function[2], -1)
+		if len(literals) != 1 || len(literals[0]) != 2 {
+			continue
+		}
+		u, err := url.Parse(strings.TrimSpace(literals[0][1]))
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+			continue
+		}
+		urls[function[1]] = u
+	}
+	return urls
+}
+
+// staticScriptLegalTarget resolves the narrow, common case where a first-party
+// legal link calls one of those functions. It deliberately does not execute
+// JavaScript. The destination path and first-party link text must independently
+// identify the same specific document type before an off-site URL is admitted;
+// normal safehttp checks still protect the subsequent fetch.
+func staticScriptLegalTarget(functionURLs map[string]*url.URL, href, linkText string) (string, bool) {
+	call := jsLegalCallRE.FindStringSubmatch(href)
+	if len(call) != 2 {
+		return "", false
+	}
+	u := functionURLs[call[1]]
+	if u == nil {
+		return "", false
+	}
+	pathType, _, _ := classifyLinkEvidence(u.Path, "")
+	textType, _, _ := classifyLinkEvidence("", linkText)
+	if pathType == "" || pathType != textType || hubDocTypes[pathType] {
+		return "", false
+	}
+	copyURL := *u
+	return stripFragment(&copyURL), true
 }
 
 // sameSiteHost reports whether u belongs to the same site as base: the same
@@ -238,7 +302,7 @@ func cleanHref(h string) string {
 	}
 	h = strings.Trim(h, `"'`)
 	if strings.IndexByte(h, '&') >= 0 {
-		h = html.UnescapeString(h)
+		h = htmlstd.UnescapeString(h)
 	}
 	return strings.TrimSpace(h)
 }
