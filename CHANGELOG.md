@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.8 — 2026-10-20
+
+### Fixed
+- Try one bounded JavaScript-rendered homepage fetch for sparse, script-heavy legal pages, and use its links only when the fetch service confirms JS rendering and the same-site page adds legal links.
+
 ## 1.9.7 — 2026-10-18
 
 ### Changed
