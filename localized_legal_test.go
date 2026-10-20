@@ -18,6 +18,33 @@ func TestLocalizedLegalAndImprintEvidence(t *testing.T) {
 	}
 }
 
+func TestRomanianPrivacyPolicyEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		path, text string
+	}{
+		{"/politica-de-confidentialitate", "Politica de confidentialitate"},
+		{"/politica-de-confidențialitate", "Politica de confidențialitate"},
+		{"/confidențialitate", "Confidențialitate"},
+	} {
+		got, _, floor := classifyLinkEvidence(tc.path, tc.text)
+		if got != DocPrivacyPolicy || floor == ConfNone {
+			t.Errorf("Romanian privacy link %q/%q => %s/%s", tc.path, tc.text, got, floor)
+		}
+	}
+
+	for _, title := range []string{
+		"Politica de confidențialitate",
+		"Politica de confidentialitate",
+		"Confidențialitate",
+	} {
+		body := "<html><head><title>" + title + "</title></head><body><h1>" + title + "</h1><p>Informații despre datele personale.</p></body></html>"
+		got := classifyBody(body, 200, DocPrivacyPolicy)
+		if !got.IsReal || got.Confidence != ConfHigh {
+			t.Errorf("Romanian privacy title %q => real=%t confidence=%s evidence=%v", title, got.IsReal, got.Confidence, got.Evidence)
+		}
+	}
+}
+
 func TestDisclaimerOnlyEvidenceIsDiscarded(t *testing.T) {
 	merged := map[DocType]DocFinding{DocDisclaimer: {Type: DocDisclaimer, URL: "https://example.test/disclaimer", Status: 200}}
 	discardStandaloneDisclaimer(merged)

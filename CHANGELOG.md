@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.9 — 2026-10-20
+
+### Fixed
+- Recognize Romanian privacy-policy links, slugs, and page titles such as
+  "Politica de confidențialitate". A live first-party page in the 200-row,
+  20-country production-derived replay had a Romanian privacy link and title
+  that 1.9.8 left unclassified; the updated handler now verifies it as a
+  privacy policy at high confidence.
+
 ## 1.9.8 — 2026-10-20
 
 ### Fixed
