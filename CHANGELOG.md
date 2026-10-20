@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.9.10 — 2026-10-20
+
+### Fixed
+- Discover a specific Privacy Policy or Terms of Service when a first-party
+  page exposes it through a zero-argument JavaScript link and the referenced
+  function contains one unambiguous absolute URL literal. The destination path
+  and visible link text must agree on the document type; JavaScript is not
+  executed. This addresses one independently verified Canadian miss in a
+  200-row replay stratified across 20 countries; both linked policy pages
+  returned HTTP 200 and classified as expected.
+
+### Validation notes
+- The production-derived sample contained 200 non-null records, 10 in each of
+  20 country strata. Historical stored predictions and current live replay
+  results differed for 36 records; those differences are reported as
+  stored-vs-live deltas, not confirmed labels or defects. The Canadian page
+  above is the single independently confirmed miss.
+- Two eligible sparse-shell pages were submitted to the JavaScript-render
+  fetch path. Both requests returned HTTP 403, so no rendered DOM was obtained
+  or used as evidence.
+
 ## 1.9.9 — 2026-10-20
 
 ### Fixed
