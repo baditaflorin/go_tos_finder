@@ -164,8 +164,13 @@ var patterns = []pattern{
 			"datenschutzbestimmungen", "datenschutzrichtlinie", "datenschutzinformation", "datenschutzinformationen",
 			"protection-des-donnees", "politique-de-protection-des-donnees", "donnees-personnelles",
 			"privacy-and-cookies", "privacy-cookies", "gizlilik-politikasi",
+			// Romanian: privacy policy / confidentiality. Romanian pages use
+			// "Politica de confidențialitate" (often unaccented in URLs),
+			// which was absent from both link-path and title vocabulary.
+			"politica-de-confidentialitate", "politica-de-confidențialitate",
+			"confidentialitate", "confidențialitate",
 		),
-		textRegex: regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|aviso\s+de\s+privacidad|aviso\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
+		textRegex: regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|aviso\s+de\s+privacidad|aviso\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
 		// datenschutz(?:erkl[äa]rung|hinweise)? — NOT bare "datenschutz": the
 		// standalone word is rare as a page <title>, while "Datenschutzerklärung"
 		// (the compound word) is the standard, near-universal title for a German
@@ -176,7 +181,7 @@ var patterns = []pattern{
 		// title match every other language gets. Found via the charset fix's own
 		// test fixture (a real German title, decoded correctly, still failed to
 		// classify as high-confidence) — a distinct, charset-independent bug.
-		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|aviso\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
+		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|aviso\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
 		scriptRegex: scriptRE(
 			// Japanese: privacy policy / handling of personal information
 			"プライバシーポリシー", "プライバシー", "個人情報保護方針", "個人情報の取り扱い", "個人情報保護",
