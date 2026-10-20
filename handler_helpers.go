@@ -15,7 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/baditaflorin/go-common/fleetfetch"
 	"github.com/baditaflorin/go-common/meshresult"
+	"github.com/baditaflorin/go-common/safehttp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -40,6 +42,46 @@ func envInt(name string, def int) int {
 		}
 	}
 	return def
+}
+
+// shouldTryJSFallback narrows the extra render request to pages that look like
+// script-driven shells. A JS-rendered body is used only if it is confirmed by
+// fetch-cache provenance and exposes legal links absent from the static body.
+func shouldTryJSFallback(body string, status, linkCount int) bool {
+	if status < http.StatusOK || status >= http.StatusBadRequest || linkCount != 0 {
+		return false
+	}
+	lower := strings.ToLower(body)
+	if len(body) < 512 || strings.Count(lower, "<script") < 2 {
+		return false
+	}
+	return len(strings.Fields(visibleText(body, maxBodyBytes))) <= 25
+}
+
+func confirmedJSRender(headers http.Header) bool {
+	return strings.EqualFold(strings.TrimSpace(headers.Get("X-FetchCache-Render")), fleetfetch.RenderJS) ||
+		strings.EqualFold(strings.TrimSpace(headers.Get("X-FetchCache-Via")), "js-proxy")
+}
+
+func fetchJSRenderedHomepage(ctx context.Context, target string) (string, string, int, error) {
+	renderCtx, cancel := context.WithTimeout(ctx, jsFallbackTimeout)
+	defer cancel()
+	if _, err := safehttp.CheckURL(renderCtx, target); err != nil {
+		return "", "", 0, err
+	}
+	client := newClientWithRender(fleetfetch.RenderJS)
+	defer client.CloseIdleConnections()
+	body, finalURL, status, headers, err := fetchPageWithHeaders(renderCtx, client, target)
+	if err != nil {
+		return "", finalURL, status, err
+	}
+	if status < http.StatusOK || status >= http.StatusBadRequest {
+		return "", finalURL, status, errors.New("JS render returned a non-success status")
+	}
+	if !confirmedJSRender(headers) {
+		return "", finalURL, status, errors.New("fetch cache did not confirm JS rendering")
+	}
+	return body, finalURL, status, nil
 }
 
 func acquireSlot(ctx context.Context) bool {
@@ -288,6 +330,27 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	// Phase 1: scan links in the rendered HTML.
 	linkHits := linkScan(html, base)
+	if renderMode() == fleetfetch.RenderDefault && shouldTryJSFallback(html, homepageStatus, len(linkHits)) {
+		// Keep at least one probe-phase budget for link verification after the
+		// bounded render attempt. The fallback is opportunistic: a failed or
+		// unconfirmed renderer leaves the static result untouched.
+		if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) >= jsFallbackTimeout+probePhaseTimeout {
+			rendered, renderedURL, renderedStatus, renderErr := fetchJSRenderedHomepage(ctx, finalURL)
+			renderBlocked, _ := isHomepageBlocked(rendered, renderedStatus)
+			if renderErr == nil && !renderBlocked {
+				renderedBase, parseErr := url.Parse(renderedURL)
+				if parseErr == nil && sameSiteHost(renderedBase, u) {
+					renderedHits := linkScan(rendered, renderedBase)
+					if len(renderedHits) > len(linkHits) {
+						html, finalURL, homepageStatus, base, linkHits = rendered, renderedURL, renderedStatus, renderedBase, renderedHits
+						resp.FetchedURL = finalURL
+						resp.Detection.RenderMode = fleetfetch.RenderJS
+						resp.Detection.JSFallbackUsed = true
+					}
+				}
+			}
+		}
+	}
 	resp.Detection.LinksScanned = len(linkHits)
 
 	// Phase 2/3 run CONCURRENTLY (they used to run back to back, doubling the

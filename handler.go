@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	userAgent      = "go_tos_finder/" + Version + " (+https://github.com/baditaflorin/go_tos_finder)"
-	requestTimeout = 12 * time.Second
-	probeTimeout   = 10 * time.Second
-	maxBodyBytes   = 4 * 1024 * 1024
-	maxRedirects   = 5
+	userAgent         = "go_tos_finder/" + Version + " (+https://github.com/baditaflorin/go_tos_finder)"
+	requestTimeout    = 12 * time.Second
+	probeTimeout      = 10 * time.Second
+	jsFallbackTimeout = 6 * time.Second
+	maxBodyBytes      = 4 * 1024 * 1024
+	maxRedirects      = 5
 	// maxProbes caps the speculative canonical-path probes per request. It was
 	// 30; in a 150-domain sample only 19 of 184 documents were ever found by a
 	// probe (none of them refund/shipping/GDPR/SLA/copyright/community pages),
@@ -116,6 +117,7 @@ type RejectedLink struct {
 type DetectionSummary struct {
 	HomepageFetched  bool   `json:"homepage_fetched"`
 	RenderMode       string `json:"render_mode"`
+	JSFallbackUsed   bool   `json:"js_fallback_used,omitempty"`
 	LinksScanned     int    `json:"links_scanned"`
 	PathsProbed      int    `json:"paths_probed"`
 	ProbesRejected   int    `json:"probes_rejected_soft404"`
@@ -263,8 +265,12 @@ func fallbackClient() *http.Client {
 var clientHook func(*http.Client)
 
 func newClient() *http.Client {
+	return newClientWithRender(renderMode())
+}
+
+func newClientWithRender(render string) *http.Client {
 	c := fleetfetch.NewHTTPClient(
-		fleetfetch.WithRender(renderMode()),
+		fleetfetch.WithRender(render),
 		fleetfetch.WithFallbackOnTimeout(),
 		fleetfetch.WithFallbackClient(fallbackClient()),
 	)
@@ -694,22 +700,28 @@ func fetchPageRetry(ctx context.Context, client *http.Client, target string) (st
 }
 
 func fetchPage(ctx context.Context, client *http.Client, target string) (string, string, int, error) {
+	body, finalURL, status, _, err := fetchPageWithHeaders(ctx, client, target)
+	return body, finalURL, status, err
+}
+
+func fetchPageWithHeaders(ctx context.Context, client *http.Client, target string) (string, string, int, http.Header, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", 0, nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
 	req.Header.Set("Accept-Language", "en;q=0.9,de;q=0.8,fr;q=0.7")
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("fetch failed: %w", err)
+		return "", "", 0, nil, fmt.Errorf("fetch failed: %w", err)
 	}
 	defer resp.Body.Close()
+	headers := resp.Header.Clone()
 	if resp.StatusCode >= 500 {
-		return "", resp.Request.URL.String(), resp.StatusCode, fmt.Errorf("upstream returned status %d", resp.StatusCode)
+		return "", resp.Request.URL.String(), resp.StatusCode, headers, fmt.Errorf("upstream returned status %d", resp.StatusCode)
 	}
-	return readBodyLimited(resp), resp.Request.URL.String(), resp.StatusCode, nil
+	return readBodyLimited(resp), resp.Request.URL.String(), resp.StatusCode, headers, nil
 }
 
 // readBodyLimited reads the response body (capped to maxBodyBytes) and
