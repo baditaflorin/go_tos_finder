@@ -13,6 +13,7 @@ func TestShouldTryJSFallbackOnlyForSparseScriptShells(t *testing.T) {
 	withLegalLink := shell + `<a href="/privacy">Privacy Policy</a>`
 	withText := `<html><head><script src="/app.js"></script><script src="/runtime.js"></script></head><body>` + strings.Repeat("visible page text ", 40) + `</body></html>`
 	withoutScripts := `<html><body>Loading</body></html>`
+	oversizedShell := shell + strings.Repeat("x", 256*1024)
 	cases := []struct {
 		name      string
 		body      string
@@ -24,6 +25,7 @@ func TestShouldTryJSFallbackOnlyForSparseScriptShells(t *testing.T) {
 		{name: "legal link already present", body: withLegalLink, status: http.StatusOK, links: 1, wantRetry: false},
 		{name: "substantial server-rendered page", body: withText, status: http.StatusOK, wantRetry: false},
 		{name: "no script evidence", body: withoutScripts, status: http.StatusOK, wantRetry: false},
+		{name: "oversized shell", body: oversizedShell, status: http.StatusOK, wantRetry: false},
 		{name: "blocked response", body: shell, status: http.StatusTooManyRequests, wantRetry: false},
 	}
 	for _, tc := range cases {
@@ -45,6 +47,7 @@ func TestConfirmedJSRenderRequiresRendererProvenance(t *testing.T) {
 		{name: "proxy metadata", header: http.Header{"X-Fetchcache-Via": []string{"js-proxy"}}, wantJS: true},
 		{name: "HTML proxy is not JavaScript", header: http.Header{"X-Fetchcache-Render": []string{fleetfetch.RenderHTML}}, wantJS: false},
 		{name: "direct fallback has no renderer", header: http.Header{"X-Fetchcache-Via-Fallback": []string{"true"}}, wantJS: false},
+		{name: "conflicting metadata", header: http.Header{"X-Fetchcache-Render": []string{fleetfetch.RenderHTML}, "X-Fetchcache-Via": []string{"js-proxy"}}, wantJS: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -52,15 +52,18 @@ func shouldTryJSFallback(body string, status, linkCount int) bool {
 		return false
 	}
 	lower := strings.ToLower(body)
-	if len(body) < 512 || strings.Count(lower, "<script") < 2 {
+	if len(body) < 512 || len(body) > 256*1024 || strings.Count(lower, "<script") < 2 {
 		return false
 	}
 	return len(strings.Fields(visibleText(body, maxBodyBytes))) <= 25
 }
 
 func confirmedJSRender(headers http.Header) bool {
-	return strings.EqualFold(strings.TrimSpace(headers.Get("X-FetchCache-Render")), fleetfetch.RenderJS) ||
-		strings.EqualFold(strings.TrimSpace(headers.Get("X-FetchCache-Via")), "js-proxy")
+	render := strings.TrimSpace(headers.Get("X-FetchCache-Render"))
+	if render != "" {
+		return strings.EqualFold(render, fleetfetch.RenderJS)
+	}
+	return strings.EqualFold(strings.TrimSpace(headers.Get("X-FetchCache-Via")), "js-proxy")
 }
 
 func fetchJSRenderedHomepage(ctx context.Context, target string) (string, string, int, error) {
@@ -335,6 +338,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		// bounded render attempt. The fallback is opportunistic: a failed or
 		// unconfirmed renderer leaves the static result untouched.
 		if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) >= jsFallbackTimeout+probePhaseTimeout {
+			resp.Detection.JSFallbackAttempted = true
 			rendered, renderedURL, renderedStatus, renderErr := fetchJSRenderedHomepage(ctx, finalURL)
 			renderBlocked, _ := isHomepageBlocked(rendered, renderedStatus)
 			if renderErr == nil && !renderBlocked {

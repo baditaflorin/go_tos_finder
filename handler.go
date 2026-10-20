@@ -115,15 +115,16 @@ type RejectedLink struct {
 // DetectionSummary is an aggregate evidence trail describing how the result
 // was produced — part of the TRL-6/7 "evidence trail" requirement.
 type DetectionSummary struct {
-	HomepageFetched  bool   `json:"homepage_fetched"`
-	RenderMode       string `json:"render_mode"`
-	JSFallbackUsed   bool   `json:"js_fallback_used,omitempty"`
-	LinksScanned     int    `json:"links_scanned"`
-	PathsProbed      int    `json:"paths_probed"`
-	ProbesRejected   int    `json:"probes_rejected_soft404"`
-	HighConfidence   int    `json:"high_confidence"`
-	MediumConfidence int    `json:"medium_confidence"`
-	LowConfidence    int    `json:"low_confidence"`
+	HomepageFetched     bool   `json:"homepage_fetched"`
+	RenderMode          string `json:"render_mode"`
+	JSFallbackAttempted bool   `json:"js_fallback_attempted,omitempty"`
+	JSFallbackUsed      bool   `json:"js_fallback_used,omitempty"`
+	LinksScanned        int    `json:"links_scanned"`
+	PathsProbed         int    `json:"paths_probed"`
+	ProbesRejected      int    `json:"probes_rejected_soft404"`
+	HighConfidence      int    `json:"high_confidence"`
+	MediumConfidence    int    `json:"medium_confidence"`
+	LowConfidence       int    `json:"low_confidence"`
 
 	// BudgetExhausted is true when the scan hit its wall-clock budget and
 	// answered with what it had verified so far.
