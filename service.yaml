@@ -1027,6 +1027,8 @@ secrets:
       target: /run/secrets/graph_api_key
       uid: 100
       gid: 101
+    key_scope: fleet-graph.0exec.com
+    key_tier: fleet-graph-writer
 
 env:
   - name: FLEET_SECRETS_API_KEY_FILE
