@@ -130,6 +130,11 @@ func normalizeCandidates(in []imprintCandidate, body, pageURL string) []imprintC
 				continue
 			}
 		}
+		if suffix != c.Suffix {
+			if _, cc, conf, found := detectSuffix(name); found {
+				c.Country, c.Confidence = cc, conf
+			}
+		}
 		c.Name, c.Suffix = name, suffix
 		out = append(out, c)
 	}
@@ -209,7 +214,12 @@ func normalizeLegalName(name, suffix string) (string, string, bool) {
 		return "", suffix, false
 	}
 	if suffix != "" && !strings.Contains(s, suffix) {
-		return "", suffix, false
+		// "Company Name: ARLC NT Limited" was found through the word "Company"; the name's own form is Limited.
+		sf, _, _, found := detectSuffix(s)
+		if !found {
+			return "", suffix, false
+		}
+		suffix = sf
 	}
 	stem := strings.TrimSpace(strings.TrimSuffix(s, suffix))
 	if stem == "" && suffix != "" {
@@ -306,7 +316,8 @@ func isGenericStem(stem string) bool {
 	}
 	for _, f := range fields {
 		f = strings.Trim(f, ".,:;")
-		if f != "" && !genericStemWords[f] {
+		// a token without a letter ("+1268", "15040220") is a number, not part of a name
+		if f != "" && hasLetter(f) && !genericStemWords[f] {
 			return false
 		}
 	}

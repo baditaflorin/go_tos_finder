@@ -660,6 +660,7 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	backfillWinnerIdentifiers(best, candidates)
 
 	var vatValidation string
+	identifierCountry := false // a single-country register number fixed the country
 	if best != nil {
 		im.LegalName = best.Name
 		im.Suffix = best.Suffix
@@ -695,6 +696,7 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 			// e.g. "S.A.S." is both France's and Italy's own native form).
 			if cc := singleCountryIdentifierKind(id.Kind); cc != "" {
 				im.Country = cc
+				identifierCountry = true
 			}
 		}
 	}
@@ -745,8 +747,10 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	// bare "GmbH" is DE-or-AT ambiguous — see imprint_suffix.go), ahead of
 	// the site's ccTLD, which is itself only a weak final fallback.
 	country := ""
+	vatCountry := ""
 	if im.VAT != "" {
 		country = normalizeCountry(vatCountryHint(im.VAT))
+		vatCountry = country
 	}
 	if country == "" && im.Country != "" {
 		country = im.Country
@@ -757,6 +761,7 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 	// A suffix-only DE/AT guess ("GmbH") must not outrank the register type, the postcode shape or
 	// the ccTLD (imprint_at.go).
 	country = refineDEATCountry(country, im.VAT, im.Register, im.Address, text, hostname)
+	country = refineCountry(country, im.Suffix, vatCountry != "" || identifierCountry, hostname, text)
 	im.Country = country
 	im.Ruleset = rulesetFor(country)
 	// Japanese Specified Commercial Transactions Act disclosures commonly
