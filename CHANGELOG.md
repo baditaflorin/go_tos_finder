@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.9.11 — 2026-11-03
+
+### Fixed
+- `imprint.legal_name` was not the operator's name verbatim for about 45% of a
+  production-derived audit sample. The sample was 720 live imprint pages (up to
+  60 per inferred country, rows with a legal-form suffix only); the extractor
+  was replayed over the fetched page text and an independent model judged each
+  name against that text. Replaying 493 judged pages whose page names the
+  operator in Latin script: exact matches went from 275 (55.8%) to 329 (66.7%),
+  with no page that matched before failing to match now and 26 non-names
+  (hosting credits, field labels, headings) no longer returned. The judge is
+  noisy; each fix below is anchored on a real page and covered by a test.
+  - A field label, copyright line or lead-in glued to the name is removed
+    ("Website Owner: X SL", "Denominación social: X, S.L.", "Alle Rechte
+    vorbehalten X", "TM & ©2026 X Inc.", "Le site Y est édité par X SARL",
+    "Aviso legal - X S.R.L.", "la société X SAS", "der X SE").
+  - Prose after the legal form is cut ("X au capital de ...", "X GmbH –
+    tagline"), and an unclosed bracket in a Japanese name ("…株式会社（Rakko,
+    Inc.") is cut back to the closed part.
+  - Field labels, headings and legal-form descriptions are no longer names
+    ("License Number: DMCC", "Company ID: 04788290", "Handelsregister: HRA 27182
+    HB", "Company Links", "Private Limited Company by Shares (Ltd)").
+  - The hosting provider, platform or web agency named in a credit line is no
+    longer taken as the operator ("Hébergeur : OVH SAS", "Webflow, Inc.",
+    "Amazon Web Services EMEA SARL", "powered by"), except on that company's
+    own domain. A rejected candidate still lends its register/VAT hits to the
+    winning name (proxima.ie), it can never win itself.
+  - Names that start with digits glued to letters keep them ("42talents GmbH",
+    "321Go Eventos, S.L.", "1GLOBAL Holdings B.V."): copyright-year stripping
+    only removes a standalone year.
+  - A dotted initial is not a sentence end ("D.A.S. SoftwareBüro GmbH"), and a
+    hyphenated compound before "und" is not cut ("Musik- und Kongreßhallen
+    GmbH").
+
+### Fixed — `imprint.country`
+- A second check used 1,025 sites whose operator and country are known from the
+  company register (21 registries, up to 60 each, where the register number is
+  on the site). The legal-form suffix alone gave the wrong country for most
+  `.ch` sites (52 of 60), for `.sk`, `.com.co`, `.com.au` and for Japanese pages
+  whose English footer says "Inc.". Replaying the old and the new extractor over
+  the same fetched pages: country correct 422 → 546 of about 600 named, country
+  wrong 178 → 36. Against the model judge on the first sample, agreement went
+  from 60% to 79%.
+  - The site's country-code domain (including `com.co`, `.ar`, `.pe`, `.cl`,
+    `.mx`, `.il`, `.za`, ...) decides when the legal form could be native there:
+    GmbH/AG on `.ch`, s.r.o. on `.sk`, S.A.S. on `.com.co`. A VAT prefix or a
+    single-country register number still outranks it, DE versus AT stays with
+    `refineDEATCountry`, and a form that is not native in the domain's country
+    (a Japanese company on `.com.au`) keeps the suffix country.
+  - Without a national domain, a clear majority of `+CC` phone numbers decides
+    the same way; kana or Hangul text (30+ characters) makes the page JP or KR.
+  - "Company Name: ARLC NT Limited" keeps its name (the legal form is re-detected
+    after the label is removed); a phone number or "Company number 15040220" is
+    no longer taken as a name.
+
+### Known gaps (not fixed here)
+- A name cut at a conjunction inside the real name ("BEST - Bioenergy and
+  Sustainable Technologies GmbH", "Televisión y Audio Editorial …") and a
+  Latin-script alias returned for pages that name the company in Japanese.
+- About 40% of the register-verified sites return no name at all: small
+  businesses whose notice has no recognisable legal-form suffix.
+
 ## 1.9.10 — 2026-10-20
 
 ### Fixed

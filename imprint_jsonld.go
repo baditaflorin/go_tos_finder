@@ -36,6 +36,10 @@ type imprintCandidate struct {
 	VAT         string
 	Address     string
 	Identifiers []identifierHit
+	// IdentifierOnly marks a candidate whose name was rejected as not a legal name
+	// (normalizeCandidates) but whose register/VAT hits still belong to the page's entity:
+	// it can lend identifiers to the winner (backfillWinnerIdentifiers), never win itself.
+	IdentifierOnly bool
 }
 
 // extractImprintCandidates runs the full extraction chain against an
@@ -49,7 +53,7 @@ func extractImprintCandidates(body, pageURL string) []imprintCandidate {
 	}
 	out = append(out, extractCopyrightFooter(body, pageURL)...)
 	out = append(out, extractImprintText(body, pageURL)...)
-	return out
+	return normalizeCandidates(out, body, pageURL)
 }
 
 // --- JSON-LD -----------------------------------------------------------
