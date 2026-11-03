@@ -670,6 +670,11 @@ func precededByKnownAbbreviation(text string, periodIdx int) bool {
 		}
 		j--
 	}
+	// A single capital letter before the period is an initial or part of a dotted
+	// abbreviation ("D.A.S. SoftwareBüro GmbH", "A.I.C. Service Srl"), not a sentence end.
+	if periodIdx-j == 1 && text[j] >= 'A' && text[j] <= 'Z' {
+		return true
+	}
 	return knownNonSentenceAbbreviations[strings.ToLower(text[j:periodIdx])]
 }
 
@@ -1046,7 +1051,7 @@ func cleanCandidateName(name, suffix string) bool {
 			return false
 		}
 	}
-	if name[0] >= '0' && name[0] <= '9' {
+	if name[0] >= '0' && name[0] <= '9' && !digitsGluedToLetters(name) {
 		return false
 	}
 	firstAlpha := byte(0)
@@ -1260,6 +1265,11 @@ func trimAtConjunction(s, suffix string) string {
 	// of just the real name "Mako d.o.o." that follows it.
 	for _, conj := range []string{" and ", " y ", " et ", " und ", " e ", " znači "} {
 		i := strings.LastIndex(s[:suffIdx], conj)
+		// "Musik- und Kongreßhallen GmbH": a hyphen-ended word before "und" is a
+		// compound ("Musik- und Kongreßhallen"), the name continues to the left.
+		if conj == " und " && i > 0 && s[i-1] == '-' {
+			continue
+		}
 		if i > 0 {
 			s = strings.TrimSpace(s[i+len(conj):])
 			break
@@ -1652,6 +1662,19 @@ func stripCopyrightPrefix(s string) string {
 	i := 0
 	for i < len(s) && (s[i] == ' ' || s[i] == ',' || s[i] == '-' ||
 		(s[i] >= '0' && s[i] <= '9')) {
+		// Digits glued to letters belong to the name ("42talents GmbH", "321Go Eventos, S.L.",
+		// "1GLOBAL Holdings B.V."): only a digit run that stands alone (a year) is copyright residue.
+		if s[i] >= '0' && s[i] <= '9' {
+			j := i
+			for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+				j++
+			}
+			if j < len(s) && ((s[j] >= 'a' && s[j] <= 'z') || (s[j] >= 'A' && s[j] <= 'Z') || s[j] >= 0x80) {
+				break
+			}
+			i = j
+			continue
+		}
 		i++
 	}
 	if i > 0 && i < len(s) {
@@ -1727,4 +1750,15 @@ func formatRegister(kind, value string) string {
 		return kind
 	}
 	return kind + " " + v
+}
+
+// digitsGluedToLetters reports a name that opens with digits directly followed by a letter
+// ("42talents GmbH", "321Go Eventos, S.L.", "3M Deutschland GmbH"): a real name. A leading
+// "1. Acme GmbH" or "2026 Acme" is list or copyright residue and stays rejected.
+func digitsGluedToLetters(name string) bool {
+	i := 0
+	for i < len(name) && name[i] >= '0' && name[i] <= '9' {
+		i++
+	}
+	return i > 0 && i < len(name) && ((name[i] >= 'a' && name[i] <= 'z') || (name[i] >= 'A' && name[i] <= 'Z'))
 }

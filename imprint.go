@@ -425,7 +425,7 @@ func bestImprintCandidate(cands []imprintCandidate) *imprintCandidate {
 	bestScore := 1 << 30
 	for i := range cands {
 		c := &cands[i]
-		if c.Name == "" {
+		if c.Name == "" || c.IdentifierOnly {
 			continue
 		}
 		if !hasProximityCorroboration(c) {

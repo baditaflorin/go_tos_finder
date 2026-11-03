@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.9.11 — 2026-11-03
+
+### Fixed
+- `imprint.legal_name` was not the operator's name verbatim for about 45% of a
+  production-derived audit sample. The sample was 720 live imprint pages (up to
+  60 per inferred country, rows with a legal-form suffix only); the extractor
+  was replayed over the fetched page text and an independent model judged each
+  name against that text. Replaying 493 judged pages whose page names the
+  operator in Latin script: exact matches went from 275 (55.8%) to 329 (66.7%),
+  with no page that matched before failing to match now and 26 non-names
+  (hosting credits, field labels, headings) no longer returned. The judge is
+  noisy; each fix below is anchored on a real page and covered by a test.
+  - A field label, copyright line or lead-in glued to the name is removed
+    ("Website Owner: X SL", "Denominación social: X, S.L.", "Alle Rechte
+    vorbehalten X", "TM & ©2026 X Inc.", "Le site Y est édité par X SARL",
+    "Aviso legal - X S.R.L.", "la société X SAS", "der X SE").
+  - Prose after the legal form is cut ("X au capital de ...", "X GmbH –
+    tagline"), and an unclosed bracket in a Japanese name ("…株式会社（Rakko,
+    Inc.") is cut back to the closed part.
+  - Field labels, headings and legal-form descriptions are no longer names
+    ("License Number: DMCC", "Company ID: 04788290", "Handelsregister: HRA 27182
+    HB", "Company Links", "Private Limited Company by Shares (Ltd)").
+  - The hosting provider, platform or web agency named in a credit line is no
+    longer taken as the operator ("Hébergeur : OVH SAS", "Webflow, Inc.",
+    "Amazon Web Services EMEA SARL", "powered by"), except on that company's
+    own domain. A rejected candidate still lends its register/VAT hits to the
+    winning name (proxima.ie), it can never win itself.
+  - Names that start with digits glued to letters keep them ("42talents GmbH",
+    "321Go Eventos, S.L.", "1GLOBAL Holdings B.V."): copyright-year stripping
+    only removes a standalone year.
+  - A dotted initial is not a sentence end ("D.A.S. SoftwareBüro GmbH"), and a
+    hyphenated compound before "und" is not cut ("Musik- und Kongreßhallen
+    GmbH").
+
+### Known gaps from the same audit (not fixed here)
+- A name cut at a conjunction inside the real name ("BEST - Bioenergy and
+  Sustainable Technologies GmbH", "Televisión y Audio Editorial …") and a
+  Latin-script alias returned for pages that name the company in Japanese.
+- `imprint.country` is often wrong when only the legal form decides it
+  (Japanese pages returned as US/GB, German-language pages as AT/AE).
+
 ## 1.9.10 — 2026-10-20
 
 ### Fixed
