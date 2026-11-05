@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.12 — 2026-11-05
+
+### Changed
+
+- Bump go-common to v0.116.1: internal names (single-label, .internal, container names) never go to the egress proxy.
+
 ## 1.9.11 — 2026-11-03
 
 ### Fixed
