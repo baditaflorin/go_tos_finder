@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.15 — 2026-11-06
+
+- Confirm Spanish privacy-policy titles and reject them when verifying another document type.
+
 ## 1.9.14 — 2026-11-06
 
 - Recognize Czech personal-data privacy policy links and titles.

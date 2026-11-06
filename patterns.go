@@ -184,7 +184,7 @@ var patterns = []pattern{
 		// title match every other language gets. Found via the charset fix's own
 		// test fixture (a real German title, decoded correctly, still failed to
 		// classify as high-confidence) — a distinct, charset-independent bug.
-		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|aviso\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
+		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|aviso\s+de\s+privacidad|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
 		scriptRegex: scriptRE(
 			// Czech privacy-policy wording (scriptRE avoids ASCII-only word boundaries).
 			"Ochrana osobních údajů", "Zásady ochrany osobních údajů",
