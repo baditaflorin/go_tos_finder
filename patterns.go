@@ -170,6 +170,8 @@ var patterns = []pattern{
 			// which was absent from both link-path and title vocabulary.
 			"politica-de-confidentialitate", "politica-de-confidențialitate",
 			"confidentialitate", "confidențialitate",
+			// Czech: protection of personal data.
+			"ochrana-osobnich-udaju", "zasady-ochrany-osobnich-udaju",
 		),
 		textRegex: regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|aviso\s+de\s+privacidad|aviso\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
 		// datenschutz(?:erkl[äa]rung|hinweise)? — NOT bare "datenschutz": the
@@ -184,6 +186,8 @@ var patterns = []pattern{
 		// classify as high-confidence) — a distinct, charset-independent bug.
 		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacid|aviso\s+de\s+privacid|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
 		scriptRegex: scriptRE(
+			// Czech privacy-policy wording (scriptRE avoids ASCII-only word boundaries).
+			"Ochrana osobních údajů", "Zásady ochrany osobních údajů",
 			// Japanese: privacy policy / handling of personal information
 			"プライバシーポリシー", "プライバシー", "個人情報保護方針", "個人情報の取り扱い", "個人情報保護",
 			// Chinese (simplified + traditional): privacy policy

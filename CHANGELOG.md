@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.14 — 2026-11-06
+
+- Recognize Czech personal-data privacy policy links and titles.
+
 ## 1.9.12 — 2026-11-05
 
 ### Changed
