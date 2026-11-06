@@ -112,3 +112,7 @@ use a real fleet-issued key:
 ```
 curl 'http://localhost:8316/?api_key=<your-key>&target=https://github.com'
 ```
+
+Privacy phrase matching uses Unicode word boundaries and NFC normalization. An
+explicit document title or H1 outranks a conflicting section heading; combined
+titles and otherwise untyped pages with legal section headings remain supported.

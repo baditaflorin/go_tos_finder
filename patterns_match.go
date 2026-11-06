@@ -1,6 +1,7 @@
 package main
 
 import (
+	"golang.org/x/text/unicode/norm"
 	"regexp"
 )
 
@@ -9,6 +10,7 @@ import (
 // is treated as "no match for that arm". This is the single place that fuses
 // Latin and non-Latin link/title/body matching.
 func matchTextOrScript(re, sr *regexp.Regexp, s string) bool {
+	s = norm.NFC.String(s)
 	if re != nil && re.MatchString(s) {
 		return true
 	}
@@ -27,4 +29,11 @@ func matchPathOnly(urlPath string, regs []*regexp.Regexp) bool {
 		}
 	}
 	return false
+}
+
+// unicodePhraseRE uses full Unicode word boundaries. Go's \b is ASCII-only:
+// it cannot terminate confidentialité and can match privacy inside préprivacy.
+// Combining marks, digits and underscores continue a word, just as letters do.
+func unicodePhraseRE(phrase string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)(?:^|[^\p{L}\p{N}\p{M}_])` + phrase + `(?:$|[^\p{L}\p{N}\p{M}_])`)
 }
