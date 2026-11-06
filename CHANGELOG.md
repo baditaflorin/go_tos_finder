@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.16 — 2026-11-06
+
+### Fixed
+
+- Match accented privacy phrases with Unicode word boundaries and canonical text normalization, including the observed Romanian cedilla spelling; reject embedded-word and digit/underscore continuations.
+- Keep explicit document titles ahead of weaker section-heading evidence so privacy pages are not verified as general terms, or terms pages as imprints.
+
 ## 1.9.15 — 2026-11-06
 
 - Confirm Spanish privacy-policy titles and reject them when verifying another document type.

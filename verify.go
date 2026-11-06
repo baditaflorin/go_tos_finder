@@ -285,6 +285,15 @@ func classifyView(v *bodyView, httpStatus int, want DocType) verifyResult {
 			return res
 		}
 	}
+	// Cross-type guard: the page announces itself (title or h1) as a DIFFERENT
+	// legal document than the one we are looking for — e.g. /terms-of-use that
+	// serves the Privacy Policy — so it is no evidence for `want`.
+	if other := otherTitleType(want, res.Title, v.h1); other != "" && !hubDocTypes[want] {
+		res.IsReal = false
+		res.Confidence = ConfNone
+		res.Evidence = append(res.Evidence, "rejected:title_is_"+string(other))
+		return res
+	}
 	// A section heading that names the type ("Termini e condizioni" under an
 	// h1 of just "Termini", androniteam.com) is weaker than the title but
 	// stronger than generic vocabulary: medium.
@@ -296,15 +305,6 @@ func classifyView(v *bodyView, httpStatus int, want DocType) verifyResult {
 				return res
 			}
 		}
-	}
-	// Cross-type guard: the page announces itself (title or h1) as a DIFFERENT
-	// legal document than the one we are looking for — e.g. /terms-of-use that
-	// serves the Privacy Policy — so it is no evidence for `want`.
-	if other := otherTitleType(want, res.Title, v.h1); other != "" && !hubDocTypes[want] {
-		res.IsReal = false
-		res.Confidence = ConfNone
-		res.Evidence = append(res.Evidence, "rejected:title_is_"+string(other))
-		return res
 	}
 	if v.legalVocab {
 		res.Confidence = ConfMedium

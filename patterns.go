@@ -173,7 +173,7 @@ var patterns = []pattern{
 			// Czech: protection of personal data.
 			"ochrana-osobnich-udaju", "zasady-ochrany-osobnich-udaju",
 		),
-		textRegex: regexp.MustCompile(`(?i)\b(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|aviso\s+de\s+privacidad|aviso\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)\b`),
+		textRegex: unicodePhraseRE(`(?:privacy(?:\s+(?:policy|notice|statement|choices|center|centre))?|data\s+privacy|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țţt]ialitate|confiden[țţt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|pol[íi]tica\s+de\s+privacidade|aviso\s+de\s+privacidad|aviso\s+de\s+privacidade|privacyverklaring|privacybeleid|polityka\s+prywatno[śs]ci|integritetspolicy)`),
 		// datenschutz(?:erkl[äa]rung|hinweise)? — NOT bare "datenschutz": the
 		// standalone word is rare as a page <title>, while "Datenschutzerklärung"
 		// (the compound word) is the standard, near-universal title for a German
@@ -184,7 +184,7 @@ var patterns = []pattern{
 		// title match every other language gets. Found via the charset fix's own
 		// test fixture (a real German title, decoded correctly, still failed to
 		// classify as high-confidence) — a distinct, charset-independent bug.
-		titleRegex: regexp.MustCompile(`(?i)\b(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țt]ialitate|confiden[țt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|aviso\s+de\s+privacidad|privacyverklaring|polityka\s+prywatno[śs]ci)\b`),
+		titleRegex: unicodePhraseRE(`(?:privacy\s+(?:policy|notice|statement)|datenschutz(?:erkl[äa]rung|hinweise?|bestimmungen|richtlinie)?|politique\s+de\s+confidentialit[ée]|politica\s+(?:de\s+)?confiden[țţt]ialitate|confiden[țţt]ialitate|informativa\s+(?:sulla\s+)?privacy|pol[íi]tica\s+de\s+privacidad|aviso\s+de\s+privacidad|privacyverklaring|polityka\s+prywatno[śs]ci)`),
 		scriptRegex: scriptRE(
 			// Czech privacy-policy wording (scriptRE avoids ASCII-only word boundaries).
 			"Ochrana osobních údajů", "Zásady ochrany osobních údajů",
