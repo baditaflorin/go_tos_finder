@@ -2,6 +2,10 @@
 
 ## 1.9.16 — 2026-11-06
 
+### Deployment
+
+- Declare the canonical GHCR image name so replica deployment can reuse the exact staging-verified digest.
+
 ### Fixed
 
 - Match accented privacy phrases with Unicode word boundaries and canonical text normalization, including the observed Romanian cedilla spelling; reject embedded-word and digit/underscore continuations.

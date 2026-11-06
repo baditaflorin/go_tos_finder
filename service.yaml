@@ -1034,3 +1034,9 @@ env:
   - name: FLEET_SECRETS_API_KEY_FILE
     description: Read-only path to the protected Fleet Secrets API key file.
     required: true
+
+# Explicit identity is required when promoting one staged digest across replicas.
+registry:
+  host: ghcr.io
+  org: baditaflorin
+  image: tos-finder
