@@ -608,7 +608,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		if base != nil {
 			hostname = base.Hostname()
 		}
-		resp.Imprint = extractImprintFieldsWithSource(imprintHit.URL, imprintHit.Body, hostname, imprintHit.BodyURL, imprintHit.BodyURLBasis, imprintHit.BodyLimitReached, imprintHit.BodyResponseReportedTruncated, imprintHit.BodyReadError)
+		resp.Imprint = extractImprintFieldsWithSource(imprintHit.URL, imprintHit.Body, hostname, imprintHit.BodyURL, imprintHit.BodyURLBasis, imprintHit.BodyURLRedacted, imprintHit.BodyLimitReached, imprintHit.BodyResponseReportedTruncated, imprintHit.BodyReadError)
 	}
 	resp.ImprintPresent = resp.Imprint.Present
 	resp.Verdict = verdictOfDocs(docs)
@@ -816,6 +816,7 @@ func (hit *DocFinding) captureImprintBody(pm probeMeta) {
 	hit.Body = pm.body
 	hit.BodyURL = pm.finalURL
 	hit.BodyURLBasis = pm.finalURLBasis
+	hit.BodyURLRedacted = pm.finalURLRedacted
 	hit.BodyLimitReached = pm.bodyLimitReached
 	hit.BodyResponseReportedTruncated = pm.responseReportedTruncated
 	hit.BodyReadError = pm.bodyReadError

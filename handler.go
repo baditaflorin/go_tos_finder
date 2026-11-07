@@ -89,8 +89,9 @@ type DocFinding struct {
 	Body string `json:"-"`
 	// BodyURL and BodyURLBasis are unverified location reports from the
 	// response. They are kept separate from the selected URL.
-	BodyURL      string `json:"-"`
-	BodyURLBasis string `json:"-"`
+	BodyURL         string `json:"-"`
+	BodyURLBasis    string `json:"-"`
+	BodyURLRedacted bool   `json:"-"`
 	// BodyLimitReached reports that the fetch reached its response-body byte cap.
 	BodyLimitReached bool `json:"-"`
 	// BodyResponseReportedTruncated records an explicit response header, whose
