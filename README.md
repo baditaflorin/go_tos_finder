@@ -49,6 +49,58 @@ Response (truncated for brevity):
 }
 ```
 
+## Imprint observations
+
+When the selected imprint page has a body, `imprint.evidence` may contain its
+URL and independent observations of names, address components and countries.
+`evidence.url` is the selected link. `reported_fetched_url`, when present, is
+an unverified response-reported location, with `reported_fetched_url_basis`
+identifying `response_header` or `response_request`. Either can reflect
+origin-supplied data or a URL synthesized by the fetch adapter; neither proves
+the final origin. An unchanged URL on direct/fallback paths is omitted as
+ambiguous. A missing reported URL does not establish whether a redirect occurred.
+The existing `imprint.legal_name`, `address`, `country`, identifiers and scoring
+remain the selected scalar result; observations are not verified operator
+claims and must not be merged into an entity merely because they share a page.
+
+For JSON-LD, `script_index` counts `application/ld+json` scripts from zero and
+`source_path` is an RFC 6901 JSON Pointer in that script. `object_path` marks
+only the source object, and `address_path` groups only components from the same
+address object or string. Nested typed organizations, including publishers,
+parents and review authors, retain their own paths without receiving operator
+roles. A `name` is not automatically a legal name. Country values remain as stated; `normalized_value` is present only when recognized.
+An integer JSON `postalCode` retains its original digits without floating-point
+conversion or inferred leading zeros. A schema-typed postalCode containing 3–9
+plain digits is retained verbatim (including CEP leading zeros); this is an
+unverified source claim, not proof that the value is a postal code.
+Text, Open Graph, copyright and hCard observations use their extractor's
+`method` and `basis: "heuristic"`; they have no object or address association,
+including when two fields happen to be near each other. They may name a host,
+provider or unrelated party. An `imprint_provider_section` observation is
+under an explicit hosting-provider heading; `role: "hosting_provider"` describes
+that source section, not a verified legal owner or a cross-field entity match.
+Direct postal-looking text lines after a bold `Adresse` label use
+`method: "imprint_address_label"` and `component: "address_line"`; those lines
+are separate observations and are not assigned to a subject. A country inferred
+by a heuristic is not an explicit country statement. Existing heuristic
+extraction itself has limits, including its existing candidate-count limits; this is not a full page archive.
+
+The stream deliberately copies no identifier or contact properties. It also
+omits values that look like mixed contact or identifier text and reports their
+count in `omitted_sensitive`; the filter cannot recognize every maliciously
+mislabelled value. The fetcher retains at most 256 KiB before character-set
+decoding, which can expand the resulting UTF-8 body. `source_limit_reached: true` means the byte
+limit was filled, so the source may be incomplete (including at an exact
+boundary). `response_reported_truncated: true` records that the response
+included an `X-FetchCache-Truncated: true` header. The adapter or the origin could have
+supplied it, and it is a report rather than verified attribution; absence is
+not proof of a complete body. `source_read_error: true` reports an interrupted
+body read without exposing the error text. The observations additionally have
+count, size and depth limits, and `truncated: true` signals an output limit was
+reached; malformed JSON-LD scripts are counted in `unparseable_json_ld`. Only
+the selected imprint page is processed. A missing body cannot yield observations,
+although capture-status flags can still be present.
+
 ## Verdict
 
 - `comprehensive` — ToS + Privacy + ≥1 other, or 5+ documents.

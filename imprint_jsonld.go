@@ -45,6 +45,11 @@ type imprintCandidate struct {
 // extractImprintCandidates runs the full extraction chain against an
 // imprint page's body.
 func extractImprintCandidates(body, pageURL string) []imprintCandidate {
+	return normalizeCandidates(extractRawImprintCandidates(body, pageURL), body, pageURL)
+}
+
+// extractRawImprintCandidates retains observations before winner filtering and merging.
+func extractRawImprintCandidates(body, pageURL string) []imprintCandidate {
 	var out []imprintCandidate
 	if doc, err := html.Parse(strings.NewReader(body)); err == nil {
 		out = append(out, extractJSONLD(doc, pageURL)...)
@@ -53,7 +58,7 @@ func extractImprintCandidates(body, pageURL string) []imprintCandidate {
 	}
 	out = append(out, extractCopyrightFooter(body, pageURL)...)
 	out = append(out, extractImprintText(body, pageURL)...)
-	return normalizeCandidates(out, body, pageURL)
+	return out
 }
 
 // --- JSON-LD -----------------------------------------------------------

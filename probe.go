@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,11 +27,15 @@ const verifyBodyBytes = 256 * 1024
 // probeMeta is the raw outcome of a single candidate fetch: status, size,
 // freshness header, and a bounded slice of the body for content verification.
 type probeMeta struct {
-	status     int
-	contentLen int64
-	lastMod    string
-	body       string
-	finalURL   string
+	status                    int
+	contentLen                int64
+	lastMod                   string
+	body                      string
+	finalURL                  string
+	finalURLBasis             string
+	bodyLimitReached          bool
+	responseReportedTruncated bool
+	bodyReadError             bool
 }
 
 // probeVerify does a GET against the candidate URL and returns status,
@@ -58,11 +63,18 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	pm.status = resp.StatusCode
 	pm.contentLen = resp.ContentLength
 	pm.lastMod = strings.TrimSpace(resp.Header.Get("Last-Modified"))
-	if resp.Request != nil && resp.Request.URL != nil {
-		pm.finalURL = resp.Request.URL.String()
+	pm.finalURL, pm.finalURLBasis = observedResponseURL(resp, rawURL)
+	// This header can originate from the cache adapter OR the origin's
+	// forwarded response. Record its presence without attributing its source.
+	for _, value := range resp.Header.Values("X-FetchCache-Truncated") {
+		if strings.EqualFold(strings.TrimSpace(value), "true") {
+			pm.responseReportedTruncated = true
+		}
 	}
 	if pm.status >= 200 && pm.status < 400 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, verifyBodyBytes))
+		b, readErr := io.ReadAll(io.LimitReader(resp.Body, verifyBodyBytes))
+		pm.bodyReadError = readErr != nil
+		pm.bodyLimitReached = len(b) == verifyBodyBytes
 		// Decode declared non-UTF-8 encodings (ISO-8859-1/Windows-1252,
 		// Shift_JIS/EUC-KR/GBK, ...) before any title/vocabulary matching —
 		// see decodeToUTF8 in charset.go. contentLen below is measured on the
@@ -75,6 +87,33 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 		}
 	}
 	return pm, nil
+}
+
+// observedResponseURL returns only a location reported by the response and
+// how it was surfaced. Neither source proves origin: fleetfetch can forward
+// origin-supplied headers and can synthesize resp.Request.URL from them.
+// Its requested-URL defaults are omitted rather than treated as a report.
+func observedResponseURL(resp *http.Response, requestedURL string) (string, string) {
+	if resp == nil {
+		return "", ""
+	}
+	final, basis := "", ""
+	if len(resp.Header.Values("X-FetchCache-Hit")) > 0 {
+		if strings.EqualFold(strings.TrimSpace(resp.Header.Get("X-FetchCache-Via-Fallback")), "true") {
+			if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.String() != requestedURL {
+				final, basis = resp.Request.URL.String(), "response_request"
+			}
+		} else if values := resp.Header.Values("X-FetchCache-Final-Url"); len(values) == 1 {
+			final, basis = strings.TrimSpace(values[0]), "response_header"
+		}
+	} else if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.String() != requestedURL {
+		final, basis = resp.Request.URL.String(), "response_request"
+	}
+	u, err := url.Parse(final)
+	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", ""
+	}
+	return final, basis
 }
 
 // probeHead does an HTTP HEAD against the given URL and captures status,

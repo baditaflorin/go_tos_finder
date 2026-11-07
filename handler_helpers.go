@@ -477,7 +477,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					// vr.IsReal is already confirmed true above — capture the
 					// verified body so extractImprintFields can run on it
 					// without a second fetch. See DocFinding.Body.
-					hit.Body = pm.body
+					hit.captureImprintBody(pm)
 				}
 				probedMu.Lock()
 				if cur, exists := probedHits[cand.DocType]; !exists ||
@@ -608,7 +608,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		if base != nil {
 			hostname = base.Hostname()
 		}
-		resp.Imprint = extractImprintFields(imprintHit.URL, imprintHit.Body, hostname)
+		resp.Imprint = extractImprintFieldsWithSource(imprintHit.URL, imprintHit.Body, hostname, imprintHit.BodyURL, imprintHit.BodyURLBasis, imprintHit.BodyLimitReached, imprintHit.BodyResponseReportedTruncated, imprintHit.BodyReadError)
 	}
 	resp.ImprintPresent = resp.Imprint.Present
 	resp.Verdict = verdictOfDocs(docs)
@@ -810,6 +810,17 @@ func isChallengeStatus(status int) bool {
 	return status >= 500
 }
 
+// captureImprintBody keeps the selected link distinct from the actual response
+// URL. The body and reported location come from the same successful fetch.
+func (hit *DocFinding) captureImprintBody(pm probeMeta) {
+	hit.Body = pm.body
+	hit.BodyURL = pm.finalURL
+	hit.BodyURLBasis = pm.finalURLBasis
+	hit.BodyLimitReached = pm.bodyLimitReached
+	hit.BodyResponseReportedTruncated = pm.responseReportedTruncated
+	hit.BodyReadError = pm.bodyReadError
+}
+
 // verifyLink GET-verifies one link-discovered document to capture status,
 // freshness and content confidence. A footer link is strong location evidence,
 // so an unconfirmed real page keeps at least its link-confidence floor; a link
@@ -891,7 +902,7 @@ func verifyLink(ctx context.Context, client *http.Client, st *scanState, t DocTy
 		hit.Evidence = append(hit.Evidence, vr.Evidence...)
 		if t == DocImprint {
 			// Verified real above — capture the body for extractImprintFields.
-			hit.Body = pm.body
+			hit.captureImprintBody(pm)
 		}
 		return hit
 	}
