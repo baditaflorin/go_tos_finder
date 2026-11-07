@@ -13,13 +13,14 @@ import (
 // operator. URL applies to every observation; extraction is limited to the
 // selected, already verified imprint page. Existing scalar fields are unchanged.
 type ImprintEvidence struct {
-	URL                string                       `json:"url"`
-	FetchedURL         string                       `json:"fetched_url,omitempty"`
-	SourceLimitReached bool                         `json:"source_limit_reached,omitempty"`
-	Observations       []ImprintEvidenceObservation `json:"observations"`
-	Truncated          bool                         `json:"truncated,omitempty"`
-	OmittedSensitive   int                          `json:"omitted_sensitive,omitempty"`
-	UnparseableJSONLD  int                          `json:"unparseable_json_ld,omitempty"`
+	URL                    string                       `json:"url"`
+	FetchedURL             string                       `json:"fetched_url,omitempty"`
+	SourceLimitReached     bool                         `json:"source_limit_reached,omitempty"`
+	CacheReportedTruncated bool                         `json:"cache_reported_truncated,omitempty"`
+	Observations           []ImprintEvidenceObservation `json:"observations"`
+	Truncated              bool                         `json:"truncated,omitempty"`
+	OmittedSensitive       int                          `json:"omitted_sensitive,omitempty"`
+	UnparseableJSONLD      int                          `json:"unparseable_json_ld,omitempty"`
 }
 
 // JSON-LD paths are RFC 6901 JSON Pointers within the zero-based JSON-LD

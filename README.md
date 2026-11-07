@@ -54,8 +54,9 @@ Response (truncated for brevity):
 When the selected imprint page has a body, `imprint.evidence` may contain its
 URL and independent observations of names, address components and countries.
 `evidence.url` is the selected link; `evidence.fetched_url`, when available,
-is the final response URL of the body after redirects. A missing `fetched_url`
-does not establish whether a redirect occurred.
+is the final response URL of the body after redirects when the fetch path
+actually reports it. Fetch-cache responses require an explicit final-URL header;
+a missing `fetched_url` does not establish whether a redirect occurred.
 The existing `imprint.legal_name`, `address`, `country`, identifiers and scoring
 remain the selected scalar result; observations are not verified operator
 claims and must not be merged into an entity merely because they share a page.
@@ -83,7 +84,9 @@ count in `omitted_sensitive`; the filter cannot recognize every maliciously
 mislabelled value. The fetcher retains at most 256 KiB before character-set decoding, which can
 expand the resulting UTF-8 body. `source_limit_reached: true` means the byte
 limit was filled, so the source may be incomplete (including at an exact
-boundary). The observations additionally have count, size and
+boundary). `cache_reported_truncated: true` records an explicit fetch-transport
+truncation marker, including on its direct-fallback path; absence is not proof
+of a complete body. The observations additionally have count, size and
 depth limits, and `truncated: true` signals an output limit was reached; malformed JSON-LD scripts
 are counted in `unparseable_json_ld`. Only the selected imprint page is
 processed, and a missing body cannot yield evidence.

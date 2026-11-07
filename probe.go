@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,12 +27,13 @@ const verifyBodyBytes = 256 * 1024
 // probeMeta is the raw outcome of a single candidate fetch: status, size,
 // freshness header, and a bounded slice of the body for content verification.
 type probeMeta struct {
-	status           int
-	contentLen       int64
-	lastMod          string
-	body             string
-	finalURL         string
-	bodyLimitReached bool
+	status                 int
+	contentLen             int64
+	lastMod                string
+	body                   string
+	finalURL               string
+	bodyLimitReached       bool
+	cacheReportedTruncated bool
 }
 
 // probeVerify does a GET against the candidate URL and returns status,
@@ -59,8 +61,13 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	pm.status = resp.StatusCode
 	pm.contentLen = resp.ContentLength
 	pm.lastMod = strings.TrimSpace(resp.Header.Get("Last-Modified"))
-	if resp.Request != nil && resp.Request.URL != nil {
-		pm.finalURL = resp.Request.URL.String()
+	pm.finalURL = observedResponseURL(resp, rawURL)
+	if len(resp.Header.Values("X-FetchCache-Hit")) > 0 {
+		for _, value := range resp.Header.Values("X-FetchCache-Truncated") {
+			if strings.EqualFold(strings.TrimSpace(value), "true") {
+				pm.cacheReportedTruncated = true
+			}
+		}
 	}
 	if pm.status >= 200 && pm.status < 400 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, verifyBodyBytes))
@@ -77,6 +84,34 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 		}
 	}
 	return pm, nil
+}
+
+// observedResponseURL avoids an ambiguity in fleetfetch v0.116.1: the
+// RoundTripper substitutes the requested URL when the cache did not provide
+// its final URL. A cache response is therefore attributable only from its
+// explicit final-URL header. A direct fallback can prove a different final
+// URL; equality is ambiguous because that path also has a requested-URL default.
+func observedResponseURL(resp *http.Response, requestedURL string) string {
+	if resp == nil {
+		return ""
+	}
+	final := ""
+	if len(resp.Header.Values("X-FetchCache-Hit")) > 0 {
+		if strings.EqualFold(strings.TrimSpace(resp.Header.Get("X-FetchCache-Via-Fallback")), "true") {
+			if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.String() != requestedURL {
+				final = resp.Request.URL.String()
+			}
+		} else if values := resp.Header.Values("X-FetchCache-Final-Url"); len(values) == 1 {
+			final = strings.TrimSpace(values[0])
+		}
+	} else if resp.Request != nil && resp.Request.URL != nil {
+		final = resp.Request.URL.String()
+	}
+	u, err := url.Parse(final)
+	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return ""
+	}
+	return final
 }
 
 // probeHead does an HTTP HEAD against the given URL and captures status,
