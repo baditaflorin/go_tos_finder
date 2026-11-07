@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
+	"sort"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -17,6 +19,7 @@ type ImprintEvidence struct {
 	FetchedURL                string                       `json:"fetched_url,omitempty"`
 	SourceLimitReached        bool                         `json:"source_limit_reached,omitempty"`
 	ResponseReportedTruncated bool                         `json:"response_reported_truncated,omitempty"`
+	SourceReadError           bool                         `json:"source_read_error,omitempty"`
 	Observations              []ImprintEvidenceObservation `json:"observations"`
 	Truncated                 bool                         `json:"truncated,omitempty"`
 	OmittedSensitive          int                          `json:"omitted_sensitive,omitempty"`
@@ -140,10 +143,17 @@ func (b *imprintEvidenceBuilder) collectJSONLD(body string) {
 			return
 		}
 		var root interface{}
-		if json.Unmarshal([]byte(script.String()), &root) != nil {
+		decoder := json.NewDecoder(strings.NewReader(script.String()))
+		decoder.UseNumber()
+		if decoder.Decode(&root) != nil {
 			b.evidence.UnparseableJSONLD++
 		} else {
-			b.visitJSONLD(root, "", index, 0)
+			var trailing interface{}
+			if decoder.Decode(&trailing) != io.EOF {
+				b.evidence.UnparseableJSONLD++
+			} else {
+				b.visitJSONLD(root, "", index, 0)
+			}
 		}
 		index++
 		active = false
@@ -177,6 +187,13 @@ func (b *imprintEvidenceBuilder) collectJSONLD(body string) {
 	}
 }
 
+// Escape property names as RFC 6901 pointer tokens; nested publisher,
+// parentOrganization and other typed objects retain their actual source paths.
+func imprintJSONPointerToken(key string) string {
+	key = strings.ReplaceAll(key, "~", "~0")
+	return strings.ReplaceAll(key, "/", "~1")
+}
+
 func (b *imprintEvidenceBuilder) visitJSONLD(v interface{}, path string, script, depth int) {
 	if depth > maxImprintEvidenceDepth || len(path) > maxImprintEvidencePathBytes {
 		b.evidence.Truncated = true
@@ -188,19 +205,30 @@ func (b *imprintEvidenceBuilder) visitJSONLD(v interface{}, path string, script,
 			b.visitJSONLD(child, fmt.Sprintf("%s/%d", path, i), script, depth+1)
 		}
 	case map[string]interface{}:
-		if graph, ok := x["@graph"]; ok {
-			b.visitJSONLD(graph, path+"/@graph", script, depth+1)
-		}
-		if !isOrgType(stringifyType(x["@type"])) {
-			return
-		}
-		for _, f := range []struct{ key, field string }{{"legalName", "legal_name"}, {"name", "name"}} {
-			if value, ok := x[f.key]; ok {
-				b.jsonText(value, path+"/"+f.key, path, "", script, depth+1, f.field, "")
+		if isOrgType(stringifyType(x["@type"])) {
+			for _, f := range []struct{ key, field string }{{"legalName", "legal_name"}, {"name", "name"}} {
+				if value, ok := x[f.key]; ok {
+					b.jsonText(value, path+"/"+f.key, path, "", script, depth+1, f.field, "")
+				}
+			}
+			if value, ok := x["address"]; ok {
+				b.jsonAddress(value, path+"/address", path, script, depth+1)
 			}
 		}
-		if value, ok := x["address"]; ok {
-			b.jsonAddress(value, path+"/address", path, script, depth+1)
+		// Every nested typed organization is a separate *source object*, including
+		// publishers, brands, parents and review authors. No role or operator
+		// status follows from its location. Sorting keys makes the walk deterministic
+		// and @graph needs no special case, so its entries are visited only once.
+		keys := make([]string, 0, len(x))
+		for key := range x {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			switch x[key].(type) {
+			case []interface{}, map[string]interface{}:
+				b.visitJSONLD(x[key], path+"/"+imprintJSONPointerToken(key), script, depth+1)
+			}
 		}
 	}
 }
@@ -236,6 +264,23 @@ func (b *imprintEvidenceBuilder) jsonText(v interface{}, path, object, address s
 		return
 	}
 	switch x := v.(type) {
+	case json.Number:
+		// Only an integer literal in the explicitly named postalCode field is
+		// retained. UseNumber preserves the token without floating-point loss;
+		// no leading zeros or numeric country/name/identifier are inferred.
+		if field != "address" || component != "postal_code" {
+			return
+		}
+		value := x.String()
+		if value == "" {
+			return
+		}
+		for _, digit := range value {
+			if digit < '0' || digit > '9' {
+				return
+			}
+		}
+		b.jsonText(value, path, object, address, script, depth, field, component)
 	case string:
 		o := ImprintEvidenceObservation{Field: field, Value: x, Method: "json_ld", Basis: "explicit", Component: component, ScriptIndex: evidenceInt(script), SourcePath: evidenceString(path), ObjectPath: evidenceString(object)}
 		if address != "" {

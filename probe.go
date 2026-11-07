@@ -34,6 +34,7 @@ type probeMeta struct {
 	finalURL                  string
 	bodyLimitReached          bool
 	responseReportedTruncated bool
+	bodyReadError             bool
 }
 
 // probeVerify does a GET against the candidate URL and returns status,
@@ -70,7 +71,8 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 		}
 	}
 	if pm.status >= 200 && pm.status < 400 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, verifyBodyBytes))
+		b, readErr := io.ReadAll(io.LimitReader(resp.Body, verifyBodyBytes))
+		pm.bodyReadError = readErr != nil
 		pm.bodyLimitReached = len(b) == verifyBodyBytes
 		// Decode declared non-UTF-8 encodings (ISO-8859-1/Windows-1252,
 		// Shift_JIS/EUC-KR/GBK, ...) before any title/vocabulary matching —

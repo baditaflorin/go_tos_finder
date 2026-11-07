@@ -608,7 +608,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		if base != nil {
 			hostname = base.Hostname()
 		}
-		resp.Imprint = extractImprintFieldsWithSource(imprintHit.URL, imprintHit.Body, hostname, imprintHit.BodyURL, imprintHit.BodyLimitReached, imprintHit.BodyResponseReportedTruncated)
+		resp.Imprint = extractImprintFieldsWithSource(imprintHit.URL, imprintHit.Body, hostname, imprintHit.BodyURL, imprintHit.BodyLimitReached, imprintHit.BodyResponseReportedTruncated, imprintHit.BodyReadError)
 	}
 	resp.ImprintPresent = resp.Imprint.Present
 	resp.Verdict = verdictOfDocs(docs)
@@ -817,6 +817,7 @@ func (hit *DocFinding) captureImprintBody(pm probeMeta) {
 	hit.BodyURL = pm.finalURL
 	hit.BodyLimitReached = pm.bodyLimitReached
 	hit.BodyResponseReportedTruncated = pm.responseReportedTruncated
+	hit.BodyReadError = pm.bodyReadError
 }
 
 // verifyLink GET-verifies one link-discovered document to capture status,

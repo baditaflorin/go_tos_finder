@@ -6,8 +6,9 @@
 
 - Return separately sourced imprint name, address and country observations in
   `imprint.evidence`, without changing the existing selected fields. Preserve
-  individual JSON-LD address components and paths, distinguish the selected
-  link from the fetched response URL, and report truncation or omitted
+  individual JSON-LD address components and nested typed-organization paths,
+  preserve safe numeric postal-code tokens, distinguish the selected link from
+  an attested fetched URL, and report source/read/output limits or omitted
   sensitive-looking mixed fields.
 - Keep text and microformat observations explicitly heuristic and ungrouped;
   the presence of a provider or other entity is not proof it is the operator.

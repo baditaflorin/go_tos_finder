@@ -198,6 +198,10 @@ func TestImprintEvidenceEmptyAndMalformed(t *testing.T) {
 	if ev["unparseable_json_ld"] != float64(1) {
 		t.Fatal("malformed script must be reported")
 	}
+	_, ev, _ = evidenceForTest(t, "https://example.test/imprint", `<script type="application/ld+json">{} {}</script>`)
+	if ev["unparseable_json_ld"] != float64(1) {
+		t.Fatal("trailing JSON values must not be silently accepted")
+	}
 }
 
 // Frozen, previously captured first-party markup across several languages. The
@@ -397,5 +401,68 @@ func TestImprintEvidenceReportsSourceLimitBoundary(t *testing.T) {
 				t.Fatalf("source_limit_reached=%t, want %t", got, want)
 			}
 		})
+	}
+}
+
+func TestImprintEvidenceNestedJSONLDObjectsStaySeparate(t *testing.T) {
+	const body = `<script type="application/ld+json">{
+ "@graph":[
+  {"@type":"WebSite","publisher":{"@type":"Organization","name":"Publisher GmbH","address":{"streetAddress":"1 Publisher Straße","addressCountry":"DE"},"parentOrganization":{"@type":"Organization","legalName":"Parent SASU","address":{"streetAddress":"2 Rue Parent","addressCountry":"FR"}}}},
+  {"@type":"Organization","name":"Graph Company Ltd"}
+ ],
+ "schema:publisher/group~primary":{"@type":"Organization","name":"Escaped Organization BV"},
+ "review":{"@type":"Review","author":{"@type":"Organization","name":"Reviewer Company Ltd"}},
+ "person":{"@type":"Person","name":"SHOULD_NOT_APPEAR"}
+ }</script>`
+	_, _, obs := evidenceForTest(t, "https://example.test/imprint", body)
+	checks := []struct{ field, value, source, object string }{
+		{"name", "Publisher GmbH", "/@graph/0/publisher/name", "/@graph/0/publisher"},
+		{"address", "1 Publisher Straße", "/@graph/0/publisher/address/streetAddress", "/@graph/0/publisher"},
+		{"legal_name", "Parent SASU", "/@graph/0/publisher/parentOrganization/legalName", "/@graph/0/publisher/parentOrganization"},
+		{"address", "2 Rue Parent", "/@graph/0/publisher/parentOrganization/address/streetAddress", "/@graph/0/publisher/parentOrganization"},
+		{"name", "Graph Company Ltd", "/@graph/1/name", "/@graph/1"},
+		{"name", "Escaped Organization BV", "/schema:publisher~1group~0primary/name", "/schema:publisher~1group~0primary"},
+		{"name", "Reviewer Company Ltd", "/review/author/name", "/review/author"},
+	}
+	for _, c := range checks {
+		o := observationForTest(t, obs, c.field, c.value, "json_ld")
+		if o["source_path"] != c.source || o["object_path"] != c.object {
+			t.Fatalf("incorrect nested source path: %s", c.source)
+		}
+		if _, ok := o["role"]; ok {
+			t.Fatal("nested source object was promoted to a role")
+		}
+	}
+	graphCount := 0
+	for _, o := range obs {
+		if o["method"] == "json_ld" && o["value"] == "Graph Company Ltd" {
+			graphCount++
+		}
+		if o["value"] == "SHOULD_NOT_APPEAR" {
+			t.Fatal("unrelated Person was exposed")
+		}
+	}
+	if graphCount != 1 {
+		t.Fatalf("@graph object emitted %d times", graphCount)
+	}
+}
+
+func TestImprintEvidenceNumericPostalCodesAreExactAndScoped(t *testing.T) {
+	const body = `<script type="application/ld+json">{"@type":"Organization","name":"Example GmbH","legalName":12345,"telephone":1234567890,"identifier":123456789,"address":[{"postalCode":75001,"streetAddress":456,"addressCountry":123},{"postalCode":"01234"},{"postalCode":1e5},{"postalCode":123456789012345678901234567890}]}</script>`
+	_, evidence, obs := evidenceForTest(t, "https://example.test/imprint", body)
+	for _, c := range []struct{ value, path string }{{"75001", "/address/0/postalCode"}, {"01234", "/address/1/postalCode"}} {
+		o := observationForTest(t, obs, "address", c.value, "json_ld")
+		if o["component"] != "postal_code" || o["source_path"] != c.path {
+			t.Fatal("postal code source was not retained exactly")
+		}
+	}
+	encoded, _ := json.Marshal(evidence)
+	for _, unwanted := range []string{"123456789012345678901234567890", "1234567890", `"value":"12345"`, `"value":"456"`, `"value":"123"`, `"value":"1e5"`} {
+		if strings.Contains(string(encoded), unwanted) {
+			t.Fatal("numeric non-postal or sensitive value entered evidence")
+		}
+	}
+	if count, ok := evidence["omitted_sensitive"].(float64); !ok || count < 1 {
+		t.Fatal("oversized numeric payload should be omitted and counted")
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -94,7 +95,7 @@ func TestImprintResponseTruncationMarkerReachesEvidence(t *testing.T) {
 			}
 			hit := DocFinding{}
 			hit.captureImprintBody(pm)
-			im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyLimitReached, hit.BodyResponseReportedTruncated)
+			im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyLimitReached, hit.BodyResponseReportedTruncated, hit.BodyReadError)
 			data, err := json.Marshal(im)
 			if err != nil {
 				t.Fatal(err)
@@ -112,5 +113,42 @@ func TestImprintResponseTruncationMarkerReachesEvidence(t *testing.T) {
 				t.Fatal("short body cannot reach local source limit")
 			}
 		})
+	}
+}
+
+type imprintInterruptedBody struct{ returned bool }
+
+func (r *imprintInterruptedBody) Read(p []byte) (int, error) {
+	if r.returned {
+		return 0, errors.New("RAW_ERROR_MUST_NOT_LEAK")
+	}
+	r.returned = true
+	body := `<script type="application/ld+json">{"@type":"Organization","legalName":"Example GmbH"}</script>`
+	return copy(p, body), errors.New("RAW_ERROR_MUST_NOT_LEAK")
+}
+
+func TestImprintSourceReadErrorIsSanitized(t *testing.T) {
+	allowLoopback(t)
+	client := &http.Client{Transport: rtFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(&imprintInterruptedBody{}), Request: req}, nil
+	})}
+	source := "http://127.0.0.1/imprint"
+	pm, err := probeVerify(context.Background(), client, source)
+	if err != nil || !pm.bodyReadError || pm.bodyLimitReached {
+		t.Fatal("interrupted short read was not classified")
+	}
+	hit := DocFinding{}
+	hit.captureImprintBody(pm)
+	im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyLimitReached, hit.BodyResponseReportedTruncated, hit.BodyReadError)
+	encoded, err := json.Marshal(im)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"source_read_error":true`) || strings.Contains(string(encoded), "RAW_ERROR_MUST_NOT_LEAK") {
+		t.Fatal("read failure should be a sanitized boolean")
+	}
+	empty := extractImprintFieldsWithSource(source, "", "127.0.0.1", "", false, false, true)
+	if empty.Evidence == nil || !empty.Evidence.SourceReadError || len(empty.Evidence.Observations) != 0 {
+		t.Fatal("empty partial read lost its capture status")
 	}
 }
