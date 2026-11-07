@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.18 — 2026-11-07
+
+### Fixed
+
+- Remove credentials, query strings and fragments from the new reported imprint
+  URL, and flag redacted reports so consumers do not equate different pages.
+  Existing selected-link fields retain their legacy behavior.
+
+
 ## 1.9.17 — 2026-11-07
 
 ### Added

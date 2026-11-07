@@ -57,8 +57,12 @@ URL and independent observations of names, address components and countries.
 an unverified response-reported location, with `reported_fetched_url_basis`
 identifying `response_header` or `response_request`. Either can reflect
 origin-supplied data or a URL synthesized by the fetch adapter; neither proves
-the final origin. An unchanged URL on direct/fallback paths is omitted as
-ambiguous. A missing reported URL does not establish whether a redirect occurred.
+the final origin. Credentials, query and fragment are removed; when any are
+removed, `reported_fetched_url_redacted: true` marks the value as display
+context only. Never use a redacted URL alone to deduplicate or equate source
+pages. An unchanged URL on direct/fallback paths is omitted as ambiguous. A
+missing reported URL does not establish whether a redirect occurred. The
+legacy selected-link fields are not altered by this redaction.
 The existing `imprint.legal_name`, `address`, `country`, identifiers and scoring
 remain the selected scalar result; observations are not verified operator
 claims and must not be merged into an entity merely because they share a page.

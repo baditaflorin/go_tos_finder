@@ -33,6 +33,7 @@ type probeMeta struct {
 	body                      string
 	finalURL                  string
 	finalURLBasis             string
+	finalURLRedacted          bool
 	bodyLimitReached          bool
 	responseReportedTruncated bool
 	bodyReadError             bool
@@ -63,7 +64,7 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	pm.status = resp.StatusCode
 	pm.contentLen = resp.ContentLength
 	pm.lastMod = strings.TrimSpace(resp.Header.Get("Last-Modified"))
-	pm.finalURL, pm.finalURLBasis = observedResponseURL(resp, rawURL)
+	pm.finalURL, pm.finalURLBasis, pm.finalURLRedacted = observedResponseURL(resp, rawURL)
 	// This header can originate from the cache adapter OR the origin's
 	// forwarded response. Record its presence without attributing its source.
 	for _, value := range resp.Header.Values("X-FetchCache-Truncated") {
@@ -93,9 +94,9 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 // how it was surfaced. Neither source proves origin: fleetfetch can forward
 // origin-supplied headers and can synthesize resp.Request.URL from them.
 // Its requested-URL defaults are omitted rather than treated as a report.
-func observedResponseURL(resp *http.Response, requestedURL string) (string, string) {
+func observedResponseURL(resp *http.Response, requestedURL string) (string, string, bool) {
 	if resp == nil {
-		return "", ""
+		return "", "", false
 	}
 	final, basis := "", ""
 	if len(resp.Header.Values("X-FetchCache-Hit")) > 0 {
@@ -110,10 +111,19 @@ func observedResponseURL(resp *http.Response, requestedURL string) (string, stri
 		final, basis = resp.Request.URL.String(), "response_request"
 	}
 	u, err := url.Parse(final)
-	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return "", ""
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", "", false
 	}
-	return final, basis
+	redacted := u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(final, "#")
+	if redacted {
+		u.User = nil
+		u.RawQuery = ""
+		u.ForceQuery = false
+		u.Fragment = ""
+		u.RawFragment = ""
+		return u.String(), basis, true
+	}
+	return final, basis, false
 }
 
 // probeHead does an HTTP HEAD against the given URL and captures status,

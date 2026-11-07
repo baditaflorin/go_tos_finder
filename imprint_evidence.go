@@ -15,16 +15,17 @@ import (
 // operator. URL applies to every observation; extraction is limited to the
 // selected, already verified imprint page. Existing scalar fields are unchanged.
 type ImprintEvidence struct {
-	URL                       string                       `json:"url"`
-	ReportedFetchedURL        string                       `json:"reported_fetched_url,omitempty"`
-	ReportedFetchedURLBasis   string                       `json:"reported_fetched_url_basis,omitempty"`
-	SourceLimitReached        bool                         `json:"source_limit_reached,omitempty"`
-	ResponseReportedTruncated bool                         `json:"response_reported_truncated,omitempty"`
-	SourceReadError           bool                         `json:"source_read_error,omitempty"`
-	Observations              []ImprintEvidenceObservation `json:"observations"`
-	Truncated                 bool                         `json:"truncated,omitempty"`
-	OmittedSensitive          int                          `json:"omitted_sensitive,omitempty"`
-	UnparseableJSONLD         int                          `json:"unparseable_json_ld,omitempty"`
+	URL                        string                       `json:"url"`
+	ReportedFetchedURL         string                       `json:"reported_fetched_url,omitempty"`
+	ReportedFetchedURLBasis    string                       `json:"reported_fetched_url_basis,omitempty"`
+	ReportedFetchedURLRedacted bool                         `json:"reported_fetched_url_redacted,omitempty"`
+	SourceLimitReached         bool                         `json:"source_limit_reached,omitempty"`
+	ResponseReportedTruncated  bool                         `json:"response_reported_truncated,omitempty"`
+	SourceReadError            bool                         `json:"source_read_error,omitempty"`
+	Observations               []ImprintEvidenceObservation `json:"observations"`
+	Truncated                  bool                         `json:"truncated,omitempty"`
+	OmittedSensitive           int                          `json:"omitted_sensitive,omitempty"`
+	UnparseableJSONLD          int                          `json:"unparseable_json_ld,omitempty"`
 }
 
 // JSON-LD paths are RFC 6901 JSON Pointers within the zero-based JSON-LD
