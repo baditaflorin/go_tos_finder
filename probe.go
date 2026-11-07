@@ -27,13 +27,13 @@ const verifyBodyBytes = 256 * 1024
 // probeMeta is the raw outcome of a single candidate fetch: status, size,
 // freshness header, and a bounded slice of the body for content verification.
 type probeMeta struct {
-	status                 int
-	contentLen             int64
-	lastMod                string
-	body                   string
-	finalURL               string
-	bodyLimitReached       bool
-	cacheReportedTruncated bool
+	status                    int
+	contentLen                int64
+	lastMod                   string
+	body                      string
+	finalURL                  string
+	bodyLimitReached          bool
+	responseReportedTruncated bool
 }
 
 // probeVerify does a GET against the candidate URL and returns status,
@@ -62,11 +62,11 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	pm.contentLen = resp.ContentLength
 	pm.lastMod = strings.TrimSpace(resp.Header.Get("Last-Modified"))
 	pm.finalURL = observedResponseURL(resp, rawURL)
-	if len(resp.Header.Values("X-FetchCache-Hit")) > 0 {
-		for _, value := range resp.Header.Values("X-FetchCache-Truncated") {
-			if strings.EqualFold(strings.TrimSpace(value), "true") {
-				pm.cacheReportedTruncated = true
-			}
+	// This header can originate from the cache adapter OR the origin's
+	// forwarded response. Record its presence without attributing its source.
+	for _, value := range resp.Header.Values("X-FetchCache-Truncated") {
+		if strings.EqualFold(strings.TrimSpace(value), "true") {
+			pm.responseReportedTruncated = true
 		}
 	}
 	if pm.status >= 200 && pm.status < 400 {

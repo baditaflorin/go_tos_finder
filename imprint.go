@@ -648,7 +648,7 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 
 // sourceURL is the response URL of this body when available; pageURL remains
 // the originally selected link and continues to drive all legacy behavior.
-func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, sourceLimitReached, cacheReportedTruncated bool) Imprint {
+func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, sourceLimitReached, responseReportedTruncated bool) Imprint {
 	im := Imprint{Present: true, URL: pageURL, Ruleset: RulesetEUBaseline}
 	if strings.TrimSpace(body) == "" {
 		// Discovery/verification confirmed the page is real, but we don't
@@ -657,8 +657,8 @@ func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, s
 		// handler_helpers.go). Degrade gracefully: Present stays true (the
 		// back-compat imprint_present signal is still honest), but no
 		// fields can be extracted from text we don't have.
-		if sourceLimitReached || cacheReportedTruncated {
-			im.Evidence = &ImprintEvidence{URL: pageURL, FetchedURL: sourceURL, SourceLimitReached: sourceLimitReached, CacheReportedTruncated: cacheReportedTruncated, Observations: []ImprintEvidenceObservation{}}
+		if sourceLimitReached || responseReportedTruncated {
+			im.Evidence = &ImprintEvidence{URL: pageURL, FetchedURL: sourceURL, SourceLimitReached: sourceLimitReached, ResponseReportedTruncated: responseReportedTruncated, Observations: []ImprintEvidenceObservation{}}
 		}
 		scoreImprint(&im, false)
 		return im
@@ -667,13 +667,13 @@ func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, s
 	text := stripTagsLines(body)
 	rawCandidates := extractRawImprintCandidates(body, pageURL)
 	im.Evidence = collectImprintEvidence(body, pageURL, rawCandidates)
-	if im.Evidence == nil && (sourceLimitReached || cacheReportedTruncated) {
+	if im.Evidence == nil && (sourceLimitReached || responseReportedTruncated) {
 		im.Evidence = &ImprintEvidence{URL: pageURL, Observations: []ImprintEvidenceObservation{}}
 	}
 	if im.Evidence != nil {
 		im.Evidence.FetchedURL = sourceURL
 		im.Evidence.SourceLimitReached = sourceLimitReached
-		im.Evidence.CacheReportedTruncated = cacheReportedTruncated
+		im.Evidence.ResponseReportedTruncated = responseReportedTruncated
 	}
 	candidates := mergeImprintCandidates(normalizeCandidates(rawCandidates, body, pageURL))
 	best := bestImprintCandidate(candidates)

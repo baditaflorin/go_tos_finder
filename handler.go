@@ -92,8 +92,9 @@ type DocFinding struct {
 	BodyURL string `json:"-"`
 	// BodyLimitReached reports that the fetch reached its wire-byte cap.
 	BodyLimitReached bool `json:"-"`
-	// BodyCacheReportedTruncated records the fetch transport's explicit marker.
-	BodyCacheReportedTruncated bool `json:"-"`
+	// BodyResponseReportedTruncated records an explicit response header, whose
+	// producer may be the fetch adapter or the origin.
+	BodyResponseReportedTruncated bool `json:"-"`
 
 	// rejected marks a link-discovered finding whose target was verified dead
 	// (HTTP 404/410, soft-404 body). Such links are reported in

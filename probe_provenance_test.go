@@ -53,17 +53,19 @@ func TestImprintResponseURLProvenance(t *testing.T) {
 	}
 }
 
-func TestImprintCacheTruncationMarkerReachesEvidence(t *testing.T) {
+func TestImprintResponseTruncationMarkerReachesEvidence(t *testing.T) {
 	allowLoopback(t)
 	cases := []struct {
-		name   string
-		cached bool
-		marker string
-		want   bool
+		name     string
+		cached   bool
+		fallback bool
+		marker   string
+		want     bool
 	}{
-		{"true", true, "true", true}, {"case insensitive", true, " TRUE ", true},
-		{"absent", true, "", false}, {"false", true, "false", false},
-		{"untrusted direct header", false, "true", false},
+		{"true", true, false, "true", true}, {"case insensitive", true, false, " TRUE ", true},
+		{"absent", true, false, "", false}, {"false", true, false, "false", false},
+		{"direct header is only a response report", false, false, "true", true},
+		{"fallback origin header is only a response report", true, true, "true", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -72,6 +74,9 @@ func TestImprintCacheTruncationMarkerReachesEvidence(t *testing.T) {
 				if c.cached {
 					headers.Set("X-FetchCache-Hit", "false")
 					headers.Set("X-FetchCache-Final-Url", req.URL.String())
+				}
+				if c.fallback {
+					headers.Set("X-FetchCache-Via-Fallback", "true")
 				}
 				if c.marker != "" {
 					headers.Set("X-FetchCache-Truncated", c.marker)
@@ -84,18 +89,24 @@ func TestImprintCacheTruncationMarkerReachesEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if pm.bodyLimitReached || pm.cacheReportedTruncated != c.want {
+			if pm.bodyLimitReached || pm.responseReportedTruncated != c.want {
 				t.Fatal("incorrect short-body provenance")
 			}
 			hit := DocFinding{}
 			hit.captureImprintBody(pm)
-			im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyLimitReached, hit.BodyCacheReportedTruncated)
+			im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyLimitReached, hit.BodyResponseReportedTruncated)
 			data, err := json.Marshal(im)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(string(data), `"cache_reported_truncated":true`) != c.want {
-				t.Fatal("cache marker not preserved independently")
+			if strings.Contains(string(data), `"response_reported_truncated":true`) != c.want {
+				t.Fatal("response marker not preserved independently")
+			}
+			if c.fallback && im.Evidence.FetchedURL != "" {
+				t.Fatal("fallback origin header must not invent a final URL")
+			}
+			if strings.Contains(string(data), `"cache_reported_truncated"`) {
+				t.Fatal("response header was attributed to the cache")
 			}
 			if strings.Contains(string(data), `"source_limit_reached":true`) {
 				t.Fatal("short body cannot reach local source limit")

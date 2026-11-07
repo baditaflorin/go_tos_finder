@@ -85,9 +85,10 @@ count in `omitted_sensitive`; the filter cannot recognize every maliciously
 mislabelled value. The fetcher retains at most 256 KiB before character-set decoding, which can
 expand the resulting UTF-8 body. `source_limit_reached: true` means the byte
 limit was filled, so the source may be incomplete (including at an exact
-boundary). `cache_reported_truncated: true` records an explicit fetch-transport
-truncation marker, including on its direct-fallback path; absence is not proof
-of a complete body. The observations additionally have count, size and
+boundary). `response_reported_truncated: true` records that the response included an
+`X-FetchCache-Truncated: true` header. The adapter or the origin could have
+supplied it, and it is a report rather than verified attribution; absence is
+not proof of a complete body. The observations additionally have count, size and
 depth limits, and `truncated: true` signals an output limit was reached; malformed JSON-LD scripts
 are counted in `unparseable_json_ld`. Only the selected imprint page is
 processed, and a missing body cannot yield evidence.
