@@ -91,7 +91,7 @@ type DocFinding struct {
 	// response. They are kept separate from the selected URL.
 	BodyURL      string `json:"-"`
 	BodyURLBasis string `json:"-"`
-	// BodyLimitReached reports that the fetch reached its wire-byte cap.
+	// BodyLimitReached reports that the fetch reached its response-body byte cap.
 	BodyLimitReached bool `json:"-"`
 	// BodyResponseReportedTruncated records an explicit response header, whose
 	// producer may be the fetch adapter or the origin.

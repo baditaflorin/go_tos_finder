@@ -46,9 +46,9 @@ type ImprintEvidenceObservation struct {
 	AddressPath     *string `json:"address_path,omitempty"`
 }
 
-// The document fetch reads at most verifyBodyBytes (256 KiB) on the wire;
-// decoding can expand that into a longer UTF-8 string. These additional
-// limits bound path amplification and deeply nested input. A caller
+// The document fetch reads at most verifyBodyBytes (256 KiB) from the response
+// body before character-set decoding, which can expand the UTF-8 result.
+// Additional limits bound path amplification and deeply nested input. A caller
 // can see any loss due to those limits in Truncated; sensitive-looking values
 // are counted separately and never included in this evidence object.
 const (
