@@ -19,7 +19,7 @@ func TestImprintResponseURLProvenance(t *testing.T) {
 		reported         []string
 		want             string
 	}{
-		{name: "direct response", requestURL: requested, want: requested},
+		{name: "direct response equal to request is ambiguous", requestURL: requested, want: ""},
 		{name: "direct redirect", requestURL: resolved, want: resolved},
 		{name: "missing response request", want: ""},
 		{name: "cache synthesized selected URL", cached: true, requestURL: requested, want: ""},

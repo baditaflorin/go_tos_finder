@@ -56,7 +56,8 @@ URL and independent observations of names, address components and countries.
 `evidence.url` is the selected link; `evidence.fetched_url`, when available,
 is the final response URL of the body after redirects when the fetch path
 actually reports it. Fetch-cache responses require an explicit final-URL header;
-a missing `fetched_url` does not establish whether a redirect occurred.
+on direct and fallback paths an unchanged URL is omitted as ambiguous. A
+missing `fetched_url` does not establish whether a redirect occurred.
 The existing `imprint.legal_name`, `address`, `country`, identifiers and scoring
 remain the selected scalar result; observations are not verified operator
 claims and must not be merged into an entity merely because they share a page.

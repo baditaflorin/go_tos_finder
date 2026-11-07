@@ -89,8 +89,8 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 // observedResponseURL avoids an ambiguity in fleetfetch v0.116.1: the
 // RoundTripper substitutes the requested URL when the cache did not provide
 // its final URL. A cache response is therefore attributable only from its
-// explicit final-URL header. A direct fallback can prove a different final
-// URL; equality is ambiguous because that path also has a requested-URL default.
+// explicit final-URL header. A direct or fallback response can prove a different
+// final URL; equality is ambiguous because either path can default to the request.
 func observedResponseURL(resp *http.Response, requestedURL string) string {
 	if resp == nil {
 		return ""
@@ -104,7 +104,9 @@ func observedResponseURL(resp *http.Response, requestedURL string) string {
 		} else if values := resp.Header.Values("X-FetchCache-Final-Url"); len(values) == 1 {
 			final = strings.TrimSpace(values[0])
 		}
-	} else if resp.Request != nil && resp.Request.URL != nil {
+	} else if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.String() != requestedURL {
+		// net/http can populate Request with the original request when a
+		// custom transport supplies none, so equality is not evidence.
 		final = resp.Request.URL.String()
 	}
 	u, err := url.Parse(final)
