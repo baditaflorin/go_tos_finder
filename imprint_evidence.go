@@ -16,7 +16,8 @@ import (
 // selected, already verified imprint page. Existing scalar fields are unchanged.
 type ImprintEvidence struct {
 	URL                       string                       `json:"url"`
-	FetchedURL                string                       `json:"fetched_url,omitempty"`
+	ReportedFetchedURL        string                       `json:"reported_fetched_url,omitempty"`
+	ReportedFetchedURLBasis   string                       `json:"reported_fetched_url_basis,omitempty"`
 	SourceLimitReached        bool                         `json:"source_limit_reached,omitempty"`
 	ResponseReportedTruncated bool                         `json:"response_reported_truncated,omitempty"`
 	SourceReadError           bool                         `json:"source_read_error,omitempty"`
@@ -74,12 +75,31 @@ func sensitiveImprintEvidenceValue(value string) bool {
 	return imprintEmailRE.MatchString(value) || imprintPhoneRE.MatchString(value) || imprintEvidenceSensitiveRE.MatchString(value) || imprintEvidenceNumericPayloadRE.MatchString(value)
 }
 
+func plainPostalDigits(value string) bool {
+	if len(value) < 3 || len(value) > 9 {
+		return false
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (b *imprintEvidenceBuilder) add(o ImprintEvidenceObservation) {
 	o.Value = strings.TrimSpace(o.Value)
 	if o.Value == "" {
 		return
 	}
-	if sensitiveImprintEvidenceValue(o.Value) {
+	sensitive := sensitiveImprintEvidenceValue(o.Value)
+	// A schema-typed atomic postalCode containing 3–9 plain digits can be a
+	// legitimate CEP/ZIP. Preserve its exact source spelling while still
+	// filtering email, labels and mixed contact/identifier text everywhere.
+	if sensitive && o.Method == "json_ld" && o.Field == "address" && o.Component == "postal_code" && plainPostalDigits(o.Value) {
+		sensitive = imprintEmailRE.MatchString(o.Value) || imprintPhoneRE.MatchString(o.Value) || imprintEvidenceSensitiveRE.MatchString(o.Value)
+	}
+	if sensitive {
 		b.evidence.OmittedSensitive++
 		return
 	}

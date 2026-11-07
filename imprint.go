@@ -643,12 +643,12 @@ func scoreImprint(im *Imprint, hasContact bool) {
 // real imprint page) — this function does not re-decide presence, only
 // extracts fields from what discovery+verification already found.
 func extractImprintFields(pageURL, body, hostname string) Imprint {
-	return extractImprintFieldsWithSource(pageURL, body, hostname, "", false, false, false)
+	return extractImprintFieldsWithSource(pageURL, body, hostname, "", "", false, false, false)
 }
 
-// sourceURL is the response URL of this body when available; pageURL remains
-// the originally selected link and continues to drive all legacy behavior.
-func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, sourceLimitReached, responseReportedTruncated, sourceReadError bool) Imprint {
+// sourceURL is an unverified response-reported location; pageURL remains the
+// originally selected link and continues to drive all legacy behavior.
+func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL, sourceURLBasis string, sourceLimitReached, responseReportedTruncated, sourceReadError bool) Imprint {
 	im := Imprint{Present: true, URL: pageURL, Ruleset: RulesetEUBaseline}
 	if strings.TrimSpace(body) == "" {
 		// Discovery/verification confirmed the page is real, but we don't
@@ -658,7 +658,7 @@ func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, s
 		// back-compat imprint_present signal is still honest), but no
 		// fields can be extracted from text we don't have.
 		if sourceLimitReached || responseReportedTruncated || sourceReadError {
-			im.Evidence = &ImprintEvidence{URL: pageURL, FetchedURL: sourceURL, SourceLimitReached: sourceLimitReached, ResponseReportedTruncated: responseReportedTruncated, SourceReadError: sourceReadError, Observations: []ImprintEvidenceObservation{}}
+			im.Evidence = &ImprintEvidence{URL: pageURL, ReportedFetchedURL: sourceURL, ReportedFetchedURLBasis: sourceURLBasis, SourceLimitReached: sourceLimitReached, ResponseReportedTruncated: responseReportedTruncated, SourceReadError: sourceReadError, Observations: []ImprintEvidenceObservation{}}
 		}
 		scoreImprint(&im, false)
 		return im
@@ -671,7 +671,8 @@ func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, s
 		im.Evidence = &ImprintEvidence{URL: pageURL, Observations: []ImprintEvidenceObservation{}}
 	}
 	if im.Evidence != nil {
-		im.Evidence.FetchedURL = sourceURL
+		im.Evidence.ReportedFetchedURL = sourceURL
+		im.Evidence.ReportedFetchedURLBasis = sourceURLBasis
 		im.Evidence.SourceLimitReached = sourceLimitReached
 		im.Evidence.ResponseReportedTruncated = responseReportedTruncated
 		im.Evidence.SourceReadError = sourceReadError

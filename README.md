@@ -53,11 +53,12 @@ Response (truncated for brevity):
 
 When the selected imprint page has a body, `imprint.evidence` may contain its
 URL and independent observations of names, address components and countries.
-`evidence.url` is the selected link; `evidence.fetched_url`, when available,
-is the final response URL of the body after redirects when the fetch path
-actually reports it. Fetch-cache responses require an explicit final-URL header;
-on direct and fallback paths an unchanged URL is omitted as ambiguous. A
-missing `fetched_url` does not establish whether a redirect occurred.
+`evidence.url` is the selected link. `reported_fetched_url`, when present, is
+an unverified response-reported location, with `reported_fetched_url_basis`
+identifying `response_header` or `response_request`. Either can reflect
+origin-supplied data or a URL synthesized by the fetch adapter; neither proves
+the final origin. An unchanged URL on direct/fallback paths is omitted as
+ambiguous. A missing reported URL does not establish whether a redirect occurred.
 The existing `imprint.legal_name`, `address`, `country`, identifiers and scoring
 remain the selected scalar result; observations are not verified operator
 claims and must not be merged into an entity merely because they share a page.
@@ -69,7 +70,9 @@ address object or string. Nested typed organizations, including publishers,
 parents and review authors, retain their own paths without receiving operator
 roles. A `name` is not automatically a legal name. Country values remain as stated; `normalized_value` is present only when recognized.
 An integer JSON `postalCode` retains its original digits without floating-point
-conversion or inferred leading zeros, subject to the sensitive-value filter.
+conversion or inferred leading zeros. A schema-typed postalCode containing 3–9
+plain digits is retained verbatim (including CEP leading zeros); this is an
+unverified source claim, not proof that the value is a postal code.
 Text, Open Graph, copyright and hCard observations use their extractor's
 `method` and `basis: "heuristic"`; they have no object or address association,
 including when two fields happen to be near each other. They may name a host,

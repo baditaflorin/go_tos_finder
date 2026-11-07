@@ -32,6 +32,7 @@ type probeMeta struct {
 	lastMod                   string
 	body                      string
 	finalURL                  string
+	finalURLBasis             string
 	bodyLimitReached          bool
 	responseReportedTruncated bool
 	bodyReadError             bool
@@ -62,7 +63,7 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	pm.status = resp.StatusCode
 	pm.contentLen = resp.ContentLength
 	pm.lastMod = strings.TrimSpace(resp.Header.Get("Last-Modified"))
-	pm.finalURL = observedResponseURL(resp, rawURL)
+	pm.finalURL, pm.finalURLBasis = observedResponseURL(resp, rawURL)
 	// This header can originate from the cache adapter OR the origin's
 	// forwarded response. Record its presence without attributing its source.
 	for _, value := range resp.Header.Values("X-FetchCache-Truncated") {
@@ -88,34 +89,31 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	return pm, nil
 }
 
-// observedResponseURL avoids an ambiguity in fleetfetch v0.116.1: the
-// RoundTripper substitutes the requested URL when the cache did not provide
-// its final URL. A cache response is therefore attributable only from its
-// explicit final-URL header. A direct or fallback response can prove a different
-// final URL; equality is ambiguous because either path can default to the request.
-func observedResponseURL(resp *http.Response, requestedURL string) string {
+// observedResponseURL returns only a location reported by the response and
+// how it was surfaced. Neither source proves origin: fleetfetch can forward
+// origin-supplied headers and can synthesize resp.Request.URL from them.
+// Its requested-URL defaults are omitted rather than treated as a report.
+func observedResponseURL(resp *http.Response, requestedURL string) (string, string) {
 	if resp == nil {
-		return ""
+		return "", ""
 	}
-	final := ""
+	final, basis := "", ""
 	if len(resp.Header.Values("X-FetchCache-Hit")) > 0 {
 		if strings.EqualFold(strings.TrimSpace(resp.Header.Get("X-FetchCache-Via-Fallback")), "true") {
 			if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.String() != requestedURL {
-				final = resp.Request.URL.String()
+				final, basis = resp.Request.URL.String(), "response_request"
 			}
 		} else if values := resp.Header.Values("X-FetchCache-Final-Url"); len(values) == 1 {
-			final = strings.TrimSpace(values[0])
+			final, basis = strings.TrimSpace(values[0]), "response_header"
 		}
 	} else if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.String() != requestedURL {
-		// net/http can populate Request with the original request when a
-		// custom transport supplies none, so equality is not evidence.
-		final = resp.Request.URL.String()
+		final, basis = resp.Request.URL.String(), "response_request"
 	}
 	u, err := url.Parse(final)
 	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return ""
+		return "", ""
 	}
-	return final
+	return final, basis
 }
 
 // probeHead does an HTTP HEAD against the given URL and captures status,

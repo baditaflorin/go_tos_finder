@@ -87,9 +87,10 @@ type DocFinding struct {
 	// discovery/verification instead of costing a second HTTP round trip.
 	// Internal extraction input — not serialised.
 	Body string `json:"-"`
-	// BodyURL is the final response URL for Body, after any HTTP redirects.
-	// Kept internally so the additive evidence can distinguish it from URL.
-	BodyURL string `json:"-"`
+	// BodyURL and BodyURLBasis are unverified location reports from the
+	// response. They are kept separate from the selected URL.
+	BodyURL      string `json:"-"`
+	BodyURLBasis string `json:"-"`
 	// BodyLimitReached reports that the fetch reached its wire-byte cap.
 	BodyLimitReached bool `json:"-"`
 	// BodyResponseReportedTruncated records an explicit response header, whose

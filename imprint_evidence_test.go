@@ -337,8 +337,9 @@ func TestImprintEvidenceTracksFinalRedirectURL(t *testing.T) {
 		Imprint struct {
 			URL      string `json:"url"`
 			Evidence struct {
-				URL        string `json:"url"`
-				FetchedURL string `json:"fetched_url"`
+				URL                     string `json:"url"`
+				ReportedFetchedURL      string `json:"reported_fetched_url"`
+				ReportedFetchedURLBasis string `json:"reported_fetched_url_basis"`
 			} `json:"evidence"`
 		} `json:"imprint"`
 	}
@@ -348,12 +349,18 @@ func TestImprintEvidenceTracksFinalRedirectURL(t *testing.T) {
 	if response.Imprint.URL != server.URL+"/original-imprint" || response.Imprint.Evidence.URL != server.URL+"/original-imprint" {
 		t.Fatal("selected link changed")
 	}
-	if response.Imprint.Evidence.FetchedURL != server.URL+"/resolved-imprint" {
+	if response.Imprint.Evidence.ReportedFetchedURL != server.URL+"/resolved-imprint" {
 		t.Fatal("redirected body URL was not preserved")
 	}
+	if basis := response.Imprint.Evidence.ReportedFetchedURLBasis; basis != "response_request" && basis != "response_header" {
+		t.Fatal("reported URL basis missing")
+	}
 	_, evidence, _ := evidenceForTest(t, "https://example.test/imprint", `<script type="application/ld+json">{"@type":"Organization","name":"Example GmbH"}</script>`)
-	if _, ok := evidence["fetched_url"]; ok {
+	if _, ok := evidence["reported_fetched_url"]; ok {
 		t.Fatal("unavailable final URL must not be invented")
+	}
+	if _, ok := evidence["reported_fetched_url_basis"]; ok {
+		t.Fatal("unavailable final URL cannot have a basis")
 	}
 }
 
@@ -448,16 +455,21 @@ func TestImprintEvidenceNestedJSONLDObjectsStaySeparate(t *testing.T) {
 }
 
 func TestImprintEvidenceNumericPostalCodesAreExactAndScoped(t *testing.T) {
-	const body = `<script type="application/ld+json">{"@type":"Organization","name":"Example GmbH","legalName":12345,"telephone":1234567890,"identifier":123456789,"address":[{"postalCode":75001,"streetAddress":456,"addressCountry":123},{"postalCode":"01234"},{"postalCode":1e5},{"postalCode":123456789012345678901234567890}]}</script>`
+	const body = `<script type="application/ld+json">{"@type":"Organization","name":"Example GmbH","legalName":12345,"telephone":1234567890,"identifier":123456789,"address":[{"postalCode":75001,"streetAddress":456,"addressCountry":123},{"postalCode":"01234"},{"postalCode":"01001000"},{"postalCode":1001000},{"postalCode":1e5},{"postalCode":123456789012345678901234567890},{"postalCode":"Tel: 0043 5272 / 62 21","streetAddress":"01001000"}]}</script>`
 	_, evidence, obs := evidenceForTest(t, "https://example.test/imprint", body)
-	for _, c := range []struct{ value, path string }{{"75001", "/address/0/postalCode"}, {"01234", "/address/1/postalCode"}} {
+	for _, c := range []struct{ value, path string }{{"75001", "/address/0/postalCode"}, {"01234", "/address/1/postalCode"}, {"01001000", "/address/2/postalCode"}, {"1001000", "/address/3/postalCode"}} {
 		o := observationForTest(t, obs, "address", c.value, "json_ld")
 		if o["component"] != "postal_code" || o["source_path"] != c.path {
 			t.Fatal("postal code source was not retained exactly")
 		}
 	}
+	for _, o := range obs {
+		if o["component"] == "street_address" && o["value"] == "01001000" {
+			t.Fatal("postal exception leaked into street or free text")
+		}
+	}
 	encoded, _ := json.Marshal(evidence)
-	for _, unwanted := range []string{"123456789012345678901234567890", "1234567890", `"value":"12345"`, `"value":"456"`, `"value":"123"`, `"value":"1e5"`} {
+	for _, unwanted := range []string{"123456789012345678901234567890", "1234567890", "0043 5272 / 62 21", `"value":"12345"`, `"value":"456"`, `"value":"123"`, `"value":"1e5"`} {
 		if strings.Contains(string(encoded), unwanted) {
 			t.Fatal("numeric non-postal or sensitive value entered evidence")
 		}

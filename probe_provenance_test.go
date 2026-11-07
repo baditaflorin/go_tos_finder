@@ -18,18 +18,22 @@ func TestImprintResponseURLProvenance(t *testing.T) {
 		cached, fallback bool
 		requestURL       string
 		reported         []string
-		want             string
+		want, wantBasis  string
 	}{
 		{name: "direct response equal to request is ambiguous", requestURL: requested, want: ""},
-		{name: "direct redirect", requestURL: resolved, want: resolved},
+		{name: "direct redirect", requestURL: resolved, want: resolved, wantBasis: "response_request"},
 		{name: "missing response request", want: ""},
 		{name: "cache synthesized selected URL", cached: true, requestURL: requested, want: ""},
-		{name: "cache explicitly reports final URL", cached: true, requestURL: requested, reported: []string{resolved}, want: resolved},
+		{name: "cache explicitly reports final URL", cached: true, requestURL: requested, reported: []string{resolved}, want: resolved, wantBasis: "response_header"},
 		{name: "cache final header conflicts", cached: true, requestURL: requested, reported: []string{requested, resolved}, want: ""},
 		{name: "cache malformed final URL", cached: true, requestURL: requested, reported: []string{"javascript:alert(1)"}, want: ""},
 		{name: "cache final URL has user info", cached: true, requestURL: requested, reported: []string{"https://secret@example.test/path"}, want: ""},
 		{name: "fallback same URL is ambiguous", cached: true, fallback: true, requestURL: requested, want: ""},
-		{name: "fallback actual redirect", cached: true, fallback: true, requestURL: resolved, want: resolved},
+		{name: "fallback actual redirect", cached: true, fallback: true, requestURL: resolved, want: resolved, wantBasis: "response_request"},
+		{name: "origin spoof is only a header report", cached: true, requestURL: requested, reported: []string{"https://spoof.example/path"}, want: "https://spoof.example/path", wantBasis: "response_header"},
+		{name: "fallback ignores spoofed final header", cached: true, fallback: true, requestURL: resolved, reported: []string{"https://spoof.example/path"}, want: resolved, wantBasis: "response_request"},
+		{name: "synthesized request is only a response report", cached: true, fallback: true, requestURL: "https://spoof.example/path", reported: []string{"https://spoof.example/path"}, want: "https://spoof.example/path", wantBasis: "response_request"},
+		{name: "unchanged fallback ignores spoofed final header", cached: true, fallback: true, requestURL: requested, reported: []string{"https://spoof.example/path"}, want: ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -47,8 +51,8 @@ func TestImprintResponseURLProvenance(t *testing.T) {
 			if c.requestURL != "" {
 				resp.Request, _ = http.NewRequest(http.MethodGet, c.requestURL, nil)
 			}
-			if got := observedResponseURL(resp, requested); got != c.want {
-				t.Errorf("got %q, want %q", got, c.want)
+			if got, basis := observedResponseURL(resp, requested); got != c.want || basis != c.wantBasis {
+				t.Errorf("got %q (%q), want %q (%q)", got, basis, c.want, c.wantBasis)
 			}
 		})
 	}
@@ -95,7 +99,7 @@ func TestImprintResponseTruncationMarkerReachesEvidence(t *testing.T) {
 			}
 			hit := DocFinding{}
 			hit.captureImprintBody(pm)
-			im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyLimitReached, hit.BodyResponseReportedTruncated, hit.BodyReadError)
+			im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyURLBasis, hit.BodyLimitReached, hit.BodyResponseReportedTruncated, hit.BodyReadError)
 			data, err := json.Marshal(im)
 			if err != nil {
 				t.Fatal(err)
@@ -103,7 +107,7 @@ func TestImprintResponseTruncationMarkerReachesEvidence(t *testing.T) {
 			if strings.Contains(string(data), `"response_reported_truncated":true`) != c.want {
 				t.Fatal("response marker not preserved independently")
 			}
-			if c.fallback && im.Evidence.FetchedURL != "" {
+			if c.fallback && im.Evidence.ReportedFetchedURL != "" {
 				t.Fatal("fallback origin header must not invent a final URL")
 			}
 			if strings.Contains(string(data), `"cache_reported_truncated"`) {
@@ -139,7 +143,7 @@ func TestImprintSourceReadErrorIsSanitized(t *testing.T) {
 	}
 	hit := DocFinding{}
 	hit.captureImprintBody(pm)
-	im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyLimitReached, hit.BodyResponseReportedTruncated, hit.BodyReadError)
+	im := extractImprintFieldsWithSource(source, hit.Body, "127.0.0.1", hit.BodyURL, hit.BodyURLBasis, hit.BodyLimitReached, hit.BodyResponseReportedTruncated, hit.BodyReadError)
 	encoded, err := json.Marshal(im)
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +151,7 @@ func TestImprintSourceReadErrorIsSanitized(t *testing.T) {
 	if !strings.Contains(string(encoded), `"source_read_error":true`) || strings.Contains(string(encoded), "RAW_ERROR_MUST_NOT_LEAK") {
 		t.Fatal("read failure should be a sanitized boolean")
 	}
-	empty := extractImprintFieldsWithSource(source, "", "127.0.0.1", "", false, false, true)
+	empty := extractImprintFieldsWithSource(source, "", "127.0.0.1", "", "", false, false, true)
 	if empty.Evidence == nil || !empty.Evidence.SourceReadError || len(empty.Evidence.Observations) != 0 {
 		t.Fatal("empty partial read lost its capture status")
 	}
