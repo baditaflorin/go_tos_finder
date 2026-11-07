@@ -26,11 +26,12 @@ const verifyBodyBytes = 256 * 1024
 // probeMeta is the raw outcome of a single candidate fetch: status, size,
 // freshness header, and a bounded slice of the body for content verification.
 type probeMeta struct {
-	status     int
-	contentLen int64
-	lastMod    string
-	body       string
-	finalURL   string
+	status           int
+	contentLen       int64
+	lastMod          string
+	body             string
+	finalURL         string
+	bodyLimitReached bool
 }
 
 // probeVerify does a GET against the candidate URL and returns status,
@@ -63,6 +64,7 @@ func probeVerify(ctx context.Context, client *http.Client, rawURL string) (probe
 	}
 	if pm.status >= 200 && pm.status < 400 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, verifyBodyBytes))
+		pm.bodyLimitReached = len(b) == verifyBodyBytes
 		// Decode declared non-UTF-8 encodings (ISO-8859-1/Windows-1252,
 		// Shift_JIS/EUC-KR/GBK, ...) before any title/vocabulary matching —
 		// see decodeToUTF8 in charset.go. contentLen below is measured on the

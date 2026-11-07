@@ -87,6 +87,11 @@ type DocFinding struct {
 	// discovery/verification instead of costing a second HTTP round trip.
 	// Internal extraction input — not serialised.
 	Body string `json:"-"`
+	// BodyURL is the final response URL for Body, after any HTTP redirects.
+	// Kept internally so the additive evidence can distinguish it from URL.
+	BodyURL string `json:"-"`
+	// BodyLimitReached reports that the fetch reached its wire-byte cap.
+	BodyLimitReached bool `json:"-"`
 
 	// rejected marks a link-discovered finding whose target was verified dead
 	// (HTTP 404/410, soft-404 body). Such links are reported in

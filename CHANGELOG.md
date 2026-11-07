@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.9.17 — 2026-11-07
+
+### Added
+
+- Return separately sourced imprint name, address and country observations in
+  `imprint.evidence`, without changing the existing selected fields. Preserve
+  individual JSON-LD address components and paths, distinguish the selected
+  link from the fetched response URL, and report truncation or omitted
+  sensitive-looking mixed fields.
+- Keep text and microformat observations explicitly heuristic and ungrouped;
+  the presence of a provider or other entity is not proof it is the operator.
+
+
 ## 1.9.16 — 2026-11-06
 
 ### Deployment

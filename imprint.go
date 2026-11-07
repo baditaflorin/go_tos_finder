@@ -59,20 +59,21 @@ const (
 // imprint/Impressum page's body. ImprintPresent (Response, back-compat) is
 // derived from Imprint.Present.
 type Imprint struct {
-	Present           bool     `json:"present"`
-	URL               string   `json:"url,omitempty"`
-	LegalName         string   `json:"legal_name,omitempty"`
-	Suffix            string   `json:"suffix,omitempty"`
-	Address           string   `json:"address,omitempty"`
-	Country           string   `json:"country,omitempty"` // ISO-3166-1 alpha-2
-	Register          string   `json:"register,omitempty"`
-	VAT               string   `json:"vat,omitempty"`
-	VATValidation     string   `json:"vat_validation,omitempty"` // checksum_valid | checksum_invalid | format_valid | unchecked
-	ResponsiblePerson string   `json:"responsible_person,omitempty"`
-	FieldsFound       []string `json:"fields_found,omitempty"`
-	FieldsMissing     []string `json:"fields_missing,omitempty"`
-	CompletenessScore int      `json:"completeness_score"` // 0-100, relative to the applicable ruleset
-	Ruleset           string   `json:"ruleset"`
+	Present           bool             `json:"present"`
+	URL               string           `json:"url,omitempty"`
+	LegalName         string           `json:"legal_name,omitempty"`
+	Suffix            string           `json:"suffix,omitempty"`
+	Address           string           `json:"address,omitempty"`
+	Country           string           `json:"country,omitempty"` // ISO-3166-1 alpha-2
+	Register          string           `json:"register,omitempty"`
+	VAT               string           `json:"vat,omitempty"`
+	VATValidation     string           `json:"vat_validation,omitempty"` // checksum_valid | checksum_invalid | format_valid | unchecked
+	ResponsiblePerson string           `json:"responsible_person,omitempty"`
+	FieldsFound       []string         `json:"fields_found,omitempty"`
+	FieldsMissing     []string         `json:"fields_missing,omitempty"`
+	CompletenessScore int              `json:"completeness_score"` // 0-100, relative to the applicable ruleset
+	Ruleset           string           `json:"ruleset"`
+	Evidence          *ImprintEvidence `json:"evidence,omitempty"`
 }
 
 // imprintEmailRE is a pragmatic (not RFC-5322-complete) email matcher — good
@@ -642,6 +643,12 @@ func scoreImprint(im *Imprint, hasContact bool) {
 // real imprint page) — this function does not re-decide presence, only
 // extracts fields from what discovery+verification already found.
 func extractImprintFields(pageURL, body, hostname string) Imprint {
+	return extractImprintFieldsWithSource(pageURL, body, hostname, "", false)
+}
+
+// sourceURL is the response URL of this body when available; pageURL remains
+// the originally selected link and continues to drive all legacy behavior.
+func extractImprintFieldsWithSource(pageURL, body, hostname, sourceURL string, sourceLimitReached bool) Imprint {
 	im := Imprint{Present: true, URL: pageURL, Ruleset: RulesetEUBaseline}
 	if strings.TrimSpace(body) == "" {
 		// Discovery/verification confirmed the page is real, but we don't
@@ -650,12 +657,24 @@ func extractImprintFields(pageURL, body, hostname string) Imprint {
 		// handler_helpers.go). Degrade gracefully: Present stays true (the
 		// back-compat imprint_present signal is still honest), but no
 		// fields can be extracted from text we don't have.
+		if sourceLimitReached {
+			im.Evidence = &ImprintEvidence{URL: pageURL, FetchedURL: sourceURL, SourceLimitReached: true, Observations: []ImprintEvidenceObservation{}}
+		}
 		scoreImprint(&im, false)
 		return im
 	}
 
 	text := stripTagsLines(body)
-	candidates := mergeImprintCandidates(extractImprintCandidates(body, pageURL))
+	rawCandidates := extractRawImprintCandidates(body, pageURL)
+	im.Evidence = collectImprintEvidence(body, pageURL, rawCandidates)
+	if im.Evidence == nil && sourceLimitReached {
+		im.Evidence = &ImprintEvidence{URL: pageURL, Observations: []ImprintEvidenceObservation{}}
+	}
+	if im.Evidence != nil {
+		im.Evidence.FetchedURL = sourceURL
+		im.Evidence.SourceLimitReached = sourceLimitReached
+	}
+	candidates := mergeImprintCandidates(normalizeCandidates(rawCandidates, body, pageURL))
 	best := bestImprintCandidate(candidates)
 	backfillWinnerIdentifiers(best, candidates)
 

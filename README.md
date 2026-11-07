@@ -49,6 +49,45 @@ Response (truncated for brevity):
 }
 ```
 
+## Imprint observations
+
+When the selected imprint page has a body, `imprint.evidence` may contain its
+URL and independent observations of names, address components and countries.
+`evidence.url` is the selected link; `evidence.fetched_url`, when available,
+is the final response URL of the body after redirects. A missing `fetched_url`
+does not establish whether a redirect occurred.
+The existing `imprint.legal_name`, `address`, `country`, identifiers and scoring
+remain the selected scalar result; observations are not verified operator
+claims and must not be merged into an entity merely because they share a page.
+
+For JSON-LD, `script_index` counts `application/ld+json` scripts from zero and
+`source_path` is an RFC 6901 JSON Pointer in that script. `object_path` marks
+only the source object, and `address_path` groups only components from the same
+address object or string. A `name` is not automatically a legal name. Country
+values remain as stated; `normalized_value` is present only when recognized.
+Text, Open Graph, copyright and hCard observations use their extractor's
+`method` and `basis: "heuristic"`; they have no object or address association,
+including when two fields happen to be near each other. They may name a host,
+provider or unrelated party. An `imprint_provider_section` observation is
+under an explicit hosting-provider heading; `role: "hosting_provider"` describes
+that source section, not a verified legal owner or a cross-field entity match.
+Direct postal-looking text lines after a bold `Adresse` label use
+`method: "imprint_address_label"` and `component: "address_line"`; those lines
+are separate observations and are not assigned to a subject. A country inferred
+by a heuristic is not an explicit country statement. Existing heuristic extraction itself has limits,
+including its existing candidate-count limits; this is not a full page archive.
+
+The stream deliberately copies no identifier or contact properties. It also
+omits values that look like mixed contact or identifier text and reports their
+count in `omitted_sensitive`; the filter cannot recognize every maliciously
+mislabelled value. The fetcher retains at most 256 KiB before character-set decoding, which can
+expand the resulting UTF-8 body. `source_limit_reached: true` means the byte
+limit was filled, so the source may be incomplete (including at an exact
+boundary). The observations additionally have count, size and
+depth limits, and `truncated: true` signals an output limit was reached; malformed JSON-LD scripts
+are counted in `unparseable_json_ld`. Only the selected imprint page is
+processed, and a missing body cannot yield evidence.
+
 ## Verdict
 
 - `comprehensive` — ToS + Privacy + ≥1 other, or 5+ documents.
