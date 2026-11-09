@@ -73,7 +73,7 @@ type imprintEvidenceBuilder struct {
 var imprintEvidenceNumericPayloadRE = regexp.MustCompile(`(?:\b\d{8,}\b|\b\d{2,4}[ \t/().-]+\d{2,4}[ \t/().-]+\d{2,4}(?:[ \t/().-]+\d{2,4})?\b)`)
 
 func sensitiveImprintEvidenceValue(value string) bool {
-	return imprintEmailRE.MatchString(value) || imprintPhoneRE.MatchString(value) || imprintEvidenceSensitiveRE.MatchString(value) || imprintEvidenceNumericPayloadRE.MatchString(value)
+	return imprintEmailRE.MatchString(value) || imprintPhoneRE.MatchString(value) || addressContactLabelRE.MatchString(value) || imprintEvidenceSensitiveRE.MatchString(value) || imprintEvidenceNumericPayloadRE.MatchString(value)
 }
 
 func plainPostalDigits(value string) bool {
