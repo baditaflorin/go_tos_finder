@@ -167,6 +167,18 @@ func containsCI(haystack, needle string) bool {
 // extractAddressNearEntity's doc comment for the real evidence.
 var bareIntlPhoneRE = regexp.MustCompile(`^\(?\+\d{1,3}\)?[\d\s()\-./]{5,20}$`)
 
+// An explicit contact label is not an address, even if the phone contains
+// HTML entities or punctuation that the stricter phone-number regex cannot
+// parse. The separator and colon keep words in street names (Faxon Street,
+// Telefonstraße) from being mistaken for labels. When a contact follows an
+// address on the same line, retain the address before the label.
+var addressContactLabelRE = regexp.MustCompile(`(?i)(?:^|[[:space:],;|])(?:tel(?:efone?|ephone|éfono)?|tél(?:éphone)?|phone|fax|faks|mobile|mobil|móvil|telemóvel|telemovel|cellulare|τηλέφωνο|τηλ|телефон|факс|電話番号|電話|ファックス|ファクス|电话|传真)\.?(?:\s*/\s*(?:fax|faks))?\s*[:：]`)
+
+// German Allee addresses often use a short house number that does not meet
+// the general four-digit heuristic. Require a separate Allee word followed
+// by a number, so prose mentioning an avenue is not accepted on that basis.
+var alleeHouseNumberRE = regexp.MustCompile(`(?i)(?:^|[[:space:]])allee[[:space:]]+[0-9]{1,5}[a-z]?\b`)
+
 // aveWordRE matches the "Ave"/"Ave." US-street abbreviation as a whole
 // word — see looksAddressLine's doc comment for why this can't be a plain
 // substring check like its sibling markers.
@@ -225,7 +237,7 @@ func looksAddressLine(s string) bool {
 	// the substring match on "have" wrongly absorbed that whole sentence
 	// into the address before this fix. "avenue" itself is unaffected: it
 	// is matched separately, in full, by the marker loop below.
-	if aveWordRE.MatchString(low) {
+	if aveWordRE.MatchString(low) || alleeHouseNumberRE.MatchString(s) {
 		return true
 	}
 	for _, marker := range []string{
@@ -565,6 +577,13 @@ func extractAddressNearEntity(text, name string) string {
 			// positive.
 			if bareIntlPhoneRE.MatchString(clean) {
 				continue
+			}
+			if loc := addressContactLabelRE.FindStringIndex(clean); loc != nil {
+				clean = strings.TrimRight(strings.TrimSpace(clean[:loc[0]]), " ,;|")
+				if clean == "" {
+					continue
+				}
+				low = strings.ToLower(clean)
 			}
 			// A labelled phone/fax line ("Tel.: +43 (0)5 0485-333") is contact data, not part of the
 			// postal address, although its digit run satisfies looksAddressLine (herold.at).

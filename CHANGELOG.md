@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.19 — 2026-11-09
+
+### Fixed
+
+- Retain German Allee street addresses with short house numbers and separate
+  labelled phone or fax text from imprint addresses, including encoded
+  punctuation and labels in several languages. Apply the same contact-label
+  protection to identity evidence while preserving the reported source page.
+
 ## 1.9.18 — 2026-11-07
 
 ### Fixed
