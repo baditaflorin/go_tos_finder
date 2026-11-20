@@ -9,7 +9,7 @@ import (
 //go:embed agent.json
 var agentFS embed.FS
 
-const Version = "1.9.19"
+const Version = "1.9.20"
 const serviceName = "go_tos_finder"
 
 // main mirrors server.Run (config load + keystore auth + the canonical /,
@@ -23,6 +23,7 @@ func main() {
 
 	srv.Mux.HandleFunc("/selftest", newSelftest(serviceName, Version).Render)
 
+	srv.Mux.Handle("/v1/parse", savedPageHandler)
 	srv.Mux.HandleFunc("/", Handler)
 	srv.Mux.HandleFunc("/"+serviceName, Handler)
 	if alias := server.KebabAlias(serviceName); alias != "" && alias != serviceName {
