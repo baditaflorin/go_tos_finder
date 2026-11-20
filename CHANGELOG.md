@@ -1,3 +1,7 @@
+## 1.9.20 — 2026-11-20
+
+- Add authenticated saved-page parsing with capture receipts. Links to published terms, privacy policies and legal notices.
+
 # Changelog
 
 ## 1.9.19 — 2026-11-09
